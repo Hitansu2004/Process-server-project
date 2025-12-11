@@ -286,7 +286,7 @@ export default function Dashboard() {
                                         const price = calculateOrderPrice(order)
                                         return price && (
                                             <p className="mt-2 text-sm">
-                                                Price: <span className="font-semibold text-primary">${price}</span>
+                                                Price: <span className="font-semibold text-green-400">${price}</span>
                                             </p>
                                         )
                                     })()}

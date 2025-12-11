@@ -66,7 +66,11 @@ export default function Contacts() {
         }
     }
 
-    const handleRemoveContact = async (id: string) => {
+    const handleRemoveContact = async (id: string, isGlobal: boolean) => {
+        if (isGlobal) {
+            alert('Cannot remove global process servers. They are available to all customers.')
+            return
+        }
         if (!confirm('Are you sure?')) return
         try {
             const token = localStorage.getItem('token')
@@ -152,12 +156,16 @@ export default function Contacts() {
                                         </span>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => handleRemoveContact(contact.id)}
-                                    className="text-red-500 hover:text-red-400"
-                                >
-                                    Remove
-                                </button>
+                                {isGlobal ? (
+                                    <span className="text-gray-500 text-sm italic">Global</span>
+                                ) : (
+                                    <button
+                                        onClick={() => handleRemoveContact(contact.id, isGlobal)}
+                                        className="text-red-500 hover:text-red-400"
+                                    >
+                                        Remove
+                                    </button>
+                                )}
                             </div>
                         )
                     })}
