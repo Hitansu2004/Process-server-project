@@ -47,7 +47,18 @@ export default function OrdersManagement() {
 
     const filteredOrders = filter === 'ALL'
         ? orders
-        : orders.filter(o => o.status === filter)
+        : filter === 'ADMIN_ORDERS'
+            ? orders.filter(o => {
+                try {
+                    const config = typeof o.pricingConfig === 'string'
+                        ? JSON.parse(o.pricingConfig)
+                        : o.pricingConfig;
+                    return config?.type === 'GUIDED';
+                } catch {
+                    return false;
+                }
+            })
+            : orders.filter(o => o.status === filter)
 
     const stats = {
         total: orders.length,
@@ -113,6 +124,16 @@ export default function OrdersManagement() {
                                 {status.replace('_', ' ')}
                             </button>
                         ))}
+                        <div className="w-px bg-gray-700 mx-2"></div>
+                        <button
+                            onClick={() => setFilter('ADMIN_ORDERS')}
+                            className={`px-4 py-2 rounded-lg transition ${filter === 'ADMIN_ORDERS'
+                                ? 'bg-purple-500 text-white'
+                                : 'glass hover:bg-white/5'
+                                }`}
+                        >
+                            👔 Admin Orders
+                        </button>
                     </div>
                 </div>
 
@@ -124,11 +145,29 @@ export default function OrdersManagement() {
                         </div>
                     ) : (
                         filteredOrders.map((order) => (
-                            <div key={order.id} className="card hover:bg-white/5 transition">
+                            <div
+                                key={order.id}
+                                onClick={() => router.push(`/orders/${order.id}`)}
+                                className="card hover:bg-white/5 cursor-pointer transition"
+                            >
                                 <div className="flex justify-between items-start">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-3">
                                             <h3 className="font-semibold text-lg">{order.orderNumber}</h3>
+                                            {(() => {
+                                                try {
+                                                    const config = typeof order.pricingConfig === 'string'
+                                                        ? JSON.parse(order.pricingConfig)
+                                                        : order.pricingConfig;
+                                                    return config?.type === 'GUIDED' && (
+                                                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-purple-500/30 text-purple-300">
+                                                            ADMIN ORDER
+                                                        </span>
+                                                    );
+                                                } catch {
+                                                    return null;
+                                                }
+                                            })()}
                                             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.status === 'COMPLETED' ? 'bg-purple-500/20 text-purple-400' :
                                                 order.status === 'IN_PROGRESS' || order.status === 'ASSIGNED' ? 'bg-blue-500/20 text-blue-400' :
                                                     order.status === 'BIDDING' ? 'bg-yellow-500/20 text-yellow-400' :
@@ -157,7 +196,7 @@ export default function OrdersManagement() {
                                             <div>
                                                 <p className="text-gray-400">Your Profit</p>
                                                 <p className="font-semibold text-primary">
-                                                    {order.tenantProfit ? `$${order.tenantProfit}` : order.finalAgreedPrice ? `$${order.finalAgreedPrice}` : 'Pending'}
+                                                    {order.tenantProfit != null ? `$${order.tenantProfit}` : 'Pending'}
                                                 </p>
                                             </div>
                                         </div>

@@ -1,7 +1,29 @@
 #!/bin/bash
 # Script to start all frontend services
 
-echo "Starting all frontend applications..."
+# Function to kill process on a specific port
+kill_port() {
+    local port=$1
+    echo "Checking for processes on port $port..."
+    local pid=$(lsof -ti:$port)
+    if [ ! -z "$pid" ]; then
+        echo "Killing process $pid on port $port..."
+        kill -9 $pid 2>/dev/null
+        sleep 1
+    else
+        echo "No process found on port $port"
+    fi
+}
+
+echo "=== Cleaning up existing processes ==="
+# Kill all frontend service ports
+kill_port 3000  # customer-portal
+kill_port 3001  # delivery-portal
+kill_port 3002  # admin-panel
+kill_port 3003  # super-admin
+
+echo ""
+echo "=== Starting all frontend applications ==="
 
 # Start Customer Portal
 echo "Starting Customer Portal on port 3000..."

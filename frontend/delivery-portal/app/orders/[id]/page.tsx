@@ -47,28 +47,36 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
 
     const handlePlaceBid = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!bidAmount || !user) return
+        if (!bidAmount || !user || !order) return
 
         setSubmitting(true)
         try {
             const token = localStorage.getItem('token')
 
-            // Get delivery person profile ID from user ID
-            const userIdToProfileId: { [key: string]: string } = {
-                '650e8400-e29b-41d4-a716-446655440006': '950e8400-e29b-41d4-a716-446655440001', // driver1
-                '650e8400-e29b-41d4-a716-446655440007': '950e8400-e29b-41d4-a716-446655440002', // driver2
+            // Get process server profile ID from user object (stored during login)
+            const processServerId = user.processServerProfileId || user.userId
+
+            // Find the first available dropoff (OPEN or BIDDING status)
+            const availableDropoff = order.dropoffs?.find((d: any) =>
+                d.status === 'OPEN' || d.status === 'BIDDING' || d.status === 'PENDING'
+            )
+
+            if (!availableDropoff) {
+                alert('No available dropoffs to bid on')
+                return
             }
-            const deliveryPersonId = userIdToProfileId[user.userId] || user.userId
 
             const bidData = {
-                orderId: params.id,
-                deliveryPersonId: deliveryPersonId,
+                orderDropoffId: availableDropoff.id,
+                processServerId: processServerId,
                 bidAmount: parseFloat(bidAmount),
             }
 
             await api.placeBid(bidData, token!)
             alert('Bid placed successfully!')
-            router.push('/bids')
+            // Reload order to show updated bid
+            loadOrderDetails(params.id, token!)
+            setBidAmount('')
         } catch (error) {
             console.error('Failed to place bid:', error)
             alert(error instanceof Error ? error.message : 'Failed to place bid. Please try again.')
@@ -84,17 +92,13 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
         try {
             const token = localStorage.getItem('token')
 
-            // Get delivery person profile ID
-            const userIdToProfileId: { [key: string]: string } = {
-                '650e8400-e29b-41d4-a716-446655440006': '950e8400-e29b-41d4-a716-446655440001',
-                '650e8400-e29b-41d4-a716-446655440007': '950e8400-e29b-41d4-a716-446655440002',
-            }
-            const deliveryPersonId = userIdToProfileId[user.userId] || user.userId
+            // Get process server profile ID from user object (stored during login)
+            const processServerId = user.processServerProfileId || user.userId
 
             // Get GPS coordinates (mock for now - in real app would use navigator.geolocation)
             const attemptData = {
                 dropoffId: selectedDropoff.id,
-                deliveryPersonId: deliveryPersonId,
+                processServerId: processServerId,
                 wasSuccessful,
                 outcomeNotes: attemptNotes || (wasSuccessful ? 'Delivered successfully' : 'Delivery failed'),
                 gpsLatitude: 40.7128, // Mock GPS - NYC
@@ -146,7 +150,7 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                 {/* Header */}
                 <div className="flex items-center gap-4 mb-8">
                     <button
-                        onClick={() => router.push('/orders')}
+                        onClick={() => router.back()}
                         className="glass px-4 py-2 rounded-lg hover:bg-white/10"
                     >
                         ← Back

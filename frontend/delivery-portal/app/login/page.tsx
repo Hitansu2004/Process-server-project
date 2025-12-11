@@ -18,6 +18,18 @@ export default function LoginPage() {
             const response = await api.login(email, password)
             localStorage.setItem('token', response.token)
             localStorage.setItem('user', JSON.stringify(response))
+
+            // Fetch process server profile to get the profile ID
+            try {
+                const profileData = await api.getProcessServerProfile(response.tenantUserRoleId, response.token)
+                // Store profile ID for use in bidding and attempts
+                const userWithProfile = { ...response, processServerProfileId: profileData.id }
+                localStorage.setItem('user', JSON.stringify(userWithProfile))
+            } catch (profileError) {
+                console.error('Failed to fetch profile:', profileError)
+                // Continue anyway - will try to use user ID as fallback
+            }
+
             router.push('/dashboard')
         } catch (err) {
             setError('Invalid credentials')

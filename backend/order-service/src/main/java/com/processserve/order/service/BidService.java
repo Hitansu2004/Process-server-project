@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +48,8 @@ public class BidService {
         OrderDropoff dropoff = dropoffRepository.findById(request.getOrderDropoffId())
                 .orElseThrow(() -> new RuntimeException("Dropoff not found"));
 
-        if (dropoff.getStatus() != OrderDropoff.DropoffStatus.PENDING &&
+        if (dropoff.getStatus() != OrderDropoff.DropoffStatus.OPEN &&
+                dropoff.getStatus() != OrderDropoff.DropoffStatus.PENDING &&
                 dropoff.getStatus() != OrderDropoff.DropoffStatus.BIDDING) {
             throw new RuntimeException("Dropoff is not accepting bids");
         }
@@ -67,8 +69,9 @@ public class BidService {
 
         bid = bidRepository.save(bid);
 
-        // Update dropoff status to BIDDING if it was PENDING
-        if (dropoff.getStatus() == OrderDropoff.DropoffStatus.PENDING) {
+        // Update dropoff status to BIDDING if it was PENDING or OPEN
+        if (dropoff.getStatus() == OrderDropoff.DropoffStatus.PENDING ||
+                dropoff.getStatus() == OrderDropoff.DropoffStatus.OPEN) {
             dropoff.setStatus(OrderDropoff.DropoffStatus.BIDDING);
             dropoffRepository.save(dropoff);
 
@@ -113,11 +116,19 @@ public class BidService {
             }
         }
 
-        // Calculate payment breakdown
-        BigDecimal commissionRate = getTenantCommissionRate(order.getTenantId());
-        PaymentBreakdown breakdown = paymentCalculationService.calculatePaymentBreakdown(
-                bid.getBidAmount(),
-                commissionRate);
+        // Calculate payment breakdown with 15% tenant commission
+        BigDecimal customerPayment = bid.getBidAmount();
+        BigDecimal tenantCommissionRate = new BigDecimal("0.15"); // 15%
+        BigDecimal superAdminFeeRate = new BigDecimal("0.05"); // 5% of commission
+
+        BigDecimal tenantCommission = customerPayment.multiply(tenantCommissionRate)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal superAdminFee = tenantCommission.multiply(superAdminFeeRate)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tenantProfit = tenantCommission.subtract(superAdminFee)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal processServerPayout = customerPayment.subtract(tenantCommission)
+                .setScale(2, RoundingMode.HALF_UP);
 
         // Update dropoff
         dropoff.setAssignedProcessServerId(bid.getProcessServerId());
@@ -126,7 +137,15 @@ public class BidService {
         dropoffRepository.save(dropoff);
 
         // Update Order totals
-        updateOrderTotals(order, breakdown);
+        order.setCustomerPaymentAmount(add(order.getCustomerPaymentAmount(), customerPayment));
+        order.setProcessServerPayout(add(order.getProcessServerPayout(), processServerPayout));
+        order.setTenantCommission(add(order.getTenantCommission(), tenantCommission));
+        order.setSuperAdminFee(add(order.getSuperAdminFee(), superAdminFee));
+        order.setTenantProfit(add(order.getTenantProfit(), tenantProfit));
+
+        // Get tenant commission rate (original logic for commissionRateApplied)
+        BigDecimal commissionRate = getTenantCommissionRate(order.getTenantId());
+        order.setCommissionRateApplied(commissionRate);
 
         // Check if all dropoffs are assigned
         boolean allAssigned = order.getDropoffs().stream()
@@ -176,7 +195,7 @@ public class BidService {
             }
 
             log.warn("No commission rate found for tenant {}, using default 15%", tenantId);
-            return new BigDecimal("15.00");
+            return new BigDecimal("20.00"); // Default to 20% commission rate
         } catch (Exception e) {
             log.error("Error fetching tenant commission rate for tenant {}: {}", tenantId, e.getMessage());
             return new BigDecimal("15.00");

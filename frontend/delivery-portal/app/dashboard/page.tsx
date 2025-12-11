@@ -133,7 +133,11 @@ export default function Dashboard() {
                     ) : (
                         <div className="space-y-4">
                             {assignedOrders.map((order) => (
-                                <div key={order.id} className="glass rounded-lg p-4">
+                                <div
+                                    key={order.id}
+                                    onClick={() => router.push(`/orders/${order.id}`)}
+                                    className="glass rounded-lg p-4 hover:bg-white/5 cursor-pointer transition"
+                                >
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <h3 className="font-semibold text-lg">{order.orderNumber}</h3>

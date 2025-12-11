@@ -3,7 +3,32 @@
 
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 
-echo "Building all backend services with Java 17..."
+# Function to kill process on a specific port
+kill_port() {
+    local port=$1
+    echo "Checking for processes on port $port..."
+    local pid=$(lsof -ti:$port)
+    if [ ! -z "$pid" ]; then
+        echo "Killing process $pid on port $port..."
+        kill -9 $pid 2>/dev/null
+        sleep 1
+    else
+        echo "No process found on port $port"
+    fi
+}
+
+echo "=== Cleaning up existing processes ==="
+# Kill all backend service ports
+kill_port 8761  # discovery-server
+kill_port 8080  # api-gateway
+kill_port 8082  # auth-service
+kill_port 8083  # order-service
+kill_port 8084  # tenant-service
+kill_port 8085  # user-service
+kill_port 8086  # notification-service
+
+echo ""
+echo "=== Building all backend services with Java 17 ==="
 
 # Build all services
 cd backend
