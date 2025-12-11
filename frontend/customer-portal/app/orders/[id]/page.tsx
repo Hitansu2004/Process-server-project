@@ -9,7 +9,7 @@ export default function OrderDetails() {
     const params = useParams()
     const [order, setOrder] = useState<any>(null)
     const [bids, setBids] = useState<any[]>([])
-    const [processServer, setProcessServer] = useState<any>(null)
+    const [processServers, setProcessServers] = useState<Record<string, any>>({})
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -35,10 +35,23 @@ export default function OrderDetails() {
 
             // Load process server details if order is ASSIGNED, IN_PROGRESS, or COMPLETED
             if (['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(orderData.status)) {
-                if (orderData.dropoffs && orderData.dropoffs[0]?.assignedProcessServerId) {
-                    const psId = orderData.dropoffs[0].assignedProcessServerId
-                    const psData = await api.getProcessServerProfile(psId, token!)
-                    setProcessServer(psData)
+                if (orderData.dropoffs) {
+                    const uniqueServerIds = Array.from(new Set(
+                        orderData.dropoffs
+                            .map((d: any) => d.assignedProcessServerId)
+                            .filter((id: string) => id)
+                    )) as string[]
+
+                    const profiles: Record<string, any> = {}
+                    await Promise.all(uniqueServerIds.map(async (id) => {
+                        try {
+                            const psData = await api.getProcessServerProfile(id, token!)
+                            profiles[id] = psData
+                        } catch (e) {
+                            console.error(`Failed to load profile for ${id}`, e)
+                        }
+                    }))
+                    setProcessServers(profiles)
                 }
             }
         } catch (error) {
@@ -198,16 +211,22 @@ export default function OrderDetails() {
                                         )}
 
                                         {/* Show assigned process server */}
-                                        {processServer && ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(order.status) && (
+                                        {['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(order.status) && dropoff.assignedProcessServerId && processServers[dropoff.assignedProcessServerId] && (
                                             <div className="mt-3 pt-3 border-t border-white/10">
                                                 <p className="text-sm text-gray-400">Assigned to</p>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
-                                                        {processServer.firstName[0]}{processServer.lastName[0]}
+                                                        {(processServers[dropoff.assignedProcessServerId].firstName?.[0] || '?')}{(processServers[dropoff.assignedProcessServerId].lastName?.[0] || '?')}
                                                     </div>
                                                     <div>
-                                                        <p className="font-semibold text-sm">{processServer.firstName} {processServer.lastName}</p>
-                                                        <p className="text-xs text-gray-400">Process Server</p>
+                                                        <p className="font-semibold text-sm">
+                                                            {processServers[dropoff.assignedProcessServerId].firstName || 'Unknown'} {processServers[dropoff.assignedProcessServerId].lastName || 'User'}
+                                                        </p>
+                                                        <p className="text-xs text-gray-400">
+                                                            {processServers[dropoff.assignedProcessServerId].successfulDeliveries > 0
+                                                                ? `${processServers[dropoff.assignedProcessServerId].successfulDeliveries} Completed Orders`
+                                                                : 'New Process Server'}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -340,52 +359,100 @@ export default function OrderDetails() {
                         })()}
 
                         {/* Process Server Info - For ASSIGNED/IN_PROGRESS/COMPLETED orders */}
-                        {processServer && ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(order.status) && (
-                            <div className="card">
-                                <h3 className="text-lg font-semibold mb-4">Assigned Process Server</h3>
-                                <div className="space-y-3">
-                                    <div>
-                                        <p className="text-sm text-gray-400">Name</p>
-                                        <p className="font-semibold">{processServer.firstName} {processServer.lastName}</p>
-                                    </div>
-                                    {processServer.currentRating && (
-                                        <div>
-                                            <p className="text-sm text-gray-400">Rating</p>
-                                            <p className="font-semibold">
-                                                ⭐ {processServer.currentRating.toFixed(1)} / 5.0
-                                            </p>
+                        {['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(order.status) && Object.keys(processServers).length > 0 && (
+                            <div className="space-y-4">
+                                {Object.values(processServers).map((ps: any) => (
+                                    <div key={ps.id} className="card">
+                                        <h3 className="text-lg font-semibold mb-4">Assigned Process Server</h3>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="text-sm text-gray-400">Name</p>
+                                                <p className="font-semibold">{ps.firstName || 'Unknown'} {ps.lastName || 'User'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-gray-400">Rating</p>
+                                                <p className="font-semibold">
+                                                    ⭐ {(ps.currentRating || 0).toFixed(1)} / 5.0
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-gray-400">Total Completed Orders</p>
+                                                <p className="font-semibold">
+                                                    {ps.successfulDeliveries > 0 ? ps.successfulDeliveries : <span className="text-blue-400">New</span>}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-gray-400">Success Rate</p>
+                                                <p className="font-semibold text-green-400">
+                                                    {ps.totalOrdersAssigned > 0
+                                                        ? ((ps.successfulDeliveries / ps.totalOrdersAssigned) * 100).toFixed(1)
+                                                        : 0}%
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-gray-400">Attempts</p>
+                                                <p className="font-semibold">
+                                                    {order.dropoffs
+                                                        .filter((d: any) => d.assignedProcessServerId === ps.id)
+                                                        .reduce((sum: number, d: any) => sum + (d.attempts?.length || 0), 0)}
+                                                </p>
+                                            </div>
+                                            {/* Show assigned dropoffs */}
+                                            <div className="pt-2 border-t border-white/10">
+                                                <p className="text-xs text-gray-400 mb-1">Assigned Dropoffs</p>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {order.dropoffs
+                                                        .map((d: any, idx: number) => ({ ...d, index: idx + 1 }))
+                                                        .filter((d: any) => d.assignedProcessServerId === ps.id)
+                                                        .map((d: any) => (
+                                                            <span key={d.id} className="px-2 py-0.5 bg-white/10 rounded text-xs">
+                                                                Dropoff {d.index}
+                                                            </span>
+                                                        ))}
+                                                </div>
+                                            </div>
                                         </div>
-                                    )}
-                                    <div>
-                                        <p className="text-sm text-gray-400">Total Deliveries</p>
-                                        <p className="font-semibold">{processServer.totalOrdersAssigned || 0}</p>
                                     </div>
-                                    <div>
-                                        <p className="text-sm text-gray-400">Success Rate</p>
-                                        <p className="font-semibold text-green-400">
-                                            {processServer.totalOrdersAssigned > 0
-                                                ? ((processServer.successfulDeliveries / processServer.totalOrdersAssigned) * 100).toFixed(1)
-                                                : 0}%
-                                        </p>
-                                    </div>
-                                </div>
+                                ))}
                             </div>
                         )}
 
                         {/* Completion Info */}
-                        {order.status === 'COMPLETED' && order.completedAt && (
+                        {order.status === 'COMPLETED' && (
                             <div className="card">
-                                <h3 className="text-lg font-semibold mb-4">Completion Details</h3>
-                                <div className="space-y-2">
-                                    <div>
-                                        <p className="text-sm text-gray-400">Completed On</p>
-                                        <p className="font-semibold">{formatDate(order.completedAt)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm text-gray-400">Total Attempts</p>
-                                        <p className="font-semibold">
-                                            {order.dropoffs?.reduce((sum: number, d: any) => sum + (d.attempts?.length || 0), 0)}
-                                        </p>
+                                {/* Rating Section */}
+                                <div className="pt-2">
+                                    <h4 className="font-semibold mb-3">Rate Process Server(s)</h4>
+                                    <div className="space-y-6">
+                                        {Object.values(processServers).map((ps: any) => (
+                                            <div key={ps.id} className="space-y-2">
+                                                <p className="text-sm font-medium">{ps.firstName} {ps.lastName}</p>
+                                                <div className="flex gap-2">
+                                                    {[1, 2, 3, 4, 5].map((star) => (
+                                                        <button
+                                                            key={star}
+                                                            onClick={() => {
+                                                                if (confirm(`Rate ${ps.firstName} ${star} stars?`)) {
+                                                                    api.submitRating({
+                                                                        orderId: order.id,
+                                                                        customerId: order.customerId,
+                                                                        processServerId: ps.id,
+                                                                        ratingValue: star,
+                                                                        reviewText: "Great service!" // Placeholder
+                                                                    }, localStorage.getItem('token')!)
+                                                                        .then(() => alert('Rating submitted!'))
+                                                                        .catch(err => alert('Failed to submit rating'))
+                                                                }
+                                                            }}
+                                                            className="text-2xl hover:scale-110 transition"
+                                                        >
+                                                            ⭐
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <p className="text-xs text-gray-400">Click a star to rate each server</p>
                                     </div>
                                 </div>
                             </div>

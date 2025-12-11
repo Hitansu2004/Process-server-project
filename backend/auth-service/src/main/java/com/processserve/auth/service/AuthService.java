@@ -145,4 +145,9 @@ public class AuthService {
         return globalUserRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
+
+    public TenantUserRole getTenantUserRole(String id) {
+        return tenantUserRoleRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("TenantUserRole not found"));
+    }
 }

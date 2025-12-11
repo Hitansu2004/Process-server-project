@@ -4,6 +4,7 @@ import com.processserve.auth.dto.LoginRequest;
 import com.processserve.auth.dto.LoginResponse;
 import com.processserve.auth.dto.RegisterRequest;
 import com.processserve.auth.entity.GlobalUser;
+import com.processserve.auth.entity.TenantUserRole;
 import com.processserve.auth.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -89,5 +90,27 @@ public class AuthController {
             return jwtUtil.extractEmail(token);
         }
         throw new RuntimeException("Invalid authorization header");
+    }
+
+    @GetMapping("/roles/{id}")
+    public ResponseEntity<?> getRoleDetails(@PathVariable String id) {
+        try {
+            TenantUserRole role = authService.getTenantUserRole(id);
+            GlobalUser user = role.getGlobalUser();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", role.getId());
+            response.put("tenantId", role.getTenantId());
+            response.put("role", role.getRole());
+            response.put("userId", user.getId());
+            response.put("firstName", user.getFirstName());
+            response.put("lastName", user.getLastName());
+            response.put("email", user.getEmail());
+            response.put("phoneNumber", user.getPhoneNumber());
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 }

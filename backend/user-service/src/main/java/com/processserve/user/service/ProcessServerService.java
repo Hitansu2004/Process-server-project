@@ -137,12 +137,15 @@ public class ProcessServerService {
         log.info("Rating added for process server {}. New average: {}", processServerId, avgRating);
     }
 
-    public ProcessServerProfile getProfile(String tenantUserRoleId) {
-        log.info("Looking up profile for tenantUserRoleId: {}", tenantUserRoleId);
-        return processServerRepository.findByTenantUserRoleId(tenantUserRoleId)
+    public ProcessServerProfile getProfile(String idOrTenantUserRoleId) {
+        log.info("Looking up profile for ID/TenantUserRoleId: {}", idOrTenantUserRoleId);
+        
+        // Try finding by ID (PK) first
+        return processServerRepository.findById(idOrTenantUserRoleId)
+                .or(() -> processServerRepository.findByTenantUserRoleId(idOrTenantUserRoleId))
                 .orElseThrow(() -> {
-                    log.error("Profile not found for tenantUserRoleId: {}", tenantUserRoleId);
-                    return new RuntimeException("Profile not found for ID: " + tenantUserRoleId);
+                    log.error("Profile not found for ID/TenantUserRoleId: {}", idOrTenantUserRoleId);
+                    return new RuntimeException("Profile not found for ID: " + idOrTenantUserRoleId);
                 });
     }
 

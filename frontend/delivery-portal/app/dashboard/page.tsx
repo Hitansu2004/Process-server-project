@@ -101,6 +101,33 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div className="card">
+                        <h3 className="text-gray-400 text-sm mb-2">Total Assigned</h3>
+                        <p className="text-3xl font-bold text-white">
+                            {profile?.totalOrdersAssigned || 0}
+                        </p>
+                    </div>
+                    <div className="card">
+                        <h3 className="text-gray-400 text-sm mb-2">Total Completed</h3>
+                        <p className="text-3xl font-bold text-green-500">
+                            {profile?.successfulDeliveries || 0}
+                        </p>
+                    </div>
+                    <div className="card">
+                        <h3 className="text-gray-400 text-sm mb-2">Total Pending</h3>
+                        <p className="text-3xl font-bold text-yellow-500">
+                            {(profile?.totalOrdersAssigned || 0) - (profile?.successfulDeliveries || 0)}
+                        </p>
+                    </div>
+                    <div className="card">
+                        <h3 className="text-gray-400 text-sm mb-2">Success Rate</h3>
+                        <p className="text-3xl font-bold text-blue-500">
+                            {profile ? `${Math.min(((profile.successfulDeliveries / (profile.totalOrdersAssigned || 1)) * 100), 100).toFixed(1)}%` : '0.0%'}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div className="card">
                         <h3 className="text-gray-400 text-sm mb-2">Available Orders</h3>
                         <p className="text-3xl font-bold text-primary">
                             {availableOrders.length}
@@ -113,16 +140,13 @@ export default function Dashboard() {
                         </p>
                     </div>
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Active Deliveries</h3>
-                        <p className="text-3xl font-bold text-blue-500">
-                            {assignedOrders.filter(o => o.status === 'ASSIGNED' || o.status === 'IN_PROGRESS').length}
-                        </p>
-                    </div>
-                    <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Total Earnings</h3>
-                        <p className="text-3xl font-bold text-green-500">
-                            ${assignedOrders.filter(o => o.status === 'COMPLETED').reduce((sum, o) => sum + (o.processServerPayout || 0), 0).toFixed(2)}
-                        </p>
+                        <h3 className="text-gray-400 text-sm mb-2">My Rating</h3>
+                        <div className="flex items-baseline gap-2">
+                            <p className="text-3xl font-bold text-yellow-500">
+                                {profile?.currentRating || '0.0'}
+                            </p>
+                            <span className="text-sm text-gray-400">/ 5.0</span>
+                        </div>
                     </div>
                 </div>
 

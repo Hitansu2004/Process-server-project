@@ -103,10 +103,23 @@ export const api = {
     },
 
     async getProcessServerProfile(processServerId: string, token: string) {
-        const response = await fetch(`${API_URL}/api/process-servers/${processServerId}`, {
-            headers: { 'Authorization': `Bearer ${token}` },
+        const res = await fetch(`${API_URL}/api/process-servers/${processServerId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
         })
-        if (!response.ok) throw new Error('Failed to fetch process server profile')
-        return response.json()
+        if (!res.ok) throw new Error('Failed to fetch profile')
+        return res.json()
     },
+
+    submitRating: async (data: any, token: string) => {
+        const res = await fetch(`${API_URL}/api/process-servers/ratings`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        if (!res.ok) throw new Error('Failed to submit rating')
+        return res.json()
+    }
 }

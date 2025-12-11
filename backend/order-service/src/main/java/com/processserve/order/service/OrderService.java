@@ -193,11 +193,17 @@ public class OrderService {
                 log.info("Order {} completed successfully", order.getId());
 
                 // Update process server stats (via Feign to user-service)
-                // Auto-add to contact list
                 try {
+                    // Update stats: successful=true, attempts=currentAttempts
+                    java.util.Map<String, Object> statsRequest = new java.util.HashMap<>();
+                    statsRequest.put("successful", true);
+                    statsRequest.put("attemptCount", currentAttempts);
+                    userClient.updateStats(request.getProcessServerId(), statsRequest);
+
+                    // Auto-add to contact list
                     userClient.autoAddProcessServer(order.getCustomerId(), request.getProcessServerId());
                 } catch (Exception e) {
-                    log.error("Failed to auto-add process server to contact list", e);
+                    log.error("Failed to update stats or auto-add process server", e);
                 }
             }
 
@@ -205,6 +211,16 @@ public class OrderService {
             // MAX ATTEMPTS REACHED - FAILED BUT STILL PAY
             dropoff.setStatus(OrderDropoff.DropoffStatus.FAILED);
             dropoffRepository.save(dropoff);
+
+            // Update stats for failure
+            try {
+                java.util.Map<String, Object> statsRequest = new java.util.HashMap<>();
+                statsRequest.put("successful", false);
+                statsRequest.put("attemptCount", currentAttempts);
+                userClient.updateStats(request.getProcessServerId(), statsRequest);
+            } catch (Exception e) {
+                log.error("Failed to update stats for failure", e);
+            }
 
             Order order = dropoff.getOrder();
             boolean allDone = order.getDropoffs().stream()

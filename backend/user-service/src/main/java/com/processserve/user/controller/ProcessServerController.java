@@ -18,6 +18,7 @@ import java.util.Map;
 public class ProcessServerController {
 
     private final ProcessServerService processServerService;
+    private final com.processserve.user.client.AuthClient authClient;
 
     @GetMapping("/{tenantUserRoleId}")
     public ResponseEntity<?> getProfile(@PathVariable String tenantUserRoleId) {
@@ -25,7 +26,23 @@ public class ProcessServerController {
         try {
             ProcessServerProfile profile = processServerService.getProfile(tenantUserRoleId);
             log.info("Found profile: {}", profile);
-            return ResponseEntity.ok(profile);
+
+            // Fetch user details from auth-service
+            com.processserve.user.dto.ProcessServerProfileDTO dto = new com.processserve.user.dto.ProcessServerProfileDTO(
+                    profile);
+            try {
+                Map<String, Object> roleDetails = authClient.getRoleDetails(profile.getTenantUserRoleId());
+                dto.setUserId((String) roleDetails.get("userId"));
+                dto.setFirstName((String) roleDetails.get("firstName"));
+                dto.setLastName((String) roleDetails.get("lastName"));
+                dto.setEmail((String) roleDetails.get("email"));
+                dto.setPhoneNumber((String) roleDetails.get("phoneNumber"));
+            } catch (Exception e) {
+                log.error("Failed to fetch user details for {}: {}", profile.getTenantUserRoleId(), e.getMessage());
+                // Continue with partial data
+            }
+
+            return ResponseEntity.ok(dto);
         } catch (Exception e) {
             log.error("Failed to fetch profile for {}: {}", tenantUserRoleId, e.getMessage());
             Map<String, String> error = new HashMap<>();
@@ -51,6 +68,19 @@ public class ProcessServerController {
             Map<String, String> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    @PostMapping("/{tenantUserRoleId}/stats")
+    public ResponseEntity<?> updateStats(@PathVariable String tenantUserRoleId,
+            @RequestBody Map<String, Object> request) {
+        try {
+            boolean successful = (Boolean) request.get("successful");
+            int attemptCount = (Integer) request.get("attemptCount");
+            processServerService.updateStats(tenantUserRoleId, successful, attemptCount);
+            return ResponseEntity.ok(Map.of("message", "Stats updated successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
