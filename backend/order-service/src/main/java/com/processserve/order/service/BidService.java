@@ -116,7 +116,9 @@ public class BidService {
             }
         }
 
-        // Calculate payment breakdown with 15% tenant commission
+        // Calculate payment breakdown
+        // Treat bidAmount as the Customer Payment (Gross)
+        // Commission is deducted from this amount
         BigDecimal customerPayment = bid.getBidAmount();
         BigDecimal tenantCommissionRate = new BigDecimal("0.15"); // 15%
         BigDecimal superAdminFeeRate = new BigDecimal("0.05"); // 5% of commission
@@ -125,8 +127,12 @@ public class BidService {
                 .setScale(2, RoundingMode.HALF_UP);
         BigDecimal superAdminFee = tenantCommission.multiply(superAdminFeeRate)
                 .setScale(2, RoundingMode.HALF_UP);
+
+        // Tenant Profit = Commission - Super Admin Fee
         BigDecimal tenantProfit = tenantCommission.subtract(superAdminFee)
                 .setScale(2, RoundingMode.HALF_UP);
+
+        // Process Server Payout = Customer Payment - Commission
         BigDecimal processServerPayout = customerPayment.subtract(tenantCommission)
                 .setScale(2, RoundingMode.HALF_UP);
 

@@ -15,4 +15,7 @@ public interface UserClient {
 
     @PostMapping("/api/process-servers/{id}/stats")
     void updateStats(@PathVariable("id") String id, @RequestBody java.util.Map<String, Object> request);
+
+    @org.springframework.web.bind.annotation.GetMapping("/api/users/{id}")
+    java.util.Map<String, Object> getUser(@PathVariable("id") String id);
 }

@@ -10,16 +10,50 @@ export default function Dashboard() {
     const [orders, setOrders] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 
-    // Helper function to get customer profile ID from user ID
-    const getUserCustomerId = (userId: string): string => {
-        const userIdToProfileId: { [key: string]: string } = {
-            'aa1bf200-5fa0-4dc7-b91a-69efb4ad1b3e': '78650ad7-23fc-4eb4-9a5c-f280f0463771', // customer1@example.com
-            '17812fce-9c0b-493c-9e4b-0189fb1c31c8': 'c371b934-2f03-4d8e-8ec6-fdf3470c1aef', // customer2@example.com
-            '9db8f52f-b73d-49a4-8831-48781f9d90a2': 'c3f5911b-8a2f-4315-b5fd-6f454df39d7e', // customer3@example.com
-            '0e1b5d79-887f-4a2b-8450-01c385e4ed18': 'd25ec2b5-242a-4b35-80a4-3696c5da745e', // customer4@example.com
-            'ab3435d4-7174-4989-b443-b9d60bff298f': '3708ddee-f034-4591-83f1-5bf2d6a160fb', // customer5@example.com
-        }
-        return userIdToProfileId[userId] || userId
+    // Initialize state from sessionStorage or defaults
+    const [statusFilter, setStatusFilter] = useState(() => {
+        if (typeof window !== 'undefined') return sessionStorage.getItem('dashboard_statusFilter') || 'ALL'
+        return 'ALL'
+    })
+    const [minPrice, setMinPrice] = useState(() => {
+        if (typeof window !== 'undefined') return sessionStorage.getItem('dashboard_minPrice') || ''
+        return ''
+    })
+    const [maxPrice, setMaxPrice] = useState(() => {
+        if (typeof window !== 'undefined') return sessionStorage.getItem('dashboard_maxPrice') || ''
+        return ''
+    })
+    const [dropoffFilter, setDropoffFilter] = useState(() => {
+        if (typeof window !== 'undefined') return sessionStorage.getItem('dashboard_dropoffFilter') || ''
+        return ''
+    })
+
+    // Persist filters to sessionStorage whenever they change
+    useEffect(() => {
+        sessionStorage.setItem('dashboard_statusFilter', statusFilter)
+    }, [statusFilter])
+
+    useEffect(() => {
+        sessionStorage.setItem('dashboard_minPrice', minPrice)
+    }, [minPrice])
+
+    useEffect(() => {
+        sessionStorage.setItem('dashboard_maxPrice', maxPrice)
+    }, [maxPrice])
+
+    useEffect(() => {
+        sessionStorage.setItem('dashboard_dropoffFilter', dropoffFilter)
+    }, [dropoffFilter])
+
+    const clearFilters = () => {
+        setStatusFilter('ALL')
+        setMinPrice('')
+        setMaxPrice('')
+        setDropoffFilter('')
+        sessionStorage.removeItem('dashboard_statusFilter')
+        sessionStorage.removeItem('dashboard_minPrice')
+        sessionStorage.removeItem('dashboard_maxPrice')
+        sessionStorage.removeItem('dashboard_dropoffFilter')
     }
 
     useEffect(() => {
@@ -33,9 +67,8 @@ export default function Dashboard() {
 
         const parsedUser = JSON.parse(userData)
         setUser(parsedUser)
-        // Use customer profile ID instead of user ID
-        const customerId = getUserCustomerId(parsedUser.userId)
-        loadOrders(customerId, token)
+        // Use user ID directly as we now use Global User IDs for orders
+        loadOrders(parsedUser.userId, token)
     }, [router])
 
     const loadOrders = async (customerId: string, token: string) => {
@@ -78,6 +111,23 @@ export default function Dashboard() {
         )
     }
 
+
+
+    const filteredOrders = orders.filter(order => {
+        // Status Filter
+        if (statusFilter !== 'ALL' && order.status !== statusFilter) return false
+
+        // Price Filter
+        const price = calculateOrderPrice(order) || 0
+        if (minPrice && price < parseFloat(minPrice)) return false
+        if (maxPrice && price > parseFloat(maxPrice)) return false
+
+        // Dropoff Filter
+        if (dropoffFilter && order.totalDropoffs !== parseInt(dropoffFilter)) return false
+
+        return true
+    })
+
     return (
         <div className="min-h-screen p-6">
             <div className="max-w-7xl mx-auto">
@@ -118,7 +168,7 @@ export default function Dashboard() {
                     <div className="card">
                         <h3 className="text-gray-400 text-sm mb-2">Active</h3>
                         <p className="text-3xl font-bold text-primary">
-                            {orders.filter(o => o.status === 'IN_PROGRESS' || o.status === 'ASSIGNED').length}
+                            {orders.length - orders.filter(o => o.status === 'COMPLETED').length}
                         </p>
                     </div>
                     <div className="card">
@@ -129,22 +179,89 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                {/* Filters */}
+                <div className="card mb-6">
+                    <div className="flex flex-wrap gap-4 items-end">
+                        <div className="flex-1 min-w-[200px]">
+                            <label className="block text-sm text-gray-400 mb-1">Status</label>
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="w-full px-4 py-2 rounded-lg glass bg-black/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                                <option value="ALL">All Statuses</option>
+                                <option value="OPEN">Open</option>
+                                <option value="BIDDING">Bidding</option>
+                                <option value="ASSIGNED">Assigned</option>
+                                <option value="IN_PROGRESS">In Progress</option>
+                                <option value="COMPLETED">Completed</option>
+                                <option value="FAILED">Failed</option>
+                                <option value="CANCELLED">Cancelled</option>
+                            </select>
+                        </div>
+                        <div className="w-32">
+                            <label className="block text-sm text-gray-400 mb-1">Min Price</label>
+                            <input
+                                type="number"
+                                value={minPrice}
+                                onChange={(e) => setMinPrice(e.target.value)}
+                                placeholder="Min $"
+                                className="w-full px-4 py-2 rounded-lg glass bg-black/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                        </div>
+                        <div className="w-32">
+                            <label className="block text-sm text-gray-400 mb-1">Max Price</label>
+                            <input
+                                type="number"
+                                value={maxPrice}
+                                onChange={(e) => setMaxPrice(e.target.value)}
+                                placeholder="Max $"
+                                className="w-full px-4 py-2 rounded-lg glass bg-black/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                        </div>
+                        <div className="w-40">
+                            <label className="block text-sm text-gray-400 mb-1">Dropoffs</label>
+                            <input
+                                type="number"
+                                value={dropoffFilter}
+                                onChange={(e) => setDropoffFilter(e.target.value)}
+                                placeholder="Count"
+                                className="w-full px-4 py-2 rounded-lg glass bg-black/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                        </div>
+                        <button
+                            onClick={clearFilters}
+                            className="px-4 py-2 rounded-lg glass hover:bg-white/10 text-sm h-[42px]"
+                        >
+                            Clear Filters
+                        </button>
+                    </div>
+                </div>
+
                 {/* Orders List */}
                 <div className="card">
-                    <h2 className="text-2xl font-bold mb-6">Your Orders</h2>
-                    {orders.length === 0 ? (
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-bold">Your Orders</h2>
+                        <span className="text-gray-400 text-sm">
+                            Showing {filteredOrders.length} of {orders.length} orders
+                        </span>
+                    </div>
+
+                    {filteredOrders.length === 0 ? (
                         <div className="text-center py-12 text-gray-400">
-                            <p className="mb-4">No orders yet</p>
-                            <button
-                                onClick={() => router.push('/orders/new')}
-                                className="btn-primary"
-                            >
-                                Create Your First Order
-                            </button>
+                            <p className="mb-4">No orders match your filters</p>
+                            {orders.length === 0 && (
+                                <button
+                                    onClick={() => router.push('/orders/new')}
+                                    className="btn-primary"
+                                >
+                                    Create Your First Order
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {orders.map((order) => (
+                            {filteredOrders.map((order) => (
                                 <div
                                     key={order.id}
                                     onClick={() => router.push(`/orders/${order.id}`)}

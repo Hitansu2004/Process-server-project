@@ -11,6 +11,24 @@ export default function Dashboard() {
     const [myBids, setMyBids] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [profile, setProfile] = useState<any>(null)
+    const [assignedFilter, setAssignedFilter] = useState('ALL')
+
+    const filteredAssignedOrders = assignedOrders.filter(order => {
+        if (assignedFilter === 'ALL') return true
+
+        // Check dropoff types
+        // If any dropoff is GUIDED, it's considered a Direct Assignment (at least partially)
+        // If all dropoffs are AUTOMATED, it's a Bidding Won order
+
+        const hasGuided = order.dropoffs?.some((d: any) => d.dropoffType === 'GUIDED')
+
+        if (assignedFilter === 'DIRECT') {
+            return hasGuided
+        } else if (assignedFilter === 'BIDDING') {
+            return !hasGuided // If no guided dropoffs, it must be bidding (or empty/legacy)
+        }
+        return true
+    })
 
     useEffect(() => {
         const token = localStorage.getItem('token')
@@ -107,9 +125,12 @@ export default function Dashboard() {
                         </p>
                     </div>
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Total Completed</h3>
-                        <p className="text-3xl font-bold text-green-500">
-                            {profile?.successfulDeliveries || 0}
+                        <h3 className="text-gray-400 text-sm mb-2">Total Earnings</h3>
+                        <p className="text-3xl font-bold text-green-400">
+                            ${assignedOrders
+                                .filter(order => order.status !== 'FAILED' && order.status !== 'CANCELLED')
+                                .reduce((sum, order) => sum + (order.processServerPayout || (order.finalAgreedPrice * 0.85) || 0), 0)
+                                .toFixed(2)}
                         </p>
                     </div>
                     <div className="card">
@@ -151,12 +172,40 @@ export default function Dashboard() {
                 </div>
 
                 <div className="card">
-                    <h2 className="text-2xl font-bold mb-6">My Assigned Deliveries</h2>
-                    {assignedOrders.length === 0 ? (
-                        <div className="text-center py-12 text-gray-400"><p>No deliveries assigned yet. Browse available orders and place bids to get started!</p></div>
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-bold">My Assigned Deliveries</h2>
+                        <div className="flex bg-black/20 p-1 rounded-lg">
+                            <button
+                                onClick={() => setAssignedFilter('ALL')}
+                                className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${assignedFilter === 'ALL' ? 'bg-primary text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                All
+                            </button>
+                            <button
+                                onClick={() => setAssignedFilter('DIRECT')}
+                                className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${assignedFilter === 'DIRECT' ? 'bg-primary text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                Direct Assigned
+                            </button>
+                            <button
+                                onClick={() => setAssignedFilter('BIDDING')}
+                                className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${assignedFilter === 'BIDDING' ? 'bg-primary text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                Bidding Won
+                            </button>
+                        </div>
+                    </div>
+
+                    {filteredAssignedOrders.length === 0 ? (
+                        <div className="text-center py-12 text-gray-400">
+                            <p>No deliveries found for this filter.</p>
+                            {assignedOrders.length === 0 && (
+                                <p className="mt-2 text-sm">Browse available orders and place bids to get started!</p>
+                            )}
+                        </div>
                     ) : (
                         <div className="space-y-4">
-                            {assignedOrders.map((order) => (
+                            {filteredAssignedOrders.map((order) => (
                                 <div
                                     key={order.id}
                                     onClick={() => router.push(`/orders/${order.id}`)}
@@ -164,9 +213,22 @@ export default function Dashboard() {
                                 >
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <h3 className="font-semibold text-lg">{order.orderNumber}</h3>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-semibold text-lg">{order.orderNumber}</h3>
+                                                {/* Show badge for order type */}
+                                                {order.dropoffs?.some((d: any) => d.dropoffType === 'GUIDED') ? (
+                                                    <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">
+                                                        DIRECT
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full border border-orange-500/30">
+                                                        BID
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-gray-300 font-medium">{order.customerName}</p>
                                             <p className="text-sm text-gray-400 mt-1">{order.pickupAddress}</p>
-                                            <p className="text-sm text-primary mt-2">Your Earnings: ${order.processServerPayout || order.finalAgreedPrice}</p>
+                                            <p className="text-sm text-green-400 font-medium mt-2">Your Earnings: ${order.processServerPayout || order.finalAgreedPrice}</p>
                                         </div>
                                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' :
                                             order.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :

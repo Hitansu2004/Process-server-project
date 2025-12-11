@@ -18,6 +18,8 @@ public interface ProcessServerRepository extends JpaRepository<ProcessServerProf
 
     List<ProcessServerProfile> findByIsGlobal(Boolean isGlobal);
 
+    List<ProcessServerProfile> findByIsGlobalTrue();
+
     List<ProcessServerProfile> findByTenantIdAndIsGlobal(String tenantId, Boolean isGlobal);
 
     // Assuming isApproved is removed or mapped to status, but entity didn't have

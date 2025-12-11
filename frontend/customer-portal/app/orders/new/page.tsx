@@ -8,11 +8,7 @@ interface ContactEntry {
     id: string
     processServerId: string
     nickname: string
-    // Add other fields if needed, e.g., processServerName (needs to be fetched or included in contact entry)
-    // For now, we'll assume contact entry has nickname or we fetch profile.
-    // Actually, ContactBookEntry only has processServerId. We might need to fetch names.
-    // Or the backend should return enriched data.
-    // Let's assume for now we just show ID or Nickname.
+    entryType: string
 }
 
 export default function NewOrder() {
@@ -60,6 +56,7 @@ export default function NewOrder() {
             dropoffZipCode: '',
             dropoffType: 'AUTOMATED',
             assignedProcessServerId: '',
+            finalAgreedPrice: '',
         }])
     }
 
@@ -81,15 +78,7 @@ export default function NewOrder() {
             const token = localStorage.getItem('token')
             const user = JSON.parse(localStorage.getItem('user') || '{}')
 
-            const userIdToProfileId: { [key: string]: string } = {
-                'aa1bf200-5fa0-4dc7-b91a-69efb4ad1b3e': '78650ad7-23fc-4eb4-9a5c-f280f0463771', // customer1@example.com
-                '17812fce-9c0b-493c-9e4b-0189fb1c31c8': 'c371b934-2f03-4d8e-8ec6-fdf3470c1aef', // customer2@example.com
-                '9db8f52f-b73d-49a4-8831-48781f9d90a2': 'c3f5911b-8a2f-4315-b5fd-6f454df39d7e', // customer3@example.com
-                '0e1b5d79-887f-4a2b-8450-01c385e4ed18': 'd25ec2b5-242a-4b35-80a4-3696c5da745e', // customer4@example.com
-                'ab3435d4-7174-4989-b443-b9d60bff298f': '3708ddee-f034-4591-83f1-5bf2d6a160fb', // customer5@example.com
-            }
-
-            const customerId = userIdToProfileId[user.userId] || user.userId
+            const customerId = user.userId
 
             // Format deadline to include seconds for proper LocalDateTime parsing
             const formattedDeadline = formData.deadline.includes(':00:')

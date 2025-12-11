@@ -228,14 +228,10 @@ public class OrderService {
                             d.getStatus() == OrderDropoff.DropoffStatus.FAILED);
 
             if (allDone) {
-                boolean anyFailed = order.getDropoffs().stream()
-                        .anyMatch(d -> d.getStatus() == OrderDropoff.DropoffStatus.FAILED);
-
-                if (anyFailed) {
-                    order.setStatus(Order.OrderStatus.FAILED);
-                } else {
-                    order.setStatus(Order.OrderStatus.COMPLETED);
-                }
+                // Even if some dropoffs failed due to max attempts, we mark the order as
+                // COMPLETED
+                // This ensures the process server gets paid for their valid attempts.
+                order.setStatus(Order.OrderStatus.COMPLETED);
                 order.setCompletedAt(LocalDateTime.now());
                 orderRepository.save(order);
             }
@@ -265,8 +261,10 @@ public class OrderService {
     }
 
     public Order getOrderById(String id) {
-        return orderRepository.findById(id)
+        Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Order not found"));
+        populateCustomerName(order);
+        return order;
     }
 
     public List<Order> getOrdersByCustomerId(String customerId) {
@@ -274,15 +272,19 @@ public class OrderService {
     }
 
     public List<Order> getOrdersByProcessServerId(String processServerId) {
-        return orderRepository.findDistinctByDropoffsAssignedProcessServerId(processServerId);
+        List<Order> orders = orderRepository.findDistinctByDropoffsAssignedProcessServerId(processServerId);
+        populateCustomerNames(orders);
+        return orders;
     }
 
     public List<Order> getAvailableOrders() {
         List<Order.OrderStatus> statuses = List.of(Order.OrderStatus.OPEN, Order.OrderStatus.BIDDING);
 
-        return orderRepository.findAll().stream()
+        List<Order> orders = orderRepository.findAll().stream()
                 .filter(order -> statuses.contains(order.getStatus()))
                 .toList();
+        populateCustomerNames(orders);
+        return orders;
     }
 
     public List<Order> getOrdersByTenantId(String tenantId) {
@@ -311,5 +313,27 @@ public class OrderService {
                     return isCompleted && isCustomerMatch && isProcessServerMatch;
                 })
                 .orElse(false);
+    }
+
+    private void populateCustomerNames(List<Order> orders) {
+        for (Order order : orders) {
+            populateCustomerName(order);
+        }
+    }
+
+    private void populateCustomerName(Order order) {
+        try {
+            java.util.Map<String, Object> user = userClient.getUser(order.getCustomerId());
+            if (user != null) {
+                String firstName = (String) user.get("firstName");
+                String lastName = (String) user.get("lastName");
+                order.setCustomerName(firstName + " " + lastName);
+            } else {
+                order.setCustomerName("Unknown Customer");
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch customer name for order {}", order.getId());
+            order.setCustomerName("Unknown Customer");
+        }
     }
 }

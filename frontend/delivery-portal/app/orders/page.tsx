@@ -87,10 +87,11 @@ export default function AvailableOrders() {
                                     <div>
                                         <h3 className="font-semibold text-lg">{order.orderNumber}</h3>
                                         <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold mt-2 ${order.status === 'OPEN' ? 'bg-green-500/20 text-green-400' :
-                                                'bg-yellow-500/20 text-yellow-400'
+                                            'bg-yellow-500/20 text-yellow-400'
                                             }`}>
                                             {order.status}
                                         </span>
+                                        <p className="text-sm text-gray-300 font-medium mt-1">{order.customerName}</p>
                                     </div>
                                     {order.existingBidsCount > 0 && (
                                         <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
@@ -129,6 +130,6 @@ export default function AvailableOrders() {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     )
 }

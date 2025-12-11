@@ -22,19 +22,24 @@ export default function MyBids() {
         const parsedUser = JSON.parse(userData)
         setUser(parsedUser)
 
-        // Get delivery person profile ID from user ID
-        const userIdToProfileId: { [key: string]: string } = {
-            '650e8400-e29b-41d4-a716-446655440006': '950e8400-e29b-41d4-a716-446655440001', // driver1
-            '650e8400-e29b-41d4-a716-446655440007': '950e8400-e29b-41d4-a716-446655440002', // driver2
-        }
-        const deliveryPersonId = userIdToProfileId[parsedUser.userId] || parsedUser.userId
+        // Find the PROCESS_SERVER role to get tenantUserRoleId
+        const processServerRole = parsedUser.roles.find((r: any) => r.role === 'PROCESS_SERVER')
 
-        loadMyBids(deliveryPersonId, token)
+        if (processServerRole && processServerRole.id) {
+            loadMyBids(processServerRole.id, token)
+        } else {
+            console.error('No PROCESS_SERVER role found for user')
+            setLoading(false)
+        }
     }, [router])
 
-    const loadMyBids = async (deliveryPersonId: string, token: string) => {
+    const loadMyBids = async (tenantUserRoleId: string, token: string) => {
         try {
-            const data = await api.getMyBids(deliveryPersonId, token)
+            // Get Profile to get the actual ProcessServerID
+            const profileData = await api.getProcessServerProfile(tenantUserRoleId, token)
+            const processServerId = profileData.id
+
+            const data = await api.getMyBids(processServerId, token)
             setBids(data)
         } catch (error) {
             console.error('Failed to load bids:', error)

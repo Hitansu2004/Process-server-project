@@ -95,6 +95,9 @@ public class Order {
     @JsonManagedReference("order-dropoffs")
     private List<OrderDropoff> dropoffs = new ArrayList<>();
 
+    @Transient
+    private String customerName;
+
     public enum OrderStatus {
         DRAFT, OPEN, BIDDING, PARTIALLY_ASSIGNED, ASSIGNED, IN_PROGRESS, COMPLETED, FAILED, CANCELLED
     }

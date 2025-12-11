@@ -158,14 +158,9 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                     <div>
                         <h1 className="text-3xl font-bold">{order.orderNumber}</h1>
                         <p className="text-gray-400 mt-1">Order Details</p>
+                        <p className="text-sm text-gray-300 font-medium mt-1">Customer: {order.customerName}</p>
                     </div>
-                    <span className={`ml-auto px-3 py-1 rounded-full text-sm font-semibold ${order.status === 'OPEN' ? 'bg-green-500/20 text-green-400' :
-                        order.status === 'BIDDING' ? 'bg-yellow-500/20 text-yellow-400' :
-                            order.status === 'ASSIGNED' || order.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
-                                'bg-gray-500/20 text-gray-400'
-                        }`}>
-                        {order.status}
-                    </span>
+
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -290,12 +285,25 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                         {new Date(order.deadline).toLocaleTimeString()}
                                     </p>
                                 </div>
-                                {order.finalAgreedPrice && (
+                                <div>
                                     <div>
-                                        <p className="text-gray-400 text-sm">Your Earnings</p>
-                                        <p className="font-medium text-green-400 text-lg">${order.deliveryPersonPayout || order.finalAgreedPrice}</p>
+                                        <p className="text-gray-400 text-sm mb-1">Payment Breakdown</p>
+                                        <div className="space-y-1">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-300">Bid Amount:</span>
+                                                <span className="font-medium">${(order.customerPaymentAmount || order.finalAgreedPrice || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-red-400">Platform Fee (15%):</span>
+                                                <span className="font-medium text-red-400">-${((order.customerPaymentAmount || order.finalAgreedPrice || 0) * 0.15).toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm border-t border-white/10 pt-1 mt-1">
+                                                <span className="text-green-400 font-bold">Your Earnings:</span>
+                                                <span className="font-bold text-green-400">${(order.processServerPayout || (order.finalAgreedPrice * 0.85) || 0).toFixed(2)}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
+                                </div>
                                 {order.specialInstructions && (
                                     <div className="col-span-2">
                                         <p className="text-gray-400 text-sm">Special Instructions</p>
@@ -338,36 +346,7 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                             </div>
                         )}
 
-                        {/* Existing Bids */}
-                        <div className="card">
-                            <h2 className="text-xl font-bold mb-4">
-                                Existing Bids ({bids.length})
-                            </h2>
-                            {bids.length === 0 ? (
-                                <p className="text-gray-400 text-sm">No bids yet. Be the first!</p>
-                            ) : (
-                                <div className="space-y-3">
-                                    {bids.slice(0, 5).map((bid: any) => (
-                                        <div key={bid.id} className="glass rounded-lg p-3">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <p className="font-semibold text-primary">${bid.bidAmount}</p>
-                                                    <p className="text-xs text-gray-400 mt-1">
-                                                        {bid.createdAt ? new Date(bid.createdAt).toLocaleString() : 'N/A'}
-                                                    </p>
-                                                </div>
-                                                <span className={`text-xs px-2 py-1 rounded ${bid.status === 'ACCEPTED' ? 'bg-green-500/20 text-green-400' :
-                                                    bid.status === 'REJECTED' ? 'bg-red-500/20 text-red-400' :
-                                                        'bg-yellow-500/20 text-yellow-400'
-                                                    }`}>
-                                                    {bid.status}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+
                     </div>
                 </div>
             </div>
