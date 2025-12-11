@@ -49,6 +49,22 @@ export default function Dashboard() {
         }
     }
 
+    const calculateOrderPrice = (order: any): number | null => {
+        // Calculate from dropoffs as source of truth
+        if (order.dropoffs && order.dropoffs.length > 0) {
+            const total = order.dropoffs.reduce((sum: number, dropoff: any) => {
+                return sum + (dropoff.finalAgreedPrice || 0)
+            }, 0)
+            if (total > 0) return total
+        }
+
+        // Fallback to order-level prices
+        if (order.finalAgreedPrice) return order.finalAgreedPrice
+        if (order.customerPaymentAmount) return order.customerPaymentAmount
+
+        return null
+    }
+
     const handleLogout = () => {
         localStorage.clear()
         router.push('/login')
@@ -149,11 +165,14 @@ export default function Dashboard() {
                                             {order.status}
                                         </span>
                                     </div>
-                                    {order.finalAgreedPrice && (
-                                        <p className="mt-2 text-sm">
-                                            Price: <span className="font-semibold text-primary">${order.finalAgreedPrice}</span>
-                                        </p>
-                                    )}
+                                    {(() => {
+                                        const price = calculateOrderPrice(order)
+                                        return price && (
+                                            <p className="mt-2 text-sm">
+                                                Price: <span className="font-semibold text-primary">${price}</span>
+                                            </p>
+                                        )
+                                    })()}
                                 </div>
                             ))}
                         </div>
