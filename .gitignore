@@ -1,0 +1,17 @@
+**/target/
+**/node_modules/
+**/.DS_Store
+**/.env
+**/.env.local
+**/dist/
+**/build/
+**/.next/
+**/out/
+**/.idea/
+**/.vscode/
+*.log
+*.iml
+.classpath
+.project
+.settings/
+mysql_data/

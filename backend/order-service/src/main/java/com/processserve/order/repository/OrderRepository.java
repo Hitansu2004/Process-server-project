@@ -1,0 +1,32 @@
+package com.processserve.order.repository;
+
+import com.processserve.order.entity.Order;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface OrderRepository extends JpaRepository<Order, String> {
+
+    List<Order> findByTenantId(String tenantId);
+
+    List<Order> findByCustomerId(String customerId);
+
+    List<Order> findDistinctByDropoffsAssignedProcessServerId(String processServerId);
+
+    Optional<Order> findByOrderNumber(String orderNumber);
+
+    @Query("SELECT DISTINCT o FROM Order o JOIN o.dropoffs d WHERE d.assignedProcessServerId = :processServerId ORDER BY o.completedAt DESC")
+    List<Order> findTop15ByAssignedProcessServerIdOrderByCompletedAtDesc(
+            @Param("processServerId") String processServerId);
+
+    List<Order> findByTenantIdAndStatus(String tenantId, Order.OrderStatus status);
+
+    long countByCustomerId(String customerId);
+
+    List<Order> findByStatusInAndPickupZipCodeIn(List<Order.OrderStatus> statuses, List<String> zipCodes);
+}
