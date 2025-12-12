@@ -1,6 +1,0 @@
-ALTER TABLE tenants
-ADD COLUMN is_active BOOLEAN DEFAULT TRUE,
-ADD COLUMN business_hours JSON,
-ADD COLUMN pricing_config JSON,
-ADD COLUMN notification_settings JSON,
-ADD COLUMN created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6);
