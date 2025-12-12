@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     compress: true,
-    basePath: '/admin',
     poweredByHeader: false,
     reactStrictMode: true,
     swcMinify: true,

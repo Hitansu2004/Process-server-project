@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --foreground-rgb: 30, 41, 59;
+    --background-start-rgb: 248, 250, 252;
+    --background-end-rgb: 241, 245, 249;
+    --primary-rgb: 59, 130, 246;
+    --secondary-rgb: 99, 102, 241;
+}
+
+/* Performance Optimizations */
+html {
+    scroll-behavior: smooth;
+}
+
+* {
+    /* Enable hardware acceleration for better performance */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Improved scrolling on touch devices */
+body {
+    color: rgb(var(--foreground-rgb));
+    background: linear-gradient(to bottom, rgb(var(--background-start-rgb)), rgb(var(--background-end-rgb)));
+    min-height: 100vh;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
+}
+
+/* Optimize animations for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Optimize scrollable containers */
+.scroll-container {
+    will-change: scroll-position;
+    contain: layout style paint;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.glass {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    /* GPU acceleration */
+    will-change: transform;
+}
+
+.btn-primary {
+    @apply bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all duration-300 shadow-md hover:shadow-lg;
+    will-change: transform;
+}
+
+.card {
+    @apply glass rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300;
+    will-change: transform;
+}
+
+.role-card {
+    @apply cursor-pointer transform hover:scale-105 transition-all duration-300 p-8 rounded-2xl border-2 border-transparent hover:border-blue-400 bg-white shadow-lg hover:shadow-2xl;
+    will-change: transform, box-shadow;
+    backface-visibility: hidden;
+}
+
+.role-card:active {
+    @apply scale-95;
+}
+
+/* Optimize images for faster loading */
+img {
+    content-visibility: auto;
+}
+
+/* Improve rendering performance for long lists */
+.list-item {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 100px;
+}

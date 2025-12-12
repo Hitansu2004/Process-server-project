@@ -77,7 +77,7 @@ export default function LoginPage() {
                 </form>
 
                 <p className="text-center text-gray-400 mt-6 text-sm">
-                    Test: customer1@example.com / Password123!
+                    Test: customer1@example.com / password
                 </p>
             </div>
         </div>

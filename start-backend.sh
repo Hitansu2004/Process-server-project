@@ -33,81 +33,94 @@ echo "=== Building all backend services with Java 17 ==="
 # Build all services
 cd backend
 
-# Build discovery server first
-echo "Building discovery-server..."
-cd discovery-server && mvn clean install -DskipTests && cd ..
+# 1. Start Discovery Server (Eureka) - Must start first
+echo ""
+echo "1️⃣  Starting Discovery Server (Eureka) on port 8761..."
+cd discovery-server
+mvn spring-boot:run > ../logs/discovery-server.log 2>&1 &
+DISCOVERY_PID=$!
+cd ..
+echo "   Started with PID: $DISCOVERY_PID"
+echo "   ⏳ Waiting 30 seconds for Eureka to be ready..."
+sleep 30
 
-# Build other services
-for service in api-gateway auth-service tenant-service user-service notification-service order-service; do
-  echo "Building $service..."
-  cd $service && mvn clean install -DskipTests && cd ..
-done
+# Check Eureka status
+if curl -s http://localhost:8761 > /dev/null 2>&1; then
+    echo "   ✅ Discovery Server is UP and ready"
+else
+    echo "   ⚠️  Discovery Server may still be starting..."
+fi
 
-# Order service already built
-echo "All services built successfully!"
+# 2. Start API Gateway
+echo ""
+echo "2️⃣  Starting API Gateway on port 8080..."
+cd api-gateway
+mvn spring-boot:run > ../logs/api-gateway.log 2>&1 &
+cd ..
+echo "   ✅ Started"
+sleep 5
+
+# 3. Start Auth Service  
+echo ""
+echo "3️⃣  Starting Auth Service..."
+cd auth-service
+mvn spring-boot:run > ../logs/auth-service.log 2>&1 &
+cd ..
+echo "   ✅ Started"
+sleep 5
+
+# 4. Start User Service
+echo ""
+echo "4️⃣  Starting User Service..."
+cd user-service
+mvn spring-boot:run > ../logs/user-service.log 2>&1 &
+cd ..
+echo "   ✅ Started"
+sleep 5
+
+# 5. Start Tenant Service
+echo ""
+echo "5️⃣  Starting Tenant Service..."
+cd tenant-service
+mvn spring-boot:run > ../logs/tenant-service.log 2>&1 &
+cd ..
+echo "   ✅ Started"
+sleep 5
+
+# 6. Start Order Service
+echo ""
+echo "6️⃣  Starting Order Service..."
+cd order-service
+mvn spring-boot:run > ../logs/order-service.log 2>&1 &
+cd ..
+echo "   ✅ Started"
+sleep 5
+
+# 7. Start Notification Service
+echo ""
+echo "7️⃣  Starting Notification Service..."
+cd notification-service
+mvn spring-boot:run > ../logs/notification-service.log 2>&1 &
+cd ..
+echo "   ✅ Started"
 
 cd ..
 
-echo "Starting services..."
-
-# Start discovery server first
-echo "Starting discovery-server on port 8761..."
-cd backend/discovery-server
-nohup java -jar target/*.jar > /tmp/discovery-server.log 2>&1 &
-echo $! > /tmp/discovery-server.pid
-cd ../..
-sleep 10
-
-# Start other services
-echo "Starting auth-service on port 8082..."
-cd backend/auth-service
-nohup java -jar target/*.jar > /tmp/auth-service.log 2>&1 &
-echo $! > /tmp/auth-service.pid
-cd ../..
-sleep 3
-
-echo "Starting tenant-service on port 8084..."
-cd backend/tenant-service
-nohup java -jar target/*.jar > /tmp/tenant-service.log 2>&1 &
-echo $! > /tmp/tenant-service.pid
-cd ../..
-sleep 3
-
-echo "Starting user-service on port 8085..."
-cd backend/user-service
-nohup java -jar target/*.jar > /tmp/user-service.log 2>&1 &
-echo $! > /tmp/user-service.pid
-cd ../..
-sleep 3
-
-echo "Starting notification-service on port 8086..."
-cd backend/notification-service
-nohup java -jar target/*.jar > /tmp/notification-service.log 2>&1 &
-echo $! > /tmp/notification-service.pid
-cd ../..
-sleep 3
-
-# Start order-service
-echo "Starting order-service on port 8083..."
-cd backend/order-service
-nohup java -jar target/*.jar > /tmp/order-service.log 2>&1 &
-echo $! > /tmp/order-service.pid
-cd ../..
-sleep 3
-
-# Start API Gateway last
-echo "Starting api-gateway on port 8080..."
-cd backend/api-gateway
-nohup java -jar target/*.jar > /tmp/api-gateway.log 2>&1 &
-echo $! > /tmp/api-gateway.pid
-cd ../..
-sleep 5
-
-echo "All backend services started!"
-echo "Discovery Server: http://localhost:8761"
-echo "API Gateway: http://localhost:8080"
-echo "Auth Service: http://localhost:8082"
-echo "Order Service: http://localhost:8083"
-echo "Tenant Service: http://localhost:8084"
-echo "User Service: http://localhost:8085"
-echo "Notification Service: http://localhost:8086"
+echo ""
+echo "=========================================="
+echo "✨ All Backend Services Started!"
+echo ""
+echo "Services:"
+echo "  🔍 Discovery Server: http://localhost:8761"
+echo "  🌐 API Gateway:      http://localhost:8080"
+echo "  🔐 Auth Service:     (registered with Eureka)"
+echo "  👤 User Service:     (registered with Eureka)"
+echo "  🏢 Tenant Service:   (registered with Eureka)"
+echo "  📦 Order Service:    (registered with Eureka)"
+echo "  🔔 Notification:     (registered with Eureka)"
+echo ""
+echo "📋 Logs: backend/logs/"
+echo "⏳ Services will register with Eureka in ~30 seconds"
+echo ""
+echo "To stop: pkill -f 'java.*spring-boot'"
+echo "=========================================="
