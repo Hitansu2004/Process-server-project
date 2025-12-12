@@ -87,4 +87,20 @@ export const api = {
         if (!res.ok) throw new Error('Failed to update settings')
         return res.json()
     },
+
+    async getProcessServerProfile(processServerId: string, token: string) {
+        const res = await fetch(`${API_URL}/api/process-servers/${processServerId}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!res.ok) throw new Error('Failed to fetch process server profile')
+        return res.json()
+    },
+
+    async getOrderBids(orderId: string, token: string) {
+        const res = await fetch(`${API_URL}/api/bids/order/${orderId}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!res.ok) throw new Error('Failed to fetch bids')
+        return res.json()
+    },
 }

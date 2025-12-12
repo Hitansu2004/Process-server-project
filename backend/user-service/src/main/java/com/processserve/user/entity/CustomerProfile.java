@@ -4,9 +4,6 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "customer_profiles")
@@ -21,8 +18,4 @@ public class CustomerProfile {
 
     @Column(name = "tenant_user_role_id", length = 36, unique = true, nullable = false)
     private String tenantUserRoleId;
-
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
 }

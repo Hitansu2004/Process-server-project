@@ -101,13 +101,17 @@ public class OrderService {
                 } else if (dropoffReq.getFinalAgreedPrice() != null) {
                     // Regular Guided: Calculate commissions
                     BigDecimal payout = dropoffReq.getFinalAgreedPrice();
-                    BigDecimal superAdminFee = payout.multiply(new BigDecimal("0.05")); // 5% fee
                     BigDecimal commission = payout.multiply(new BigDecimal("0.15")); // 15% commission
-                    BigDecimal totalCustomerPay = payout.add(commission).add(superAdminFee);
+                    BigDecimal totalCustomerPay = payout.add(commission); // Customer pays payout + commission
+
+                    // Super admin fee is 5% of the commission, NOT added to customer payment
+                    BigDecimal superAdminFee = commission.multiply(new BigDecimal("0.05")); // 5% of commission
+                    BigDecimal tenantProfit = commission.subtract(superAdminFee); // Tenant profit = commission - super
+                                                                                  // admin fee
 
                     order.setSuperAdminFee(order.getSuperAdminFee().add(superAdminFee));
                     order.setTenantCommission(order.getTenantCommission().add(commission));
-                    order.setTenantProfit(order.getTenantProfit().add(commission)); // Profit = Commission
+                    order.setTenantProfit(order.getTenantProfit().add(tenantProfit));
                     order.setCustomerPaymentAmount(order.getCustomerPaymentAmount().add(totalCustomerPay));
                 }
 
@@ -295,7 +299,8 @@ public class OrderService {
 
     public BigDecimal getPlatformRevenue() {
         return orderRepository.findAll().stream()
-                .filter(order -> order.getStatus() == Order.OrderStatus.COMPLETED)
+                .filter(order -> order.getStatus() != Order.OrderStatus.CANCELLED
+                        && order.getStatus() != Order.OrderStatus.DRAFT)
                 .map(Order::getSuperAdminFee)
                 .filter(fee -> fee != null)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

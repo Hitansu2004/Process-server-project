@@ -1,5 +1,6 @@
 package com.processserve.user.controller;
 
+import com.processserve.user.dto.CustomerDTO;
 import com.processserve.user.entity.CustomerProfile;
 import com.processserve.user.service.CustomerService;
 import lombok.RequiredArgsConstructor;
@@ -32,11 +33,13 @@ public class CustomerController {
     }
 
     @GetMapping("/tenant/{tenantId}")
-    public ResponseEntity<List<CustomerProfile>> getCustomersByTenant(@PathVariable String tenantId) {
-        // For now, return all customers since we don't track tenantId in
-        // CustomerProfile
-        // In production, you would add tenantId field to CustomerProfile entity
-        List<CustomerProfile> customers = customerService.getAllCustomers();
-        return ResponseEntity.ok(customers);
+    public ResponseEntity<List<CustomerDTO>> getCustomersByTenant(@PathVariable String tenantId) {
+        try {
+            List<CustomerDTO> customers = customerService.getCustomersByTenantEnriched(tenantId);
+            return ResponseEntity.ok(customers);
+        } catch (Exception e) {
+            log.error("Error fetching customers for tenant {}: {}", tenantId, e.getMessage(), e);
+            throw e;
+        }
     }
 }
