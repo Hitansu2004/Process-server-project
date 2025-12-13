@@ -128,13 +128,13 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Total Assigned</h3>
-                        <p className="text-3xl font-bold text-white">
+                        <h3 className="text-gray-500 text-sm mb-2">Total Assigned</h3>
+                        <p className="text-3xl font-bold text-gray-900">
                             {profile?.totalOrdersAssigned || 0}
                         </p>
                     </div>
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Total Earnings</h3>
+                        <h3 className="text-gray-500 text-sm mb-2">Total Earnings</h3>
                         <p className="text-3xl font-bold text-green-400">
                             ${assignedOrders
                                 .filter(order => order.status !== 'FAILED' && order.status !== 'CANCELLED')
@@ -143,13 +143,13 @@ export default function Dashboard() {
                         </p>
                     </div>
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Total Pending</h3>
+                        <h3 className="text-gray-500 text-sm mb-2">Total Pending</h3>
                         <p className="text-3xl font-bold text-yellow-500">
                             {(profile?.totalOrdersAssigned || 0) - (profile?.successfulDeliveries || 0)}
                         </p>
                     </div>
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Success Rate</h3>
+                        <h3 className="text-gray-500 text-sm mb-2">Success Rate</h3>
                         <p className="text-3xl font-bold text-blue-500">
                             {profile ? `${Math.min(((profile.successfulDeliveries / (profile.totalOrdersAssigned || 1)) * 100), 100).toFixed(1)}%` : '0.0%'}
                         </p>
@@ -158,19 +158,19 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Available Orders</h3>
+                        <h3 className="text-gray-500 text-sm mb-2">Available Orders</h3>
                         <p className="text-3xl font-bold text-primary">
                             {availableOrders.length}
                         </p>
                     </div>
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">My Bids (Pending)</h3>
+                        <h3 className="text-gray-500 text-sm mb-2">My Bids (Pending)</h3>
                         <p className="text-3xl font-bold text-yellow-500">
                             {myBids.filter(b => b.status === 'PENDING').length}
                         </p>
                     </div>
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">My Rating</h3>
+                        <h3 className="text-gray-500 text-sm mb-2">My Rating</h3>
                         <div className="flex items-baseline gap-2">
                             <p className="text-3xl font-bold text-yellow-500">
                                 {profile?.currentRating || '0.0'}
@@ -226,22 +226,22 @@ export default function Dashboard() {
                                                 <h3 className="font-semibold text-lg">{order.orderNumber}</h3>
                                                 {/* Show badge for order type */}
                                                 {order.dropoffs?.some((d: any) => d.dropoffType === 'GUIDED') ? (
-                                                    <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">
+                                                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
                                                         DIRECT
                                                     </span>
                                                 ) : (
-                                                    <span className="text-[10px] bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full border border-orange-500/30">
+                                                    <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full border border-orange-200">
                                                         BID
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-gray-300 font-medium">{order.customerName}</p>
-                                            <p className="text-sm text-gray-400 mt-1">{order.pickupAddress}</p>
-                                            <p className="text-sm text-green-400 font-medium mt-2">Your Earnings: ${order.processServerPayout || order.finalAgreedPrice}</p>
+                                            <p className="text-sm text-gray-600 font-medium">{order.customerName}</p>
+                                            <p className="text-sm text-gray-500 mt-1">{order.pickupAddress}</p>
+                                            <p className="text-sm text-green-600 font-medium mt-2">Your Earnings: ${order.processServerPayout || order.finalAgreedPrice}</p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' :
-                                            order.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
-                                                'bg-yellow-500/20 text-yellow-400'
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                                            order.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                                                'bg-yellow-100 text-yellow-700'
                                             }`}>{order.status}</span>
                                     </div>
                                 </div>

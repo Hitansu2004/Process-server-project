@@ -54,14 +54,14 @@ export default function Home() {
         if (!selectedTenant) return
 
         const routeMap = {
-            'admin': '/admin',
-            'customer': '/customer',
-            'server': '/delivery'
+            'admin': 'http://localhost:3002/admin',
+            'customer': 'http://localhost:3004/customer',
+            'server': 'http://localhost:3001/delivery'
         }
 
         const route = routeMap[role]
         if (typeof window !== 'undefined') {
-            window.location.href = `http://localhost:3000${route}`
+            window.location.href = route
         }
     }
 
@@ -90,7 +90,7 @@ export default function Home() {
                 {/* Hidden Super Admin Link */}
                 <div className="text-center mb-8">
                     <a
-                        href="http://localhost:3000/super-admin"
+                        href="http://localhost:3003/super-admin"
                         className="text-xs text-gray-400 hover:text-blue-500 transition"
                     >
                         Super Admin Access

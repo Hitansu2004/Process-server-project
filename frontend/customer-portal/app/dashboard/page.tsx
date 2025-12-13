@@ -115,7 +115,13 @@ export default function Dashboard() {
 
     const filteredOrders = orders.filter(order => {
         // Status Filter
-        if (statusFilter !== 'ALL' && order.status !== statusFilter) return false
+        if (statusFilter !== 'ALL') {
+            if (statusFilter === 'ASSIGNED') {
+                if (order.status !== 'ASSIGNED' && order.status !== 'PARTIALLY_ASSIGNED') return false
+            } else if (order.status !== statusFilter) {
+                return false
+            }
+        }
 
         // Price Filter
         const price = calculateOrderPrice(order) || 0
@@ -134,8 +140,8 @@ export default function Dashboard() {
                 {/* Header */}
                 <div className="flex justify-between items-center mb-8">
                     <div>
-                        <h1 className="text-3xl font-bold">Dashboard</h1>
-                        <p className="text-gray-400 mt-1">Welcome back, {user?.firstName}!</p>
+                        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+                        <p className="text-gray-500 mt-1">Welcome back, {user?.firstName}!</p>
                     </div>
                     <div className="flex gap-4">
                         <button
@@ -171,17 +177,17 @@ export default function Dashboard() {
                 {/* Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Total Orders</h3>
-                        <p className="text-3xl font-bold">{orders.length}</p>
+                        <h3 className="text-gray-500 text-sm mb-2">Total Orders</h3>
+                        <p className="text-3xl font-bold text-gray-900">{orders.length}</p>
                     </div>
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Active</h3>
+                        <h3 className="text-gray-500 text-sm mb-2">Active</h3>
                         <p className="text-3xl font-bold text-primary">
                             {orders.length - orders.filter(o => o.status === 'COMPLETED').length}
                         </p>
                     </div>
                     <div className="card">
-                        <h3 className="text-gray-400 text-sm mb-2">Completed</h3>
+                        <h3 className="text-gray-500 text-sm mb-2">Completed</h3>
                         <p className="text-3xl font-bold text-green-500">
                             {orders.filter(o => o.status === 'COMPLETED').length}
                         </p>
@@ -192,7 +198,7 @@ export default function Dashboard() {
                 <div className="card mb-6">
                     <div className="flex flex-wrap gap-4 items-end">
                         <div className="flex-1 min-w-[200px]">
-                            <label className="block text-sm text-gray-400 mb-1">Status</label>
+                            <label className="block text-sm text-gray-500 mb-1">Status</label>
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -209,7 +215,7 @@ export default function Dashboard() {
                             </select>
                         </div>
                         <div className="w-32">
-                            <label className="block text-sm text-gray-400 mb-1">Min Price</label>
+                            <label className="block text-sm text-gray-500 mb-1">Min Price</label>
                             <input
                                 type="number"
                                 value={minPrice}
@@ -219,7 +225,7 @@ export default function Dashboard() {
                             />
                         </div>
                         <div className="w-32">
-                            <label className="block text-sm text-gray-400 mb-1">Max Price</label>
+                            <label className="block text-sm text-gray-500 mb-1">Max Price</label>
                             <input
                                 type="number"
                                 value={maxPrice}
@@ -229,7 +235,7 @@ export default function Dashboard() {
                             />
                         </div>
                         <div className="w-40">
-                            <label className="block text-sm text-gray-400 mb-1">Dropoffs</label>
+                            <label className="block text-sm text-gray-500 mb-1">Dropoffs</label>
                             <input
                                 type="number"
                                 value={dropoffFilter}
@@ -240,7 +246,7 @@ export default function Dashboard() {
                         </div>
                         <button
                             onClick={clearFilters}
-                            className="px-4 py-2 rounded-lg glass hover:bg-white/10 text-sm h-[42px]"
+                            className="px-4 py-2 rounded-lg glass hover:bg-black/5 text-sm h-[42px] text-gray-700"
                         >
                             Clear Filters
                         </button>
@@ -250,14 +256,14 @@ export default function Dashboard() {
                 {/* Orders List */}
                 <div className="card">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold">Your Orders</h2>
-                        <span className="text-gray-400 text-sm">
+                        <h2 className="text-2xl font-bold text-gray-900">Your Orders</h2>
+                        <span className="text-gray-500 text-sm">
                             Showing {filteredOrders.length} of {orders.length} orders
                         </span>
                     </div>
 
                     {filteredOrders.length === 0 ? (
-                        <div className="text-center py-12 text-gray-400">
+                        <div className="text-center py-12 text-gray-500">
                             <p className="mb-4">No orders match your filters</p>
                             {orders.length === 0 && (
                                 <button
@@ -279,23 +285,23 @@ export default function Dashboard() {
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <h3 className="font-semibold text-lg">{order.orderNumber}</h3>
-                                            <p className="text-sm text-gray-400 mt-1">
+                                            <p className="text-sm text-gray-500 mt-1">
                                                 {order.pickupAddress} → {order.totalDropoffs} dropoff(s)
                                             </p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' :
-                                            order.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
-                                                order.status === 'BIDDING' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                    'bg-gray-500/20 text-gray-400'
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                                            order.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                                                order.status === 'BIDDING' ? 'bg-yellow-100 text-yellow-700' :
+                                                    'bg-gray-100 text-gray-700'
                                             }`}>
-                                            {order.status}
+                                            {order.status === 'PARTIALLY_ASSIGNED' ? 'ASSIGNED' : order.status}
                                         </span>
                                     </div>
                                     {(() => {
                                         const price = calculateOrderPrice(order)
                                         return price && (
                                             <p className="mt-2 text-sm">
-                                                Price: <span className="font-semibold text-green-400">${price}</span>
+                                                Price: <span className="font-semibold text-green-600">${price}</span>
                                             </p>
                                         )
                                     })()}
