@@ -110,12 +110,14 @@ public class ProcessServerController {
             String operatingZipCodes = (String) request.get("operatingZipCodes");
             String tenantId = (String) request.get("tenantId");
             Boolean isGlobal = (Boolean) request.get("isGlobal");
+            String profilePhotoUrl = (String) request.get("profilePhotoUrl");
 
             ProcessServerProfile profile = processServerService.createProfile(
                     tenantUserRoleId,
                     operatingZipCodes,
                     tenantId,
-                    isGlobal != null ? isGlobal : false);
+                    isGlobal != null ? isGlobal : false,
+                    profilePhotoUrl);
             return ResponseEntity.ok(profile);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -133,6 +135,17 @@ public class ProcessServerController {
             e.printStackTrace(); // Print to console as well
             return ResponseEntity.badRequest()
                     .body(Map.of("error", e.getMessage(), "trace", e.getStackTrace()[0].toString()));
+        }
+    }
+
+    @GetMapping("/details/{processServerId}")
+    public ResponseEntity<?> getProcessServerDetails(@PathVariable String processServerId) {
+        try {
+            com.processserve.user.dto.ProcessServerDetailsDTO details = processServerService
+                    .getProcessServerDetails(processServerId);
+            return ResponseEntity.ok(details);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 }

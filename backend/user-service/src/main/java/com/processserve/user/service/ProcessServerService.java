@@ -24,7 +24,7 @@ public class ProcessServerService {
 
     @Transactional
     public ProcessServerProfile createProfile(String tenantUserRoleId, String operatingZipCodes, String tenantId,
-            boolean isGlobal) {
+            boolean isGlobal, String profilePhotoUrl) {
         ProcessServerProfile profile = new ProcessServerProfile();
         profile.setId(UUID.randomUUID().toString());
         profile.setTenantUserRoleId(tenantUserRoleId);
@@ -33,6 +33,7 @@ public class ProcessServerService {
         profile.setIsGlobal(isGlobal);
         profile.setStatus(ProcessServerProfile.ProcessServerStatus.PENDING_APPROVAL);
         profile.setIsRedZone(false);
+        profile.setProfilePhotoUrl(profilePhotoUrl != null ? profilePhotoUrl : "1.png");
 
         return processServerRepository.save(profile);
     }
@@ -139,7 +140,7 @@ public class ProcessServerService {
 
     public ProcessServerProfile getProfile(String idOrTenantUserRoleId) {
         log.info("Looking up profile for ID/TenantUserRoleId: {}", idOrTenantUserRoleId);
-        
+
         // Try finding by ID (PK) first
         return processServerRepository.findById(idOrTenantUserRoleId)
                 .or(() -> processServerRepository.findByTenantUserRoleId(idOrTenantUserRoleId))
@@ -155,5 +156,30 @@ public class ProcessServerService {
 
     public List<ProcessServerProfile> getAllProcessServers() {
         return processServerRepository.findAll();
+    }
+
+    public com.processserve.user.dto.ProcessServerDetailsDTO getProcessServerDetails(String processServerId) {
+        ProcessServerProfile profile = processServerRepository.findById(processServerId)
+                .orElseThrow(() -> new RuntimeException("Process server not found: " + processServerId));
+
+        // Calculate success rate
+        double successRate = 0.0;
+        if (profile.getTotalOrdersAssigned() > 0) {
+            successRate = (profile.getSuccessfulDeliveries().doubleValue() / profile.getTotalOrdersAssigned()) * 100;
+        }
+
+        // Get name from tenant_user_role or use a default
+        String name = "Process Server " + processServerId.substring(0, 8);
+
+        com.processserve.user.dto.ProcessServerDetailsDTO dto = new com.processserve.user.dto.ProcessServerDetailsDTO();
+        dto.setId(profile.getId());
+        dto.setName(name);
+        dto.setProfilePhotoUrl(profile.getProfilePhotoUrl());
+        dto.setCurrentRating(profile.getCurrentRating());
+        dto.setSuccessRate(successRate);
+        dto.setTotalOrdersAssigned(profile.getTotalOrdersAssigned());
+        dto.setSuccessfulDeliveries(profile.getSuccessfulDeliveries());
+
+        return dto;
     }
 }

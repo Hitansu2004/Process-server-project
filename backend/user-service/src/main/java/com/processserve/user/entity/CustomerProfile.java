@@ -18,4 +18,10 @@ public class CustomerProfile {
 
     @Column(name = "tenant_user_role_id", length = 36, unique = true, nullable = false)
     private String tenantUserRoleId;
+
+    @Column(name = "default_zip_code", length = 10)
+    private String defaultZipCode;
+
+    @Column(name = "default_process_server_id", length = 36)
+    private String defaultProcessServerId;
 }

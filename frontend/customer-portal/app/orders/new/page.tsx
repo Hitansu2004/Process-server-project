@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import ProcessServerCard from '@/components/ProcessServerCard'
 
 interface ContactEntry {
     id: string
@@ -11,10 +12,23 @@ interface ContactEntry {
     entryType: string
 }
 
+interface ProcessServerDetails {
+    id: string
+    name: string
+    profilePhotoUrl: string
+    currentRating: number
+    successRate: number
+    totalOrdersAssigned: number
+    successfulDeliveries: number
+}
+
 export default function NewOrder() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [contactList, setContactList] = useState<ContactEntry[]>([])
+    const [processServerDetails, setProcessServerDetails] = useState<Record<string, ProcessServerDetails>>({})
+    const [defaultProcessServerId, setDefaultProcessServerId] = useState<string | null>(null)
+    const [sortFilter, setSortFilter] = useState<string>('default') // Filter state
     const [formData, setFormData] = useState({
         pickupAddress: '',
         pickupZipCode: '',
@@ -31,23 +45,77 @@ export default function NewOrder() {
     }])
 
     useEffect(() => {
-        const fetchContacts = async () => {
+        const fetchData = async () => {
             try {
-                const token = localStorage.getItem('token')
-                const user = JSON.parse(localStorage.getItem('user') || '{}')
-                // Use user ID directly (global_users.id) for contact list
+                const token = sessionStorage.getItem('token')
+                const user = JSON.parse(sessionStorage.getItem('user') || '{}')
                 const userId = user.userId
 
                 if (token && userId) {
+                    // Fetch contact list
                     const contacts = await api.getContactList(userId, token)
                     setContactList(contacts)
+
+                    // Fetch process server details for each contact
+                    const detailsPromises = contacts.map((contact: ContactEntry) =>
+                        api.getProcessServerDetails(contact.processServerId, token)
+                            .catch(() => null)
+                    )
+                    const detailsResults = await Promise.all(detailsPromises)
+                    const detailsMap: Record<string, ProcessServerDetails> = {}
+                    detailsResults.forEach((details, index) => {
+                        if (details) {
+                            detailsMap[contacts[index].processServerId] = details
+                        }
+                    })
+                    setProcessServerDetails(detailsMap)
+
+                    // Fetch default process server
+                    const customerProfileId = user.roles[0]?.customerProfileId
+                    if (customerProfileId) {
+                        const defaultRes = await api.getDefaultProcessServer(customerProfileId, token)
+                        if (defaultRes.processServerId) {
+                            setDefaultProcessServerId(defaultRes.processServerId)
+                        }
+                    }
                 }
             } catch (error) {
-                console.error('Failed to fetch contacts:', error)
+                console.error('Failed to fetch data:', error)
             }
         }
-        fetchContacts()
+        fetchData()
     }, [])
+
+    // Sort and filter process servers based on selected filter
+    const getSortedContacts = (contacts: ContactEntry[]) => {
+        const contactsWithDetails = contacts
+            .map(contact => ({
+                contact,
+                details: processServerDetails[contact.processServerId]
+            }))
+            .filter(item => item.details) // Only include contacts with details
+
+        switch (sortFilter) {
+            case 'highest-rated':
+                return contactsWithDetails
+                    .sort((a, b) => Number(b.details.currentRating) - Number(a.details.currentRating))
+                    .map(item => item.contact)
+            case 'highest-success':
+                return contactsWithDetails
+                    .sort((a, b) => b.details.successRate - a.details.successRate)
+                    .map(item => item.contact)
+            case 'most-orders':
+                return contactsWithDetails
+                    .sort((a, b) => b.details.totalOrdersAssigned - a.details.totalOrdersAssigned)
+                    .map(item => item.contact)
+            case 'most-worked':
+                return contactsWithDetails
+                    .sort((a, b) => b.details.successfulDeliveries - a.details.successfulDeliveries)
+                    .map(item => item.contact)
+            default:
+                return contacts
+        }
+    }
 
     const addDropoff = () => {
         setDropoffs([...dropoffs, {
@@ -75,8 +143,8 @@ export default function NewOrder() {
         setLoading(true)
 
         try {
-            const token = localStorage.getItem('token')
-            const user = JSON.parse(localStorage.getItem('user') || '{}')
+            const token = sessionStorage.getItem('token')
+            const user = JSON.parse(sessionStorage.getItem('user') || '{}')
 
             const customerId = user.userId
 
@@ -218,7 +286,7 @@ export default function NewOrder() {
                                     </div>
 
                                     {/* Assignment Type */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-4">
                                         <div>
                                             <label className="block text-sm font-medium mb-2">Assignment Type</label>
                                             <select
@@ -232,32 +300,123 @@ export default function NewOrder() {
                                         </div>
 
                                         {dropoff.dropoffType === 'GUIDED' && (
-                                            <div>
-                                                <label className="block text-sm font-medium mb-2">Select Process Server</label>
-                                                <select
-                                                    value={dropoff.assignedProcessServerId}
-                                                    onChange={(e) => updateDropoff(index, 'assignedProcessServerId', e.target.value)}
-                                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                                                    required
-                                                >
-                                                    <option value="">-- Select from Contact List --</option>
-                                                    {contactList.map(contact => {
-                                                        const isGlobal = contact.nickname?.startsWith('Global')
-                                                        const typeLabel = isGlobal ? 'GLOBAL' : contact.entryType
-                                                        return (
-                                                            <option key={contact.id} value={contact.processServerId}>
-                                                                {contact.nickname || contact.processServerId} ({typeLabel})
-                                                            </option>
-                                                        )
-                                                    })}
-                                                </select>
-                                                {contactList.length === 0 && (
-                                                    <p className="text-xs text-yellow-400 mt-1">
-                                                        No contacts found. Add Process Servers to your Contact List first.
-                                                    </p>
-                                                )}
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium mb-3">
+                                                        Select Process Server
+                                                        {contactList.length > 0 && (
+                                                            <span className="ml-2 text-xs text-gray-400">
+                                                                ({contactList.length} available)
+                                                            </span>
+                                                        )}
+                                                    </label>
 
-                                                <div className="mt-4">
+                                                    {/* Filter/Sort Buttons */}
+                                                    {contactList.length > 0 && (
+                                                        <div className="mb-4 flex flex-wrap gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSortFilter('default')}
+                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'default'
+                                                                        ? 'bg-primary text-white'
+                                                                        : 'glass hover:bg-white/10'
+                                                                    }`}
+                                                            >
+                                                                Default
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSortFilter('highest-rated')}
+                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'highest-rated'
+                                                                        ? 'bg-primary text-white'
+                                                                        : 'glass hover:bg-white/10'
+                                                                    }`}
+                                                            >
+                                                                ⭐ Highest Rated
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSortFilter('highest-success')}
+                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'highest-success'
+                                                                        ? 'bg-primary text-white'
+                                                                        : 'glass hover:bg-white/10'
+                                                                    }`}
+                                                            >
+                                                                📈 Highest Success Rate
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSortFilter('most-orders')}
+                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'most-orders'
+                                                                        ? 'bg-primary text-white'
+                                                                        : 'glass hover:bg-white/10'
+                                                                    }`}
+                                                            >
+                                                                📦 Most Orders Completed
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSortFilter('most-worked')}
+                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'most-worked'
+                                                                        ? 'bg-primary text-white'
+                                                                        : 'glass hover:bg-white/10'
+                                                                    }`}
+                                                            >
+                                                                🤝 Most Worked With
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="grid grid-cols-1 gap-4 max-h-[600px] overflow-y-auto pr-2">
+                                                        {getSortedContacts(contactList).map(contact => {
+                                                            const details = processServerDetails[contact.processServerId]
+                                                            if (!details) return null
+
+                                                            return (
+                                                                <ProcessServerCard
+                                                                    key={contact.id}
+                                                                    id={contact.processServerId}
+                                                                    name={contact.nickname || details.name}
+                                                                    profilePhotoUrl={details.profilePhotoUrl}
+                                                                    currentRating={Number(details.currentRating) || 0}
+                                                                    successRate={details.successRate || 0}
+                                                                    totalOrdersAssigned={details.totalOrdersAssigned}
+                                                                    successfulDeliveries={details.successfulDeliveries}
+                                                                    isDefault={contact.processServerId === defaultProcessServerId}
+                                                                    isSelected={dropoff.assignedProcessServerId === contact.processServerId}
+                                                                    onSelect={() => updateDropoff(index, 'assignedProcessServerId', contact.processServerId)}
+                                                                    onSetDefault={async () => {
+                                                                        try {
+                                                                            const token = sessionStorage.getItem('token')
+                                                                            const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+                                                                            const customerProfileId = user.roles[0]?.customerProfileId
+                                                                            if (token && customerProfileId) {
+                                                                                await api.setDefaultProcessServer(customerProfileId, contact.processServerId, token)
+                                                                                setDefaultProcessServerId(contact.processServerId)
+                                                                            }
+                                                                        } catch (error) {
+                                                                            console.error('Failed to set default:', error)
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            )
+                                                        })}
+                                                    </div>
+
+                                                    {contactList.length === 0 && (
+                                                        <div className="glass rounded-lg p-8 text-center">
+                                                            <div className="text-4xl mb-3">👥</div>
+                                                            <p className="text-yellow-400 font-medium mb-2">
+                                                                No contacts found
+                                                            </p>
+                                                            <p className="text-sm text-gray-400">
+                                                                Add Process Servers to your Contact List first.
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div>
                                                     <label className="block text-sm font-medium mb-2">Offer Amount ($)</label>
                                                     <input
                                                         type="number"

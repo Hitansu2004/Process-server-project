@@ -20,6 +20,19 @@ public class CustomerService {
     private final CustomerProfileRepository customerRepository;
     private final TenantUserRoleRepository tenantUserRoleRepository;
 
+    public CustomerProfile createProfile(String tenantUserRoleId) {
+        // Check if profile already exists
+        if (customerRepository.findByTenantUserRoleId(tenantUserRoleId).isPresent()) {
+            throw new RuntimeException("Customer profile already exists for this tenant user role");
+        }
+
+        CustomerProfile profile = new CustomerProfile();
+        profile.setId(java.util.UUID.randomUUID().toString());
+        profile.setTenantUserRoleId(tenantUserRoleId);
+
+        return customerRepository.save(profile);
+    }
+
     public CustomerProfile getProfile(String globalUserId) {
         return customerRepository.findByGlobalUserId(globalUserId)
                 .orElseThrow(() -> new RuntimeException("Customer profile not found"));
@@ -85,5 +98,20 @@ public class CustomerService {
                 .totalOrders(0) // Will be calculated by frontend from orders
                 .companyName(null) // Not in current schema
                 .build();
+    }
+
+    public void setDefaultProcessServer(String customerId, String processServerId) {
+        CustomerProfile profile = customerRepository.findById(customerId)
+                .orElseThrow(() -> new RuntimeException("Customer profile not found"));
+
+        profile.setDefaultProcessServerId(processServerId);
+        customerRepository.save(profile);
+        log.info("Set default process server {} for customer {}", processServerId, customerId);
+    }
+
+    public String getDefaultProcessServer(String customerId) {
+        return customerRepository.findById(customerId)
+                .map(CustomerProfile::getDefaultProcessServerId)
+                .orElse(null);
     }
 }

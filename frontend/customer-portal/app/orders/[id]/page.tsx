@@ -18,7 +18,7 @@ export default function OrderDetails() {
 
     const loadOrderDetails = async () => {
         try {
-            const token = localStorage.getItem('token')
+            const token = sessionStorage.getItem('token')
 
             // Load order details with dropoffs
             const orderData = await fetch(`http://localhost:8080/api/orders/${params.id}`, {
@@ -65,7 +65,7 @@ export default function OrderDetails() {
         if (!confirm('Accept this bid? The process server will be assigned to this order.')) return
 
         try {
-            const token = localStorage.getItem('token')
+            const token = sessionStorage.getItem('token')
             await api.acceptBid(bidId, token!)
             alert('Bid accepted! Process server has been assigned.')
             router.push('/dashboard')
@@ -439,7 +439,7 @@ export default function OrderDetails() {
                                                                         processServerId: ps.id,
                                                                         ratingValue: star,
                                                                         reviewText: "Great service!" // Placeholder
-                                                                    }, localStorage.getItem('token')!)
+                                                                    }, sessionStorage.getItem('token')!)
                                                                         .then(() => alert('Rating submitted!'))
                                                                         .catch(err => alert('Failed to submit rating'))
                                                                 }

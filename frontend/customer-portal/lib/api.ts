@@ -1,11 +1,11 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
 export const api = {
-    async login(email: string, password: string) {
+    async login(email: string, password: string, tenantId?: string) {
         const response = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ email, password, tenantId }),
         })
         if (!response.ok) throw new Error('Login failed')
         return response.json()
@@ -121,5 +121,34 @@ export const api = {
         })
         if (!res.ok) throw new Error('Failed to submit rating')
         return res.json()
+    },
+
+    async getProcessServerDetails(processServerId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/process-servers/details/${processServerId}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!response.ok) throw new Error('Failed to fetch process server details')
+        return response.json()
+    },
+
+    async setDefaultProcessServer(customerId: string, processServerId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/customers/${customerId}/default-process-server`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ processServerId }),
+        })
+        if (!response.ok) throw new Error('Failed to set default process server')
+        return response.json()
+    },
+
+    async getDefaultProcessServer(customerId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/customers/${customerId}/default-process-server`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!response.ok) throw new Error('Failed to get default process server')
+        return response.json()
     }
 }

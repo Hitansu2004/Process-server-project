@@ -60,6 +60,9 @@ public class ProcessServerProfile {
     @Column(name = "verification_docs", columnDefinition = "JSON")
     private String verificationDocs;
 
+    @Column(name = "profile_photo_url", length = 500)
+    private String profilePhotoUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ProcessServerStatus status;

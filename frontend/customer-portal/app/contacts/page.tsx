@@ -9,6 +9,11 @@ interface ContactEntry {
     processServerId: string
     nickname: string
     entryType: string
+    processServerDetails?: {
+        firstName?: string
+        lastName?: string
+        email?: string
+    }
 }
 
 export default function Contacts() {
@@ -22,14 +27,41 @@ export default function Contacts() {
 
     const fetchContacts = async () => {
         try {
-            const token = localStorage.getItem('token')
-            const user = JSON.parse(localStorage.getItem('user') || '{}')
+            const token = sessionStorage.getItem('token')
+            const user = JSON.parse(sessionStorage.getItem('user') || '{}')
             // Mapping logic - use user ID directly (it's the global user ID)
             const userId = user.userId
 
             if (token && userId) {
                 const data = await api.getContactList(userId, token)
-                setContacts(data)
+
+                // Enrich contacts with process server details
+                const enrichedContacts = await Promise.all(
+                    data.map(async (contact: ContactEntry) => {
+                        try {
+                            // Fetch process server details using the process server ID
+                            const response = await fetch(`http://localhost:8080/api/process-servers/${contact.processServerId}`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            })
+                            if (response.ok) {
+                                const serverData = await response.json()
+                                return {
+                                    ...contact,
+                                    processServerDetails: {
+                                        firstName: serverData.firstName,
+                                        lastName: serverData.lastName,
+                                        email: serverData.email
+                                    }
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`Failed to fetch details for ${contact.processServerId}:`, error)
+                        }
+                        return contact
+                    })
+                )
+
+                setContacts(enrichedContacts)
             }
         } catch (error) {
             console.error('Failed to fetch contacts:', error)
@@ -44,8 +76,8 @@ export default function Contacts() {
         e.preventDefault()
         setLoading(true)
         try {
-            const token = localStorage.getItem('token')
-            const user = JSON.parse(localStorage.getItem('user') || '{}')
+            const token = sessionStorage.getItem('token')
+            const user = JSON.parse(sessionStorage.getItem('user') || '{}')
             // Use user ID directly (it's the global user ID)
             const userId = user.userId
 
@@ -73,7 +105,7 @@ export default function Contacts() {
         }
         if (!confirm('Are you sure?')) return
         try {
-            const token = localStorage.getItem('token')
+            const token = sessionStorage.getItem('token')
             await api.removeContact(id, token!)
             fetchContacts()
         } catch (error) {
@@ -145,10 +177,22 @@ export default function Contacts() {
                             badgeColor = 'bg-blue-500/20 text-blue-300'
                         }
 
+                        // Determine display name
+                        let displayName = contact.nickname
+                        if (!displayName && contact.processServerDetails) {
+                            const { firstName, lastName, email } = contact.processServerDetails
+                            if (firstName || lastName) {
+                                displayName = `${firstName || ''} ${lastName || ''}`.trim()
+                            } else if (email) {
+                                displayName = email
+                            }
+                        }
+                        displayName = displayName || 'Unknown Process Server'
+
                         return (
                             <div key={contact.id} className="glass rounded-lg p-4 flex justify-between items-center">
                                 <div>
-                                    <h3 className="font-bold text-lg">{contact.nickname || 'No Nickname'}</h3>
+                                    <h3 className="font-bold text-lg">{displayName}</h3>
                                     <p className="text-sm text-gray-400">ID: {contact.processServerId}</p>
                                     <div className="flex gap-2 mt-2">
                                         <span className={`text-xs px-2 py-1 rounded-full ${badgeColor}`}>

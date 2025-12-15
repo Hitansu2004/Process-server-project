@@ -20,6 +20,22 @@ public class CustomerController {
 
     private final CustomerService customerService;
 
+    @PostMapping
+    public ResponseEntity<?> createProfile(@RequestBody Map<String, Object> request) {
+        try {
+            String tenantUserRoleId = (String) request.get("tenantUserRoleId");
+            log.info("Creating customer profile for tenantUserRoleId: {}", tenantUserRoleId);
+
+            CustomerProfile profile = customerService.createProfile(tenantUserRoleId);
+            return ResponseEntity.ok(profile);
+        } catch (Exception e) {
+            log.error("Failed to create customer profile: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
     @GetMapping("/{globalUserId}")
     public ResponseEntity<?> getProfile(@PathVariable String globalUserId) {
         try {
@@ -40,6 +56,29 @@ public class CustomerController {
         } catch (Exception e) {
             log.error("Error fetching customers for tenant {}: {}", tenantId, e.getMessage(), e);
             throw e;
+        }
+    }
+
+    @PutMapping("/{customerId}/default-process-server")
+    public ResponseEntity<?> setDefaultProcessServer(
+            @PathVariable String customerId,
+            @RequestBody Map<String, String> request) {
+        try {
+            String processServerId = request.get("processServerId");
+            customerService.setDefaultProcessServer(customerId, processServerId);
+            return ResponseEntity.ok(Map.of("message", "Default process server updated successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{customerId}/default-process-server")
+    public ResponseEntity<?> getDefaultProcessServer(@PathVariable String customerId) {
+        try {
+            String processServerId = customerService.getDefaultProcessServer(customerId);
+            return ResponseEntity.ok(Map.of("processServerId", processServerId != null ? processServerId : ""));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import SessionManager from '@/lib/sessionManager'
 
 export default function Dashboard() {
     const router = useRouter()
@@ -57,8 +58,8 @@ export default function Dashboard() {
     }
 
     useEffect(() => {
-        const token = localStorage.getItem('token')
-        const userData = localStorage.getItem('user')
+        const token = sessionStorage.getItem('token')
+        const userData = sessionStorage.getItem('user')
 
         if (!token || !userData) {
             router.push('/login')
@@ -67,6 +68,10 @@ export default function Dashboard() {
 
         const parsedUser = JSON.parse(userData)
         setUser(parsedUser)
+
+        // Initialize session manager
+        SessionManager.init()
+
         // Use user ID directly as we now use Global User IDs for orders
         loadOrders(parsedUser.userId, token)
     }, [router])
@@ -99,7 +104,7 @@ export default function Dashboard() {
     }
 
     const handleLogout = () => {
-        localStorage.clear()
+        SessionManager.clear()
         router.push('/login')
     }
 
@@ -183,7 +188,11 @@ export default function Dashboard() {
                     <div className="card">
                         <h3 className="text-gray-500 text-sm mb-2">Active</h3>
                         <p className="text-3xl font-bold text-primary">
-                            {orders.length - orders.filter(o => o.status === 'COMPLETED').length}
+                            {orders.filter(o =>
+                                o.status !== 'COMPLETED' &&
+                                o.status !== 'FAILED' &&
+                                o.status !== 'CANCELLED'
+                            ).length}
                         </p>
                     </div>
                     <div className="card">

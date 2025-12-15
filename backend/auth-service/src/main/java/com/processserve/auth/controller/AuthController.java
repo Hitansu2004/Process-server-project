@@ -3,6 +3,8 @@ package com.processserve.auth.controller;
 import com.processserve.auth.dto.LoginRequest;
 import com.processserve.auth.dto.LoginResponse;
 import com.processserve.auth.dto.RegisterRequest;
+import com.processserve.auth.dto.RegistrationRequest;
+import com.processserve.auth.dto.RegistrationResponse;
 import com.processserve.auth.entity.GlobalUser;
 import com.processserve.auth.entity.TenantUserRole;
 import com.processserve.auth.service.AuthService;
@@ -33,6 +35,49 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (Exception e) {
             log.error("Registration failed: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    @PostMapping("/register/customer")
+    public ResponseEntity<?> registerCustomer(@Valid @RequestBody RegistrationRequest request) {
+        try {
+            log.info("Customer registration request for: {} in tenant: {}", request.getEmail(), request.getTenantId());
+            RegistrationResponse response = authService.registerCustomer(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (Exception e) {
+            log.error("Customer registration failed: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    @PostMapping("/register/process-server")
+    public ResponseEntity<?> registerProcessServer(@Valid @RequestBody RegistrationRequest request) {
+        try {
+            log.info("Process server registration request for: {} in tenant: {}", request.getEmail(),
+                    request.getTenantId());
+            RegistrationResponse response = authService.registerProcessServer(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (Exception e) {
+            log.error("Process server registration failed: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    @PostMapping("/register/admin")
+    public ResponseEntity<?> registerAdmin(@Valid @RequestBody RegistrationRequest request) {
+        try {
+            log.info("Admin registration request for: {} in tenant: {}", request.getEmail(), request.getTenantId());
+            RegistrationResponse response = authService.registerAdmin(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (Exception e) {
+            log.error("Admin registration failed: {}", e.getMessage());
             Map<String, String> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);

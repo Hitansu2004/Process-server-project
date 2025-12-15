@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Ports to free up
-# export JAVA_HOME="/usr/local/Cellar/openjdk@17/17.0.16/libexec/openjdk.jdk/Contents/Home"
-# export PATH="$JAVA_HOME/bin:$PATH"
+export JAVA_HOME="/usr/local/Cellar/openjdk@17/17.0.16/libexec/openjdk.jdk/Contents/Home"
+export PATH="$JAVA_HOME/bin:$PATH"
 
 PORTS="8761 8080 8081 8082 8083 8084 8085"
 
