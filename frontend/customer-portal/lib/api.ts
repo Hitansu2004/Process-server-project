@@ -110,6 +110,14 @@ export const api = {
         return res.json()
     },
 
+    async getCustomerProfile(userId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/customers/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!response.ok) throw new Error('Failed to fetch customer profile')
+        return response.json()
+    },
+
     submitRating: async (data: any, token: string) => {
         const res = await fetch(`${API_URL}/api/process-servers/ratings`, {
             method: 'POST',

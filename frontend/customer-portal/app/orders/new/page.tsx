@@ -28,6 +28,7 @@ export default function NewOrder() {
     const [contactList, setContactList] = useState<ContactEntry[]>([])
     const [processServerDetails, setProcessServerDetails] = useState<Record<string, ProcessServerDetails>>({})
     const [defaultProcessServerId, setDefaultProcessServerId] = useState<string | null>(null)
+    const [customerProfileId, setCustomerProfileId] = useState<string | null>(null)
     const [sortFilter, setSortFilter] = useState<string>('default') // Filter state
     const [formData, setFormData] = useState({
         pickupAddress: '',
@@ -70,12 +71,27 @@ export default function NewOrder() {
                     })
                     setProcessServerDetails(detailsMap)
 
-                    // Fetch default process server
-                    const customerProfileId = user.roles[0]?.customerProfileId
-                    if (customerProfileId) {
-                        const defaultRes = await api.getDefaultProcessServer(customerProfileId, token)
-                        if (defaultRes.processServerId) {
-                            setDefaultProcessServerId(defaultRes.processServerId)
+                    // Fetch customer profile to get the real ID
+                    let profileId = user.roles?.[0]?.customerProfileId
+
+                    if (!profileId) {
+                        try {
+                            const profile = await api.getCustomerProfile(userId, token)
+                            profileId = profile.id
+                        } catch (e) {
+                            console.error("Failed to fetch customer profile", e)
+                        }
+                    }
+
+                    if (profileId) {
+                        setCustomerProfileId(profileId)
+                        try {
+                            const defaultRes = await api.getDefaultProcessServer(profileId, token)
+                            if (defaultRes.processServerId) {
+                                setDefaultProcessServerId(defaultRes.processServerId)
+                            }
+                        } catch (e) {
+                            console.error("Failed to fetch default process server", e)
                         }
                     }
                 }
@@ -318,8 +334,8 @@ export default function NewOrder() {
                                                                 type="button"
                                                                 onClick={() => setSortFilter('default')}
                                                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'default'
-                                                                        ? 'bg-primary text-white'
-                                                                        : 'glass hover:bg-white/10'
+                                                                    ? 'bg-primary text-white'
+                                                                    : 'glass hover:bg-white/10'
                                                                     }`}
                                                             >
                                                                 Default
@@ -328,8 +344,8 @@ export default function NewOrder() {
                                                                 type="button"
                                                                 onClick={() => setSortFilter('highest-rated')}
                                                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'highest-rated'
-                                                                        ? 'bg-primary text-white'
-                                                                        : 'glass hover:bg-white/10'
+                                                                    ? 'bg-primary text-white'
+                                                                    : 'glass hover:bg-white/10'
                                                                     }`}
                                                             >
                                                                 ⭐ Highest Rated
@@ -338,8 +354,8 @@ export default function NewOrder() {
                                                                 type="button"
                                                                 onClick={() => setSortFilter('highest-success')}
                                                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'highest-success'
-                                                                        ? 'bg-primary text-white'
-                                                                        : 'glass hover:bg-white/10'
+                                                                    ? 'bg-primary text-white'
+                                                                    : 'glass hover:bg-white/10'
                                                                     }`}
                                                             >
                                                                 📈 Highest Success Rate
@@ -348,8 +364,8 @@ export default function NewOrder() {
                                                                 type="button"
                                                                 onClick={() => setSortFilter('most-orders')}
                                                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'most-orders'
-                                                                        ? 'bg-primary text-white'
-                                                                        : 'glass hover:bg-white/10'
+                                                                    ? 'bg-primary text-white'
+                                                                    : 'glass hover:bg-white/10'
                                                                     }`}
                                                             >
                                                                 📦 Most Orders Completed
@@ -358,8 +374,8 @@ export default function NewOrder() {
                                                                 type="button"
                                                                 onClick={() => setSortFilter('most-worked')}
                                                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'most-worked'
-                                                                        ? 'bg-primary text-white'
-                                                                        : 'glass hover:bg-white/10'
+                                                                    ? 'bg-primary text-white'
+                                                                    : 'glass hover:bg-white/10'
                                                                     }`}
                                                             >
                                                                 🤝 Most Worked With
@@ -388,14 +404,17 @@ export default function NewOrder() {
                                                                     onSetDefault={async () => {
                                                                         try {
                                                                             const token = sessionStorage.getItem('token')
-                                                                            const user = JSON.parse(sessionStorage.getItem('user') || '{}')
-                                                                            const customerProfileId = user.roles[0]?.customerProfileId
+
                                                                             if (token && customerProfileId) {
                                                                                 await api.setDefaultProcessServer(customerProfileId, contact.processServerId, token)
                                                                                 setDefaultProcessServerId(contact.processServerId)
+                                                                            } else {
+                                                                                console.error('Missing token or customerProfileId')
+                                                                                alert('Unable to set default: Customer profile not loaded.')
                                                                             }
                                                                         } catch (error) {
                                                                             console.error('Failed to set default:', error)
+                                                                            alert('Failed to set default process server.')
                                                                         }
                                                                     }}
                                                                 />

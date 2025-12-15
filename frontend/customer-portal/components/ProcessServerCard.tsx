@@ -27,8 +27,16 @@ export default function ProcessServerCard({
     onSelect,
     onSetDefault
 }: ProcessServerCardProps) {
+    const [imgError, setImgError] = React.useState(false)
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
-    const imageUrl = profilePhotoUrl ? `${API_URL}/uploads/${profilePhotoUrl}` : null
+
+    // Construct image URL or fallback
+    const getImageUrl = () => {
+        if (!profilePhotoUrl || imgError) {
+            return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&size=128`
+        }
+        return `${API_URL}/uploads/${profilePhotoUrl}`
+    }
 
     const renderStars = (rating: number) => {
         const stars = []
@@ -76,23 +84,12 @@ export default function ProcessServerCard({
             <div className="flex flex-col items-center text-center">
                 {/* Profile Photo */}
                 <div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-800 flex-shrink-0 mb-4 ring-4 ring-white/10">
-                    {imageUrl ? (
-                        <img
-                            src={imageUrl}
-                            alt={name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                                // Fallback if image fails to load
-                                const target = e.target as HTMLImageElement
-                                target.style.display = 'none'
-                                target.parentElement!.innerHTML = '<div class="w-full h-full flex items-center justify-center text-4xl text-gray-400">👤</div>'
-                            }}
-                        />
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center text-4xl text-gray-400">
-                            👤
-                        </div>
-                    )}
+                    <img
+                        src={getImageUrl()}
+                        alt={name}
+                        className="w-full h-full object-cover"
+                        onError={() => setImgError(true)}
+                    />
                 </div>
 
                 {/* Name */}
@@ -142,6 +139,7 @@ export default function ProcessServerCard({
             {/* Set as Default Button */}
             {!isDefault && onSetDefault && (
                 <button
+                    type="button"
                     onClick={(e) => {
                         e.stopPropagation()
                         onSetDefault()
