@@ -143,6 +143,21 @@ public class ProcessServerController {
         try {
             com.processserve.user.dto.ProcessServerDetailsDTO details = processServerService
                     .getProcessServerDetails(processServerId);
+
+            // Fetch user details from auth-service
+            try {
+                Map<String, Object> roleDetails = authClient.getRoleDetails(details.getTenantUserRoleId());
+                details.setFirstName((String) roleDetails.get("firstName"));
+                details.setLastName((String) roleDetails.get("lastName"));
+                details.setEmail((String) roleDetails.get("email"));
+                // Update display name if available
+                if (details.getFirstName() != null || details.getLastName() != null) {
+                    details.setName((details.getFirstName() + " " + details.getLastName()).trim());
+                }
+            } catch (Exception e) {
+                log.error("Failed to fetch user details for {}: {}", details.getTenantUserRoleId(), e.getMessage());
+            }
+
             return ResponseEntity.ok(details);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

@@ -1,7 +1,7 @@
 // SessionManager - Handles session timeout and activity tracking
 class SessionManager {
-    private static TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-    private static WARNING_MS = 60 * 1000; // 1 minute before timeout
+    private static TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+    private static WARNING_MS = 2 * 60 * 1000; // 2 minutes before timeout
     private static lastActivity: number = Date.now();
     private static timeoutCheckInterval: NodeJS.Timeout | null = null;
     private static warningShown: boolean = false;

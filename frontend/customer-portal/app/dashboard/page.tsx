@@ -28,6 +28,10 @@ export default function Dashboard() {
         if (typeof window !== 'undefined') return sessionStorage.getItem('dashboard_dropoffFilter') || ''
         return ''
     })
+    const [sortOrder, setSortOrder] = useState(() => {
+        if (typeof window !== 'undefined') return sessionStorage.getItem('dashboard_sortOrder') || 'newest'
+        return 'newest'
+    })
 
     // Persist filters to sessionStorage whenever they change
     useEffect(() => {
@@ -46,15 +50,21 @@ export default function Dashboard() {
         sessionStorage.setItem('dashboard_dropoffFilter', dropoffFilter)
     }, [dropoffFilter])
 
+    useEffect(() => {
+        sessionStorage.setItem('dashboard_sortOrder', sortOrder)
+    }, [sortOrder])
+
     const clearFilters = () => {
         setStatusFilter('ALL')
         setMinPrice('')
         setMaxPrice('')
         setDropoffFilter('')
+        setSortOrder('newest')
         sessionStorage.removeItem('dashboard_statusFilter')
         sessionStorage.removeItem('dashboard_minPrice')
         sessionStorage.removeItem('dashboard_maxPrice')
         sessionStorage.removeItem('dashboard_dropoffFilter')
+        sessionStorage.removeItem('dashboard_sortOrder')
     }
 
     useEffect(() => {
@@ -137,6 +147,10 @@ export default function Dashboard() {
         if (dropoffFilter && order.totalDropoffs !== parseInt(dropoffFilter)) return false
 
         return true
+    }).sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime()
+        const dateB = new Date(b.createdAt).getTime()
+        return sortOrder === 'newest' ? dateB - dateA : dateA - dateB
     })
 
     return (
@@ -252,6 +266,17 @@ export default function Dashboard() {
                                 placeholder="Count"
                                 className="w-full px-4 py-2 rounded-lg glass bg-black/20 focus:outline-none focus:ring-2 focus:ring-primary"
                             />
+                        </div>
+                        <div className="w-40">
+                            <label className="block text-sm text-gray-500 mb-1">Sort By</label>
+                            <select
+                                value={sortOrder}
+                                onChange={(e) => setSortOrder(e.target.value)}
+                                className="w-full px-4 py-2 rounded-lg glass bg-black/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                            </select>
                         </div>
                         <button
                             onClick={clearFilters}

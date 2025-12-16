@@ -173,6 +173,7 @@ public class ProcessServerService {
 
         com.processserve.user.dto.ProcessServerDetailsDTO dto = new com.processserve.user.dto.ProcessServerDetailsDTO();
         dto.setId(profile.getId());
+        dto.setTenantUserRoleId(profile.getTenantUserRoleId());
         dto.setName(name);
         dto.setProfilePhotoUrl(profile.getProfilePhotoUrl());
         dto.setCurrentRating(profile.getCurrentRating());

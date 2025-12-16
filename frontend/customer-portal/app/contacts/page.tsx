@@ -3,23 +3,22 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import ContactCard from '@/components/ContactCard'
 
 interface ContactEntry {
     id: string
     processServerId: string
     nickname: string
     entryType: string
-    processServerDetails?: {
-        firstName?: string
-        lastName?: string
-        email?: string
-    }
+    processServerDetails?: any
 }
 
 export default function Contacts() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [contacts, setContacts] = useState<ContactEntry[]>([])
+    const [defaultProcessServerId, setDefaultProcessServerId] = useState<string | null>(null)
+    const [customerProfileId, setCustomerProfileId] = useState<string | null>(null)
     const [newContact, setNewContact] = useState({
         processServerId: '',
         nickname: '',
@@ -29,35 +28,34 @@ export default function Contacts() {
         try {
             const token = sessionStorage.getItem('token')
             const user = JSON.parse(sessionStorage.getItem('user') || '{}')
-            // Mapping logic - use user ID directly (it's the global user ID)
             const userId = user.userId
 
             if (token && userId) {
+                // Fetch customer profile to get the real ID and default server
+                try {
+                    const profile = await api.getCustomerProfile(userId, token)
+                    setCustomerProfileId(profile.id)
+                    setDefaultProcessServerId(profile.defaultProcessServerId)
+                } catch (error) {
+                    console.error('Failed to fetch customer profile:', error)
+                }
+
                 const data = await api.getContactList(userId, token)
 
-                // Enrich contacts with process server details
+                // Enrich contacts with detailed process server info
                 const enrichedContacts = await Promise.all(
                     data.map(async (contact: ContactEntry) => {
                         try {
-                            // Fetch process server details using the process server ID
-                            const response = await fetch(`http://localhost:8080/api/process-servers/${contact.processServerId}`, {
-                                headers: { 'Authorization': `Bearer ${token}` }
-                            })
-                            if (response.ok) {
-                                const serverData = await response.json()
-                                return {
-                                    ...contact,
-                                    processServerDetails: {
-                                        firstName: serverData.firstName,
-                                        lastName: serverData.lastName,
-                                        email: serverData.email
-                                    }
-                                }
+                            // Use getProcessServerDetails for full stats and info
+                            const details = await api.getProcessServerDetails(contact.processServerId, token)
+                            return {
+                                ...contact,
+                                processServerDetails: details
                             }
                         } catch (error) {
                             console.error(`Failed to fetch details for ${contact.processServerId}:`, error)
+                            return contact
                         }
-                        return contact
                     })
                 )
 
@@ -72,13 +70,26 @@ export default function Contacts() {
         fetchContacts()
     }, [])
 
+    const handleSetDefault = async (processServerId: string) => {
+        try {
+            const token = sessionStorage.getItem('token')
+            if (token && customerProfileId) {
+                await api.setDefaultProcessServer(customerProfileId, processServerId, token)
+                setDefaultProcessServerId(processServerId)
+                alert('Default process server updated!')
+            }
+        } catch (error) {
+            console.error('Failed to set default:', error)
+            alert('Failed to set default process server.')
+        }
+    }
+
     const handleAddContact = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
         try {
             const token = sessionStorage.getItem('token')
             const user = JSON.parse(sessionStorage.getItem('user') || '{}')
-            // Use user ID directly (it's the global user ID)
             const userId = user.userId
 
             await api.addContact({
@@ -90,20 +101,17 @@ export default function Contacts() {
 
             setNewContact({ processServerId: '', nickname: '' })
             fetchContacts()
+            alert('Process server added successfully!')
         } catch (error) {
             console.error('Failed to add contact:', error)
-            alert('Failed to add contact. Check ID.')
+            alert('Failed to add contact. Please check the ID and try again.')
         } finally {
             setLoading(false)
         }
     }
 
-    const handleRemoveContact = async (id: string, isGlobal: boolean) => {
-        if (isGlobal) {
-            alert('Cannot remove global process servers. They are available to all customers.')
-            return
-        }
-        if (!confirm('Are you sure?')) return
+    const handleRemoveContact = async (id: string) => {
+        if (!confirm('Are you sure you want to remove this process server from your contacts?')) return
         try {
             const token = sessionStorage.getItem('token')
             await api.removeContact(id, token!)
@@ -116,106 +124,89 @@ export default function Contacts() {
 
     return (
         <div className="min-h-screen p-6">
-            <div className="max-w-4xl mx-auto">
-                <div className="flex items-center gap-4 mb-8">
-                    <button
-                        onClick={() => router.back()}
-                        className="glass px-4 py-2 rounded-lg hover:bg-white/10"
-                    >
-                        ← Back
-                    </button>
-                    <h1 className="text-3xl font-bold">My Contact List</h1>
-                </div>
-
-                {/* Add Contact Form */}
-                <div className="card mb-8">
-                    <h2 className="text-xl font-semibold mb-4">Add Process Server</h2>
-                    <form onSubmit={handleAddContact} className="flex gap-4 items-end">
-                        <div className="flex-1">
-                            <label className="block text-sm font-medium mb-2">Process Server ID</label>
-                            <input
-                                type="text"
-                                value={newContact.processServerId}
-                                onChange={(e) => setNewContact({ ...newContact, processServerId: e.target.value })}
-                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                                placeholder="UUID"
-                                required
-                            />
-                        </div>
-                        <div className="flex-1">
-                            <label className="block text-sm font-medium mb-2">Nickname (Optional)</label>
-                            <input
-                                type="text"
-                                value={newContact.nickname}
-                                onChange={(e) => setNewContact({ ...newContact, nickname: e.target.value })}
-                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                                placeholder="My Favorite Server"
-                            />
-                        </div>
+            <div className="max-w-7xl mx-auto">
+                <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-4">
                         <button
-                            type="submit"
-                            disabled={loading}
-                            className="btn-primary px-6 py-3"
+                            onClick={() => router.back()}
+                            className="glass px-4 py-2 rounded-lg hover:bg-white/10"
                         >
-                            {loading ? 'Adding...' : 'Add'}
+                            ← Back
                         </button>
-                    </form>
+                        <div>
+                            <h1 className="text-3xl font-bold">My Contact List</h1>
+                            <p className="text-gray-400 mt-1">Manage your preferred process servers</p>
+                        </div>
+                    </div>
                 </div>
 
-                {/* Contact List */}
-                <div className="space-y-4">
-                    {contacts.map((contact) => {
-                        const isGlobal = contact.nickname?.startsWith('Global')
-                        // Determine badge type and color
-                        let badgeText = contact.entryType
-                        let badgeColor = 'bg-green-500/20 text-green-300' // MANUAL default
-
-                        if (isGlobal) {
-                            badgeText = 'GLOBAL'
-                            badgeColor = 'bg-yellow-500/20 text-yellow-300'
-                        } else if (contact.entryType === 'AUTO_ADDED') {
-                            badgeColor = 'bg-blue-500/20 text-blue-300'
-                        }
-
-                        // Determine display name
-                        let displayName = contact.nickname
-                        if (!displayName && contact.processServerDetails) {
-                            const { firstName, lastName, email } = contact.processServerDetails
-                            if (firstName || lastName) {
-                                displayName = `${firstName || ''} ${lastName || ''}`.trim()
-                            } else if (email) {
-                                displayName = email
-                            }
-                        }
-                        displayName = displayName || 'Unknown Process Server'
-
-                        return (
-                            <div key={contact.id} className="glass rounded-lg p-4 flex justify-between items-center">
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                    {/* Sidebar - Add Contact */}
+                    <div className="lg:col-span-1">
+                        <div className="card sticky top-6">
+                            <h2 className="text-xl font-bold mb-4">Add Process Server</h2>
+                            <p className="text-sm text-gray-400 mb-6">
+                                Add a process server by their unique ID to easily assign them to future orders.
+                            </p>
+                            <form onSubmit={handleAddContact} className="space-y-4">
                                 <div>
-                                    <h3 className="font-bold text-lg">{displayName}</h3>
-                                    <p className="text-sm text-gray-400">ID: {contact.processServerId}</p>
-                                    <div className="flex gap-2 mt-2">
-                                        <span className={`text-xs px-2 py-1 rounded-full ${badgeColor}`}>
-                                            {badgeText}
-                                        </span>
-                                    </div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-300">Process Server ID</label>
+                                    <input
+                                        type="text"
+                                        value={newContact.processServerId}
+                                        onChange={(e) => setNewContact({ ...newContact, processServerId: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass bg-black/20 focus:outline-none focus:ring-2 focus:ring-primary text-sm font-mono"
+                                        placeholder="UUID"
+                                        required
+                                    />
                                 </div>
-                                {isGlobal ? (
-                                    <span className="text-gray-500 text-sm italic">Global</span>
-                                ) : (
-                                    <button
-                                        onClick={() => handleRemoveContact(contact.id, isGlobal)}
-                                        className="text-red-500 hover:text-red-400"
-                                    >
-                                        Remove
-                                    </button>
-                                )}
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-300">Nickname (Optional)</label>
+                                    <input
+                                        type="text"
+                                        value={newContact.nickname}
+                                        onChange={(e) => setNewContact({ ...newContact, nickname: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass bg-black/20 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                                        placeholder="My Favorite Server"
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="btn-primary w-full py-3"
+                                >
+                                    {loading ? 'Adding...' : 'Add to Contacts'}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    {/* Main Content - Contact Grid */}
+                    <div className="lg:col-span-3">
+                        {contacts.length === 0 ? (
+                            <div className="text-center py-12 glass rounded-xl">
+                                <p className="text-gray-400 text-lg">No contacts found.</p>
+                                <p className="text-sm text-gray-500 mt-2">Add a process server to get started.</p>
                             </div>
-                        )
-                    })}
-                    {contacts.length === 0 && (
-                        <p className="text-center text-gray-400 py-8">No contacts found.</p>
-                    )}
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                                {contacts.map((contact, index) => (
+                                    <ContactCard
+                                        key={contact.id}
+                                        id={contact.id}
+                                        processServerId={contact.processServerId}
+                                        nickname={contact.nickname}
+                                        entryType={contact.entryType}
+                                        details={contact.processServerDetails || {}}
+                                        onRemove={handleRemoveContact}
+                                        index={index + 1}
+                                        isDefault={defaultProcessServerId === contact.processServerId}
+                                        onSetDefault={handleSetDefault}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
