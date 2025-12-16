@@ -316,8 +316,47 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
 
                     {/* Bidding Section */}
                     <div className="space-y-6">
+                        {/* My Bid Status */}
+                        {bids.find((b: any) => b.processServerId === (user?.processServerProfileId || user?.userId)) && (
+                            <div className="card border-2 border-primary/20">
+                                <h2 className="text-xl font-bold mb-4 text-primary">My Bid</h2>
+                                {(() => {
+                                    const myBid = bids.find((b: any) => b.processServerId === (user?.processServerProfileId || user?.userId))
+                                    return (
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-gray-400">Status</span>
+                                                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${myBid.status === 'ACCEPTED' ? 'bg-green-500/20 text-green-400' :
+                                                    myBid.status === 'REJECTED' ? 'bg-red-500/20 text-red-400' :
+                                                        'bg-yellow-500/20 text-yellow-400'
+                                                    }`}>
+                                                    {myBid.status}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-gray-400">Bid Amount</span>
+                                                <span className="text-2xl font-bold text-primary">${myBid.bidAmount}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-gray-400">Submitted</span>
+                                                <span className="text-sm">
+                                                    {new Date(myBid.createdAt).toLocaleDateString()} {new Date(myBid.createdAt).toLocaleTimeString()}
+                                                </span>
+                                            </div>
+                                            {myBid.comment && (
+                                                <div className="pt-4 border-t border-white/10">
+                                                    <p className="text-gray-400 text-sm mb-1">Comment</p>
+                                                    <p className="text-sm italic">"{myBid.comment}"</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })()}
+                            </div>
+                        )}
+
                         {/* Place Bid */}
-                        {!isMyOrder && (order.status === 'OPEN' || order.status === 'BIDDING') && (
+                        {!isMyOrder && !bids.find((b: any) => b.processServerId === (user?.processServerProfileId || user?.userId)) && (order.status === 'OPEN' || order.status === 'BIDDING') && (
                             <div className="card">
                                 <h2 className="text-xl font-bold mb-4">Place Your Bid</h2>
                                 <form onSubmit={handlePlaceBid} className="space-y-4">

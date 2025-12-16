@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 
 export default function LoginPage() {
@@ -21,7 +22,11 @@ export default function LoginPage() {
 
             // Fetch process server profile to get the profile ID
             try {
-                const profileData = await api.getProcessServerProfile(response.tenantUserRoleId, response.token)
+                // Extract tenantUserRoleId from the first role (assuming single tenant context for now)
+                const tenantUserRoleId = response.roles?.[0]?.id
+                if (!tenantUserRoleId) throw new Error('No tenant role found')
+
+                const profileData = await api.getProcessServerProfile(tenantUserRoleId, response.token)
                 // Store profile ID for use in bidding and attempts
                 const userWithProfile = { ...response, processServerProfileId: profileData.id }
                 localStorage.setItem('user', JSON.stringify(userWithProfile))
@@ -61,7 +66,15 @@ export default function LoginPage() {
                         {loading ? 'Logging in...' : 'Login'}
                     </button>
                 </form>
-                <p className="text-center text-gray-400 mt-6 text-sm">Test: driver1@example.com / Password123!</p>
+                <div className="text-center mt-6">
+                    <p className="text-gray-400 text-sm mb-2">
+                        Don't have an account?{' '}
+                        <Link href="/register" className="text-primary hover:text-primary/80 font-medium">
+                            Register here
+                        </Link>
+                    </p>
+                    <p className="text-gray-500 text-xs">Test: driver1@example.com / Password123!</p>
+                </div>
             </div>
         </div>
     )

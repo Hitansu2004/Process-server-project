@@ -1,5 +1,18 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
+export interface Bid {
+    id: string
+    orderId?: string
+    orderNumber?: string
+    pickupAddress?: string
+    pickupZipCode?: string
+    processServerId: string
+    bidAmount: number
+    status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN'
+    createdAt: string
+    order?: any
+}
+
 export const api = {
     async login(email: string, password: string) {
         const res = await fetch(`${API_URL}/api/auth/login`, {
@@ -58,7 +71,7 @@ export const api = {
         return res.json()
     },
 
-    async getOrderBids(orderId: string, token: string) {
+    async getOrderBids(orderId: string, token: string): Promise<Bid[]> {
         const res = await fetch(`${API_URL}/api/bids/order/${orderId}`, {
             headers: { 'Authorization': `Bearer ${token}` },
         })
@@ -66,7 +79,7 @@ export const api = {
         return res.json()
     },
 
-    async getMyBids(processServerId: string, token: string) {
+    async getMyBids(processServerId: string, token: string): Promise<Bid[]> {
         const res = await fetch(`${API_URL}/api/bids/process-server/${processServerId}`, {
             headers: { 'Authorization': `Bearer ${token}` },
         })
@@ -94,4 +107,24 @@ export const api = {
         if (!res.ok) throw new Error('Failed to fetch profile')
         return res.json()
     },
+
+    async registerProcessServer(data: any) {
+        const res = await fetch(`${API_URL}/api/auth/register/process-server`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        })
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: 'Registration failed' }))
+            throw new Error(error.error || 'Registration failed')
+        }
+        return res.json()
+    },
+
+    async getTenants() {
+        const res = await fetch(`${API_URL}/api/tenants`)
+        if (!res.ok) throw new Error('Failed to fetch tenants')
+        return res.json()
+    },
 }
+

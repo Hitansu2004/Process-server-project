@@ -134,6 +134,12 @@ export default function Dashboard() {
                         </p>
                     </div>
                     <div className="card">
+                        <h3 className="text-gray-500 text-sm mb-2">Total Completed</h3>
+                        <p className="text-3xl font-bold text-green-600">
+                            {profile?.successfulDeliveries || 0}
+                        </p>
+                    </div>
+                    <div className="card">
                         <h3 className="text-gray-500 text-sm mb-2">Total Earnings</h3>
                         <p className="text-3xl font-bold text-green-400">
                             ${assignedOrders
@@ -148,15 +154,15 @@ export default function Dashboard() {
                             {(profile?.totalOrdersAssigned || 0) - (profile?.successfulDeliveries || 0)}
                         </p>
                     </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div className="card">
                         <h3 className="text-gray-500 text-sm mb-2">Success Rate</h3>
                         <p className="text-3xl font-bold text-blue-500">
                             {profile ? `${Math.min(((profile.successfulDeliveries / (profile.totalOrdersAssigned || 1)) * 100), 100).toFixed(1)}%` : '0.0%'}
                         </p>
                     </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="card">
                         <h3 className="text-gray-500 text-sm mb-2">Available Orders</h3>
                         <p className="text-3xl font-bold text-primary">

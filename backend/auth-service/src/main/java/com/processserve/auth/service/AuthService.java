@@ -37,6 +37,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final RestTemplate restTemplate;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     @Transactional
     public LoginResponse register(RegisterRequest request) {
@@ -121,13 +122,36 @@ public class AuthService {
         return tenantUserRole;
     }
 
-    @Transactional
     public RegistrationResponse registerProcessServer(RegistrationRequest request) {
         log.info("Registering process server: {} for tenant: {}", request.getEmail(), request.getTenantId());
 
         // Validate tenant
         validateTenant(request.getTenantId());
 
+        // Perform database operations in a separate transaction
+        TenantUserRole tenantUserRole = registerProcessServerInDatabase(request);
+
+        // Create process server profile via user-service
+        // Transaction is committed, so user-service can see the FK reference
+        try {
+            createProcessServerProfile(tenantUserRole.getId(), request);
+        } catch (Exception e) {
+            log.error("Failed to create process server profile: {}", e.getMessage());
+            // Note: User is already created. We might want to rollback or mark as
+            // incomplete,
+            // but for now we just throw the error.
+            throw new RuntimeException("Failed to create process server profile: " + e.getMessage());
+        }
+
+        log.info("Process server registered successfully: {}", tenantUserRole.getGlobalUser().getId());
+
+        return new RegistrationResponse(true,
+                "Process server registration submitted. Awaiting admin approval.",
+                tenantUserRole.getGlobalUser().getId());
+    }
+
+    @Transactional
+    private TenantUserRole registerProcessServerInDatabase(RegistrationRequest request) {
         // Check email uniqueness in tenant
         checkEmailUniquenessInTenant(request.getEmail(), request.getTenantId());
 
@@ -138,14 +162,7 @@ public class AuthService {
         TenantUserRole tenantUserRole = createTenantUserRole(globalUser, request.getTenantId(),
                 TenantUserRole.UserRole.PROCESS_SERVER);
 
-        // Create process server profile via user-service
-        createProcessServerProfile(tenantUserRole.getId(), request);
-
-        log.info("Process server registered successfully: {}", globalUser.getId());
-
-        return new RegistrationResponse(true,
-                "Process server registration submitted. Awaiting admin approval.",
-                globalUser.getId());
+        return tenantUserRole;
     }
 
     @Transactional
@@ -257,8 +274,19 @@ public class AuthService {
         try {
             Map<String, Object> profileRequest = new HashMap<>();
             profileRequest.put("tenantUserRoleId", tenantUserRoleId);
-            profileRequest.put("operatingZipCodes",
-                    request.getOperatingZipCodes() != null ? request.getOperatingZipCodes() : "");
+
+            // Convert comma-separated string to JSON array string
+            String zipCodes = request.getOperatingZipCodes();
+            String zipCodesJson = "[]";
+            if (zipCodes != null && !zipCodes.trim().isEmpty()) {
+                List<String> zipList = java.util.Arrays.stream(zipCodes.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .collect(Collectors.toList());
+                zipCodesJson = objectMapper.writeValueAsString(zipList);
+            }
+
+            profileRequest.put("operatingZipCodes", zipCodesJson);
             profileRequest.put("tenantId", request.getTenantId());
             profileRequest.put("isGlobal", false);
 

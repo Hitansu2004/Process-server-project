@@ -124,7 +124,7 @@ export default function MyBids() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-2">
                                             <h3 className="font-semibold text-lg">
-                                                {bid.order?.orderNumber || (bid.orderId ? `Order ${bid.orderId.substring(0, 8)}...` : 'Order Details')}
+                                                {bid.orderNumber || (bid.orderId ? `Order ${bid.orderId.substring(0, 8)}...` : 'Order Details')}
                                             </h3>
                                             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${bid.status === 'ACCEPTED' ? 'bg-green-500/20 text-green-400' :
                                                 bid.status === 'REJECTED' ? 'bg-red-500/20 text-red-400' :
@@ -148,11 +148,11 @@ export default function MyBids() {
                                                     {bid.createdAt ? new Date(bid.createdAt).toLocaleTimeString() : 'N/A'}
                                                 </p>
                                             </div>
-                                            {bid.order && (
+                                            {(bid.pickupAddress || bid.pickupZipCode) && (
                                                 <div>
                                                     <p className="text-gray-400">Pickup Location</p>
-                                                    <p className="font-medium truncate">{bid.order.pickupAddress}</p>
-                                                    <p className="text-xs text-primary">ZIP: {bid.order.pickupZipCode}</p>
+                                                    <p className="font-medium truncate">{bid.pickupAddress || 'N/A'}</p>
+                                                    <p className="text-xs text-primary">ZIP: {bid.pickupZipCode || 'N/A'}</p>
                                                 </div>
                                             )}
                                         </div>

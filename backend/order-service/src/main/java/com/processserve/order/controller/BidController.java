@@ -57,8 +57,9 @@ public class BidController {
     }
 
     @GetMapping("/process-server/{processServerId}")
-    public ResponseEntity<List<Bid>> getBidsByProcessServer(@PathVariable String processServerId) {
-        List<Bid> bids = bidService.getBidsByProcessServerId(processServerId);
+    public ResponseEntity<List<com.processserve.order.dto.BidDTO>> getBidsByProcessServer(
+            @PathVariable String processServerId) {
+        List<com.processserve.order.dto.BidDTO> bids = bidService.getBidsByProcessServerId(processServerId);
         return ResponseEntity.ok(bids);
     }
 }

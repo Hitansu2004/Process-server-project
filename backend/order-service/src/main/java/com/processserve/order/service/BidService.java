@@ -212,7 +212,24 @@ public class BidService {
         return bidRepository.findByDropoffOrderId(orderId);
     }
 
-    public List<Bid> getBidsByProcessServerId(String processServerId) {
-        return bidRepository.findByProcessServerId(processServerId);
+    public List<com.processserve.order.dto.BidDTO> getBidsByProcessServerId(String processServerId) {
+        List<Bid> bids = bidRepository.findByProcessServerId(processServerId);
+        return bids.stream().map(this::mapToDTO).collect(java.util.stream.Collectors.toList());
+    }
+
+    private com.processserve.order.dto.BidDTO mapToDTO(Bid bid) {
+        OrderDropoff dropoff = bid.getDropoff();
+        Order order = dropoff != null ? dropoff.getOrder() : null;
+
+        return com.processserve.order.dto.BidDTO.builder()
+                .id(bid.getId())
+                .orderId(order != null ? order.getId() : null)
+                .orderNumber(order != null ? order.getOrderNumber() : null)
+                .pickupAddress(order != null ? order.getPickupAddress() : null)
+                .pickupZipCode(order != null ? order.getPickupZipCode() : null)
+                .bidAmount(bid.getBidAmount())
+                .status(bid.getStatus())
+                .createdAt(bid.getCreatedAt())
+                .build();
     }
 }
