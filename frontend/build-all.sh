@@ -1,7 +1,11 @@
 #!/bin/bash
 
 # Build all frontend portals
-# Run from the frontend directory
+# This script can be run from anywhere
+
+# Get the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+FRONTEND_DIR="$SCRIPT_DIR"
 
 echo "🚀 Starting Frontend Build Process..."
 echo "===================================="
@@ -10,7 +14,7 @@ echo "===================================="
 build_portal() {
     local portal=$1
     echo "🔨 Building $portal..."
-    cd "$portal" || exit
+    cd "$FRONTEND_DIR/$portal" || exit
     
     if [ ! -d "node_modules" ]; then
         echo "📦 Installing dependencies..."
@@ -26,7 +30,6 @@ build_portal() {
     fi
     
     echo "✅ $portal built successfully"
-    cd ..
     echo ""
 }
 

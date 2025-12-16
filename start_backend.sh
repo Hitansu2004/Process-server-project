@@ -1,6 +1,11 @@
 #!/bin/bash
 
+# Get the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$SCRIPT_DIR"
+
 # Ports to free up
+# Set JAVA_HOME to Java 17 if needed (optional, can use system default)
 export JAVA_HOME="/usr/local/Cellar/openjdk@17/17.0.16/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 
@@ -22,9 +27,9 @@ start_service() {
   service_name=$1
   dir_name=$2
   echo "Starting $service_name..."
-  cd "backend/$dir_name"
-  nohup mvn spring-boot:run > "$service_name.log" 2>&1 &
-  cd ../..
+  cd "$PROJECT_ROOT/backend/$dir_name" || exit
+  nohup mvn spring-boot:run > "$PROJECT_ROOT/backend/${dir_name}.log" 2>&1 &
+  cd "$PROJECT_ROOT" || exit
 }
 
 # 1. Eureka Server

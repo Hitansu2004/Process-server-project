@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Start all frontend portals for ProcessServe Platform
+# This script can be run from anywhere
+
+# Get the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$SCRIPT_DIR"
+
 # Ports to free up
 PORTS="3000 3001 3002 3003 3004"
 
@@ -16,27 +23,27 @@ echo "Starting Frontend Services..."
 
 # Function to start a portal
 start_portal() {
-    local dir=$1
-    local name=$2
+    local name=$1
+    local title=$2
     local port=$3
     
-    echo "Starting $name on port $port..."
-    cd "frontend/$dir" || exit
+    echo "Starting $title on port $port..."
+    cd "$PROJECT_ROOT/frontend/$name" || exit
     
     # Install dependencies if node_modules doesn't exist
     if [ ! -d "node_modules" ]; then
-        echo "📦 Installing dependencies for $name..."
+        echo "📦 Installing dependencies for $title..."
         npm install > /dev/null 2>&1
     fi
     
     # Start dev server
-    nohup npm run dev > "../logs/${name}.log" 2>&1 &
-    echo "✅ $name started (PID: $!)"
-    cd ../..
+    # Using nohup to keep running if terminal closes, and redirecting logs
+    nohup npm run dev -- -p $port > "$PROJECT_ROOT/frontend/logs/${name}.log" 2>&1 &
+    echo "✅ $title started (PID: $!)"
 }
 
 # Create logs directory
-mkdir -p frontend/logs
+mkdir -p "$PROJECT_ROOT/frontend/logs"
 
 # Start each portal
 start_portal "home-page" "Home Page" "3000"
