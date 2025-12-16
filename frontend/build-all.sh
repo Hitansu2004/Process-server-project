@@ -16,10 +16,8 @@ build_portal() {
     echo "🔨 Building $portal..."
     cd "$FRONTEND_DIR/$portal" || exit
     
-    if [ ! -d "node_modules" ]; then
-        echo "📦 Installing dependencies..."
-        npm install
-    fi
+    echo "📦 Installing dependencies..."
+    npm install
     
     echo "🏗️  Running build..."
     npm run build

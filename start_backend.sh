@@ -5,9 +5,19 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$SCRIPT_DIR"
 
 # Ports to free up
-# Set JAVA_HOME to Java 17 if needed (optional, can use system default)
-export JAVA_HOME="/usr/local/Cellar/openjdk@17/17.0.16/libexec/openjdk.jdk/Contents/Home"
-export PATH="$JAVA_HOME/bin:$PATH"
+# Set JAVA_HOME to Java 17 if not already set
+if [ -z "$JAVA_HOME" ]; then
+    # Try to find Java 17 (Linux/Mac)
+    if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+    elif [ -d "/usr/local/Cellar/openjdk@17/17.0.16/libexec/openjdk.jdk/Contents/Home" ]; then
+         export JAVA_HOME="/usr/local/Cellar/openjdk@17/17.0.16/libexec/openjdk.jdk/Contents/Home"
+    fi
+fi
+
+if [ -n "$JAVA_HOME" ]; then
+    export PATH="$JAVA_HOME/bin:$PATH"
+fi
 
 PORTS="8761 8080 8081 8082 8083 8084 8085"
 

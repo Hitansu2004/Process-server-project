@@ -7,9 +7,19 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BACKEND_DIR="$SCRIPT_DIR"
 
-# Set JAVA_HOME to Java 17
-export JAVA_HOME="/usr/local/Cellar/openjdk@17/17.0.16/libexec/openjdk.jdk/Contents/Home"
-export PATH="$JAVA_HOME/bin:$PATH"
+# Set JAVA_HOME to Java 17 if not already set
+if [ -z "$JAVA_HOME" ]; then
+    # Try to find Java 17 (Linux/Mac)
+    if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+    elif [ -d "/usr/local/Cellar/openjdk@17/17.0.16/libexec/openjdk.jdk/Contents/Home" ]; then
+         export JAVA_HOME="/usr/local/Cellar/openjdk@17/17.0.16/libexec/openjdk.jdk/Contents/Home"
+    fi
+fi
+
+if [ -n "$JAVA_HOME" ]; then
+    export PATH="$JAVA_HOME/bin:$PATH"
+fi
 
 echo "🚀 Starting Backend Build Process..."
 echo "Using Java: $(java -version 2>&1 | head -n 1)"
