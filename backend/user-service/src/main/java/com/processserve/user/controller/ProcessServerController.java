@@ -130,7 +130,26 @@ public class ProcessServerController {
             @RequestParam(required = false, defaultValue = "ALL") String filter) {
         try {
             List<ProcessServerProfile> processServers = processServerService.getTenantProcessServers(tenantId, filter);
-            return ResponseEntity.ok(processServers);
+
+            // Convert to DTOs and enrich with user details
+            List<com.processserve.user.dto.ProcessServerProfileDTO> dtos = processServers.stream().map(profile -> {
+                com.processserve.user.dto.ProcessServerProfileDTO dto = new com.processserve.user.dto.ProcessServerProfileDTO(
+                        profile);
+                try {
+                    Map<String, Object> roleDetails = authClient.getRoleDetails(profile.getTenantUserRoleId());
+                    dto.setUserId((String) roleDetails.get("userId"));
+                    dto.setFirstName((String) roleDetails.get("firstName"));
+                    dto.setLastName((String) roleDetails.get("lastName"));
+                    dto.setEmail((String) roleDetails.get("email"));
+                    dto.setPhoneNumber((String) roleDetails.get("phoneNumber"));
+                    dto.setProfilePhotoUrl(profile.getProfilePhotoUrl()); // Ensure photo URL is passed
+                } catch (Exception e) {
+                    log.error("Failed to fetch user details for {}: {}", profile.getTenantUserRoleId(), e.getMessage());
+                }
+                return dto;
+            }).collect(java.util.stream.Collectors.toList());
+
+            return ResponseEntity.ok(dtos);
         } catch (Exception e) {
             e.printStackTrace(); // Print to console as well
             return ResponseEntity.badRequest()

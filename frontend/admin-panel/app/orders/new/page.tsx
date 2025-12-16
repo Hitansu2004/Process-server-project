@@ -259,18 +259,103 @@ export default function NewConciergeOrder() {
 
                                         <div className="md:col-span-2">
                                             <label className="block text-sm font-medium mb-2">Assign Process Server</label>
-                                            <select
-                                                value={dropoff.assignedProcessServerId}
-                                                onChange={(e) => updateDropoff(index, 'assignedProcessServerId', e.target.value)}
-                                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                                            >
-                                                <option value="">-- Select Process Server --</option>
-                                                {processServers.map(ps => (
-                                                    <option key={ps.id} value={ps.id}>
-                                                        {ps.firstName} {ps.lastName} (Rating: {ps.currentRating})
-                                                    </option>
-                                                ))}
-                                            </select>
+
+                                            {/* Process Server List */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto pr-2 mb-4">
+                                                {processServers.map(ps => {
+                                                    console.log('Rendering Process Server:', ps);
+                                                    const successRate = ps.totalOrdersAssigned > 0
+                                                        ? (ps.successfulDeliveries / ps.totalOrdersAssigned) * 100
+                                                        : 0;
+
+                                                    // Robust name resolution
+                                                    const displayName = ps.firstName && ps.lastName
+                                                        ? `${ps.firstName} ${ps.lastName}`
+                                                        : ps.user?.firstName && ps.user?.lastName
+                                                            ? `${ps.user.firstName} ${ps.user.lastName}`
+                                                            : ps.email || 'Unknown Server';
+
+                                                    return (
+                                                        <div
+                                                            key={ps.id}
+                                                            onClick={() => updateDropoff(index, 'assignedProcessServerId', ps.id)}
+                                                            className={`glass rounded-xl p-6 hover:bg-white/10 transition-all cursor-pointer relative border-2 ${dropoff.assignedProcessServerId === ps.id
+                                                                ? 'border-primary bg-primary/10'
+                                                                : 'border-transparent'
+                                                                }`}
+                                                        >
+                                                            {/* Selected Badge */}
+                                                            {dropoff.assignedProcessServerId === ps.id && (
+                                                                <div className="absolute top-4 right-4 bg-green-500 text-white text-xs px-3 py-1 rounded-full font-semibold">
+                                                                    ✓ Selected
+                                                                </div>
+                                                            )}
+
+                                                            <div className="flex flex-col items-center text-center">
+                                                                {/* Profile Photo */}
+                                                                <div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-gray-700 to-gray-800 flex-shrink-0 mb-4 ring-4 ring-white/10">
+                                                                    {ps.profilePhotoUrl ? (
+                                                                        <img src={ps.profilePhotoUrl} alt={displayName} className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <img
+                                                                            src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random&color=fff&size=128`}
+                                                                            alt={displayName}
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    )}
+                                                                </div>
+
+                                                                {/* Name */}
+                                                                <h3 className="font-bold text-xl mb-3 text-gray-900">{displayName}</h3>
+
+                                                                {/* Rating Stars */}
+                                                                <div className="flex items-center gap-2 mb-4">
+                                                                    <div className="flex items-center gap-0.5">
+                                                                        {[...Array(5)].map((_, i) => (
+                                                                            <span key={i} className={`text-xl ${i < Math.floor(ps.currentRating || 0) ? 'text-yellow-400' : 'text-gray-400'}`}>
+                                                                                ★
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <span className="text-sm text-gray-500 font-semibold">
+                                                                        {(ps.currentRating || 0).toFixed(1)}
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* Stats Grid */}
+                                                                <div className="w-full grid grid-cols-2 gap-4 mb-4">
+                                                                    <div className="glass rounded-lg p-3">
+                                                                        <div className="text-2xl font-bold text-primary">{successRate.toFixed(0)}%</div>
+                                                                        <div className="text-xs text-gray-400 mt-1">Success Rate</div>
+                                                                    </div>
+                                                                    <div className="glass rounded-lg p-3">
+                                                                        <div className="text-2xl font-bold text-blue-400">
+                                                                            {ps.totalOrdersAssigned || 0}
+                                                                        </div>
+                                                                        <div className="text-xs text-gray-400 mt-1">Total Orders</div>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Success Rate Progress Bar */}
+                                                                <div className="w-full">
+                                                                    <div className="flex items-center justify-between text-sm mb-2">
+                                                                        <span className="text-gray-400">Deliveries</span>
+                                                                        <span className="font-semibold text-green-400">
+                                                                            {ps.successfulDeliveries || 0} / {ps.totalOrdersAssigned || 0}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                                                                        <div
+                                                                            className="bg-gradient-to-r from-green-500 to-emerald-400 h-full rounded-full transition-all duration-500"
+                                                                            style={{ width: `${Math.min(successRate, 100)}%` }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
