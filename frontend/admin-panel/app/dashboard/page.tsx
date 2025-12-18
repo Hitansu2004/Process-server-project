@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import ConfirmModal from '@/components/ConfirmModal'
 
 export default function Dashboard() {
     const router = useRouter()
@@ -9,6 +10,7 @@ export default function Dashboard() {
     const [orders, setOrders] = useState<any[]>([])
     const [processServers, setProcessServers] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [showLogoutModal, setShowLogoutModal] = useState(false)
 
     useEffect(() => {
         const token = localStorage.getItem('token')
@@ -67,19 +69,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex gap-4">
                         <button
-                            onClick={() => window.location.href = 'http://localhost:3000/'}
-                            className="glass px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-2"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                            </svg>
-                            Home
-                        </button>
-                        <button
-                            onClick={() => {
-                                localStorage.clear()
-                                router.push('/login')
-                            }}
+                            onClick={() => setShowLogoutModal(true)}
                             className="glass px-4 py-2 rounded-lg hover:bg-white/10"
                         >
                             Logout
@@ -146,6 +136,19 @@ export default function Dashboard() {
                     </div>
                 </div>
             </div>
+
+            <ConfirmModal
+                isOpen={showLogoutModal}
+                onClose={() => setShowLogoutModal(false)}
+                onConfirm={() => {
+                    localStorage.clear()
+                    router.push('/login')
+                }}
+                title="Logout Confirmation"
+                message="Are you sure you want to logout?"
+                confirmText="Yes, Logout"
+                cancelText="Cancel"
+            />
         </div>
     )
 }

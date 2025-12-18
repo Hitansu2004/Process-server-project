@@ -126,5 +126,31 @@ export const api = {
         if (!res.ok) throw new Error('Failed to fetch tenants')
         return res.json()
     },
+
+    async sendOtp(email: string) {
+        const res = await fetch(`${API_URL}/api/auth/send-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        })
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: 'Failed to send OTP' }))
+            throw new Error(error.error || 'Failed to send OTP')
+        }
+        return res.json()
+    },
+
+    async verifyOtp(email: string, otp: string) {
+        const res = await fetch(`${API_URL}/api/auth/verify-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, otp }),
+        })
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: 'Invalid OTP' }))
+            throw new Error(error.error || 'Invalid OTP')
+        }
+        return res.json()
+    },
 }
 

@@ -93,6 +93,22 @@ export const api = {
         return response.json()
     },
 
+    async inviteProcessServer(email: string, inviterName: string, token: string) {
+        const response = await fetch(`${API_URL}/api/invites/process-server`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ email, inviterName }),
+        })
+        if (!response.ok) {
+            const error = await response.text()
+            throw new Error(error || 'Failed to send invitation')
+        }
+        return response.json()
+    },
+
     async removeContact(entryId: string, token: string) {
         const response = await fetch(`${API_URL}/api/contact-book/${entryId}`, {
             method: 'DELETE',

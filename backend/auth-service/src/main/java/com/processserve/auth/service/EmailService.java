@@ -89,4 +89,49 @@ public class EmailService {
                 "ProcessServe Team\n\n" +
                 "(c) 2025 ProcessServe Platform. All rights reserved.";
     }
+
+    public void sendProcessServerInvitation(String toEmail, String inviterName) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom("hitansu0007@gmail.com");
+            helper.setTo(toEmail);
+            helper.setSubject("You're Invited to Join ProcessServe as a Process Server!");
+
+            String htmlContent = buildInvitationEmailTemplate(toEmail, inviterName);
+            helper.setText(htmlContent, false);
+
+            mailSender.send(message);
+            log.info("Process server invitation sent successfully to: {}", toEmail);
+        } catch (Exception e) {
+            log.error("Failed to send invitation email to: {}", toEmail, e);
+            throw new RuntimeException("Failed to send invitation email");
+        }
+    }
+
+    private String buildInvitationEmailTemplate(String email, String inviterName) {
+        String registerUrl = "http://localhost:3001/delivery/register?email=" + email;
+        
+        return "ProcessServe Platform - You're Invited!\n\n" +
+                "Hello!\n\n" +
+                inviterName + " has invited you to join ProcessServe as a Process Server.\n\n" +
+                "ProcessServe is a platform connecting customers with professional process servers for efficient document delivery and service.\n\n" +
+                "To accept this invitation and create your process server account:\n\n" +
+                "1. Click this link to register: " + registerUrl + "\n" +
+                "2. Your email will be pre-filled - please use this exact email\n" +
+                "3. Complete your profile with your qualifications and service areas\n" +
+                "4. Submit for admin approval\n\n" +
+                "Benefits of joining ProcessServe:\n" +
+                "• Access to a network of customers needing process serving\n" +
+                "• Flexible work opportunities\n" +
+                "• Competitive pricing and transparent bidding\n" +
+                "• Professional platform to manage your orders\n" +
+                "• Ratings and reviews to build your reputation\n\n" +
+                "If you have any questions, feel free to reach out to our support team.\n\n" +
+                "We look forward to having you on our platform!\n\n" +
+                "Best regards,\n" +
+                "ProcessServe Team\n\n" +
+                "(c) 2025 ProcessServe Platform. All rights reserved.";
+    }
 }

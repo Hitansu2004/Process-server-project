@@ -16,9 +16,9 @@ spring:
         - id: tenant-service
           uri: lb://TENANT-SERVICE
           predicates:
-            - Path=/api/tenants/**
+            - Path=/tenant-service/**,/api/tenants/**
           filters:
-            - RewritePath=/api/tenants/(?<segment>.*), /api/tenants/$\{segment}
+            - RewritePath=/tenant-service/(?<segment>.*), /$\{segment}
         
         # Order Service Routes
         - id: order-service

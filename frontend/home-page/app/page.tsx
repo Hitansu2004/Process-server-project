@@ -29,7 +29,7 @@ export default function Home() {
 
     const loadTenants = async () => {
         try {
-            const { default: { api } } = await import('@/lib/api')
+            const { api } = await import('@/lib/api')
             const fetchedTenants = await api.getTenants()
             setTenants(fetchedTenants)
             setLoading(false)
@@ -51,7 +51,7 @@ export default function Home() {
         
         // Fetch detailed tenant information
         try {
-            const { default: { api } } = await import('@/lib/api')
+            const { api } = await import('@/lib/api')
             const tenantDetails = await api.getTenant(tenantId)
             setSelectedTenantDetails(tenantDetails)
         } catch (error) {
