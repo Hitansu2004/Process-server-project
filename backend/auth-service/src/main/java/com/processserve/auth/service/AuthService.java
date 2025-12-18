@@ -38,6 +38,8 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final RestTemplate restTemplate;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    private final OtpService otpService;
+    private final EmailService emailService;
 
     @Transactional
     public LoginResponse register(RegisterRequest request) {
@@ -46,6 +48,13 @@ public class AuthService {
         // Check if user already exists
         if (globalUserRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email already registered");
+        }
+
+        // For non-Gmail users, check if email is verified via OTP
+        if (!request.getEmail().toLowerCase().endsWith("@gmail.com")) {
+            if (!otpService.isEmailVerified(request.getEmail())) {
+                throw new RuntimeException("Email not verified. Please verify your email with OTP first.");
+            }
         }
 
         // Create global user
@@ -73,6 +82,14 @@ public class AuthService {
         tenantUserRoleRepository.save(tenantUserRole);
 
         log.info("User registered successfully: {}", globalUser.getId());
+
+        // Send welcome email
+        try {
+            emailService.sendWelcomeEmail(globalUser.getEmail(), 
+                globalUser.getFirstName() + " " + globalUser.getLastName());
+        } catch (Exception e) {
+            log.warn("Failed to send welcome email, but registration succeeded: {}", e.getMessage());
+        }
 
         // Return login response
         return generateLoginResponse(globalUser, request.getTenantId());
@@ -406,5 +423,9 @@ public class AuthService {
     public TenantUserRole getTenantUserRole(String id) {
         return tenantUserRoleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("TenantUserRole not found"));
+    }
+
+    public boolean emailExists(String email) {
+        return globalUserRepository.existsByEmail(email);
     }
 }

@@ -43,6 +43,9 @@ public class GlobalUser {
     @Column(name = "is_active")
     private Boolean isActive = true;
 
+    @Column(name = "google_id", unique = true)
+    private String googleId;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

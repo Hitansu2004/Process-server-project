@@ -5,9 +5,14 @@ import com.processserve.auth.dto.LoginResponse;
 import com.processserve.auth.dto.RegisterRequest;
 import com.processserve.auth.dto.RegistrationRequest;
 import com.processserve.auth.dto.RegistrationResponse;
+import com.processserve.auth.dto.GoogleAuthRequest;
+import com.processserve.auth.dto.SendOtpRequest;
+import com.processserve.auth.dto.VerifyOtpRequest;
 import com.processserve.auth.entity.GlobalUser;
 import com.processserve.auth.entity.TenantUserRole;
 import com.processserve.auth.service.AuthService;
+import com.processserve.auth.service.GoogleOAuthService;
+import com.processserve.auth.service.OtpService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +30,8 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final GoogleOAuthService googleOAuthService;
+    private final OtpService otpService;
     private final com.processserve.auth.util.JwtUtil jwtUtil;
 
     @PostMapping("/register")
@@ -156,6 +163,71 @@ public class AuthController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<?> googleAuth(@Valid @RequestBody GoogleAuthRequest request) {
+        try {
+            log.info("Google OAuth authentication request received");
+            LoginResponse response = googleOAuthService.authenticateWithGoogle(request);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Google OAuth authentication failed: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Google authentication failed: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+        }
+    }
+
+    @PostMapping("/send-otp")
+    public ResponseEntity<?> sendOtp(@Valid @RequestBody SendOtpRequest request) {
+        try {
+            log.info("OTP request for email: {}", request.getEmail());
+            
+            // Check if email already exists
+            if (authService.emailExists(request.getEmail())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Email already registered. Please login instead."));
+            }
+            
+            otpService.sendOtp(request.getEmail(), request.getFirstName(), request.getLastName());
+            
+            return ResponseEntity.ok(Map.of(
+                    "message", "OTP sent successfully to " + request.getEmail(),
+                    "email", request.getEmail()
+            ));
+        } catch (Exception e) {
+            log.error("Failed to send OTP: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to send OTP: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/verify-otp")
+    public ResponseEntity<?> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        try {
+            log.info("OTP verification for email: {}", request.getEmail());
+            
+            boolean isValid = otpService.verifyOtp(request.getEmail(), request.getOtp());
+            
+            if (isValid) {
+                return ResponseEntity.ok(Map.of(
+                        "message", "Email verified successfully",
+                        "verified", true,
+                        "email", request.getEmail()
+                ));
+            } else {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of(
+                                "error", "Invalid or expired OTP",
+                                "verified", false
+                        ));
+            }
+        } catch (Exception e) {
+            log.error("OTP verification failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Verification failed: " + e.getMessage()));
         }
     }
 }

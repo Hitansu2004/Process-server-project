@@ -2,12 +2,16 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import GoogleSignInButton from '@/components/GoogleSignInButton'
 
 export default function AdminRegisterPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
+    const [step, setStep] = useState<'form' | 'otp'>('form')
+    const [otpSent, setOtpSent] = useState(false)
+    const [otp, setOtp] = useState('')
     const [formData, setFormData] = useState({
         email: '',
         password: '',
@@ -37,8 +41,87 @@ export default function AdminRegisterPage() {
             return
         }
 
-        setLoading(true)
+        // Check if it's a Gmail address
+        const isGmail = formData.email.toLowerCase().endsWith('@gmail.com')
 
+        if (!isGmail && step === 'form') {
+            // Non-Gmail users need OTP verification
+            await sendOtp()
+            return
+        }
+
+        // If OTP verified or Gmail user, proceed with registration
+        await registerUser()
+    }
+
+    const sendOtp = async () => {
+        setLoading(true)
+        try {
+            const response = await fetch('http://localhost:8080/api/auth/send-otp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: formData.email,
+                    firstName: formData.firstName,
+                    lastName: formData.lastName
+                })
+            })
+
+            const data = await response.json()
+
+            if (response.ok) {
+                setOtpSent(true)
+                setStep('otp')
+                setError('')
+            } else {
+                setError(data.error || 'Failed to send OTP')
+            }
+        } catch (err) {
+            setError('Failed to send OTP. Please try again.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const verifyOtpAndRegister = async () => {
+        if (!otp || otp.length !== 6) {
+            setError('Please enter a valid 6-digit OTP')
+            return
+        }
+
+        setLoading(true)
+        try {
+            // First verify OTP
+            const verifyResponse = await fetch('http://localhost:8080/api/auth/verify-otp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: formData.email,
+                    otp: otp
+                })
+            })
+
+            const verifyData = await verifyResponse.json()
+
+            if (verifyResponse.ok && verifyData.verified) {
+                // OTP verified, now register
+                await registerUser()
+            } else {
+                setError(verifyData.error || 'Invalid OTP')
+                setLoading(false)
+            }
+        } catch (err) {
+            setError('Verification failed. Please try again.')
+            setLoading(false)
+        }
+    }
+
+    const registerUser = async () => {
+        setLoading(true)
         try {
             const response = await fetch('http://localhost:8080/api/auth/register/admin', {
                 method: 'POST',
@@ -72,6 +155,43 @@ export default function AdminRegisterPage() {
         }
     }
 
+    const handleGoogleSuccess = async (credential: string) => {
+        setLoading(true)
+        setError('')
+        try {
+            const response = await fetch('http://localhost:8080/api/auth/google', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    idToken: credential,
+                    tenantId: tenantId,
+                    role: 'ADMIN'
+                })
+            })
+
+            const data = await response.json()
+
+            if (response.ok) {
+                setSuccess(true)
+                setTimeout(() => {
+                    router.push('/login?registered=true')
+                }, 2000)
+            } else {
+                setError(data.error || 'Google registration failed')
+            }
+        } catch (err) {
+            setError('Failed to register with Google')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleGoogleError = () => {
+        setError('Google Sign-In failed')
+    }
+
     if (success) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-indigo-100">
@@ -98,8 +218,29 @@ export default function AdminRegisterPage() {
                     </div>
                 )}
 
+                {/* Google Sign-In Button */}
+                <div className="mb-6">
+                    <GoogleSignInButton 
+                        onSuccess={handleGoogleSuccess} 
+                        onError={handleGoogleError}
+                        text="signup_with"
+                    />
+                </div>
+
+                {/* Divider */}
+                <div className="relative mb-6">
+                    <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-gray-300"></div>
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                        <span className="px-2 bg-white text-gray-500">Or register with email</span>
+                    </div>
+                </div>
+
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    {step === 'form' && (
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 First Name *
@@ -186,21 +327,89 @@ export default function AdminRegisterPage() {
                         disabled={loading}
                         className="w-full btn-primary py-3 text-lg font-semibold"
                     >
-                        {loading ? 'Creating Account...' : 'Create Admin Account'}
+                        {loading ? (formData.email.toLowerCase().endsWith('@gmail.com') ? 'Creating Account...' : 'Sending OTP...') : (formData.email.toLowerCase().endsWith('@gmail.com') ? 'Create Admin Account' : 'Send OTP & Continue')}
                     </button>
+                        </>
+                    )}
+
+                    {step === 'otp' && (
+                        <>
+                            <div className="text-center mb-4">
+                                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-2">Check Your Email</h3>
+                                <p className="text-gray-600">We've sent a 6-digit verification code to:</p>
+                                <p className="font-semibold text-gray-900 mt-1">{formData.email}</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2 text-center">
+                                    Enter Verification Code
+                                </label>
+                                <input
+                                    type="text"
+                                    maxLength={6}
+                                    value={otp}
+                                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                                    className="w-full px-4 py-4 text-center text-2xl font-bold tracking-widest rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="000000"
+                                    autoFocus
+                                />
+                                <p className="text-xs text-gray-500 mt-2 text-center">Code expires in 10 minutes</p>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setStep('form')
+                                        setOtp('')
+                                        setError('')
+                                    }}
+                                    className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg font-semibold text-gray-700 hover:bg-gray-50"
+                                >
+                                    Back
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={verifyOtpAndRegister}
+                                    disabled={loading || otp.length !== 6}
+                                    className="flex-1 btn-primary py-3 font-semibold disabled:opacity-50"
+                                >
+                                    {loading ? 'Verifying...' : 'Verify & Register'}
+                                </button>
+                            </div>
+
+                            <div className="text-center">
+                                <button
+                                    type="button"
+                                    onClick={sendOtp}
+                                    disabled={loading}
+                                    className="text-sm text-primary hover:underline font-semibold"
+                                >
+                                    Didn't receive code? Resend
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </form>
 
-                <div className="mt-6 text-center">
-                    <p className="text-gray-600">
-                        Already have an account?{' '}
-                        <button
-                            onClick={() => router.push('/login')}
-                            className="text-primary hover:underline font-semibold"
-                        >
-                            Login here
-                        </button>
-                    </p>
-                </div>
+                {step === 'form' && (
+                    <div className="mt-6 text-center">
+                        <p className="text-gray-600">
+                            Already have an account?{' '}
+                            <button
+                                onClick={() => router.push('/login')}
+                                className="text-primary hover:underline font-semibold"
+                            >
+                                Login here
+                            </button>
+                        </p>
+                    </div>
+                )}
             </div>
         </div>
     )
