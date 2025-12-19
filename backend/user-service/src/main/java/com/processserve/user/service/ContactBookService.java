@@ -23,52 +23,9 @@ public class ContactBookService {
     private final com.processserve.user.repository.TenantUserRoleRepository tenantUserRoleRepository;
 
     public List<ContactBookEntry> getContactList(String ownerUserId) {
-        // 1. Get existing contacts
-        List<ContactBookEntry> existingContacts = contactBookRepository.findByOwnerUserId(ownerUserId);
-
-        // 2. Get all Global Process Servers
-        List<ProcessServerProfile> globalProfiles = processServerRepository.findByIsGlobalTrue();
-
-        // 3. Merge Global Servers into the list (if not already present)
-        for (ProcessServerProfile globalProfile : globalProfiles) {
-            boolean alreadyExists = existingContacts.stream()
-                    .anyMatch(c -> c.getProcessServerId().equals(globalProfile.getId()));
-
-            if (!alreadyExists) {
-                ContactBookEntry globalEntry = new ContactBookEntry();
-                // Use a deterministic UUID based on owner + server ID to ensure consistent keys
-                // if needed,
-                // but for transient display, random UUID is fine, or we can just not set ID if
-                // frontend doesn't need it for removal.
-                // However, frontend uses ID for key.
-                globalEntry.setId(UUID.randomUUID().toString());
-                globalEntry.setOwnerUserId(ownerUserId);
-                globalEntry.setProcessServerId(globalProfile.getId());
-                globalEntry.setEntryType(ContactBookEntry.EntryType.AUTO_ADDED); // Or a new GLOBAL type
-                // Fetch user details for nickname?
-                // For now, we'll set a placeholder nickname, frontend should fetch details.
-                // Or we can leave it null and frontend handles it.
-
-                // Fetch real name
-                String displayName = "Global Process Server";
-                try {
-                    displayName = tenantUserRoleRepository.findById(globalProfile.getTenantUserRoleId())
-                            .map(tur -> {
-                                com.processserve.user.entity.GlobalUser user = tur.getGlobalUser();
-                                return user.getFirstName() + " " + user.getLastName();
-                            })
-                            .orElse("Global Process Server");
-                } catch (Exception e) {
-                    log.warn("Failed to fetch name for global server {}", globalProfile.getId(), e);
-                }
-
-                globalEntry.setNickname(displayName);
-
-                existingContacts.add(globalEntry);
-            }
-        }
-
-        return existingContacts;
+        // Return only the contacts that are actually saved in the database
+        // Global servers are now accessed via a separate endpoint
+        return contactBookRepository.findByOwnerUserId(ownerUserId);
     }
 
     @Transactional

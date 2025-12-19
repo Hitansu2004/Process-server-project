@@ -3,58 +3,71 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
-import ContactCard from '@/components/ContactCard'
 import { motion, AnimatePresence } from 'framer-motion'
-import ConfirmModal from '@/components/ConfirmModal'
-import Toast from '@/components/Toast'
+import { Users, Globe, Mail, UserPlus, Star, Phone, MapPin, TrendingUp, Award, ArrowLeft } from 'lucide-react'
+
+interface ProcessServer {
+    id: string
+    tenantUserRoleId: string
+    firstName: string
+    lastName: string
+    email: string
+    phoneNumber: string
+    profilePhotoUrl: string
+    currentRating: number
+    totalOrdersAssigned: number
+    successfulDeliveries: number
+    operatingZipCodes: string
+    isGlobal: boolean
+}
 
 interface ContactEntry {
     id: string
     processServerId: string
     nickname: string
     entryType: string
-    processServerDetails?: any
+    processServerDetails?: ProcessServer
 }
 
 export default function Contacts() {
     const router = useRouter()
+    const [activeTab, setActiveTab] = useState<'personal' | 'global'>('personal')
+    const [personalContacts, setPersonalContacts] = useState<ContactEntry[]>([])
+    const [globalServers, setGlobalServers] = useState<ProcessServer[]>([])
     const [loading, setLoading] = useState(false)
-    const [contacts, setContacts] = useState<ContactEntry[]>([])
-    const [defaultProcessServerId, setDefaultProcessServerId] = useState<string | null>(null)
-    const [customerProfileId, setCustomerProfileId] = useState<string | null>(null)
-    const [showRemoveModal, setShowRemoveModal] = useState(false)
-    const [contactToRemove, setContactToRemove] = useState<string | null>(null)
+    const [inviteEmail, setInviteEmail] = useState('')
+    const [inviteLoading, setInviteLoading] = useState(false)
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; visible: boolean }>({
         message: '',
         type: 'success',
         visible: false
     })
-    const [inviteEmail, setInviteEmail] = useState('')
-    const [inviteLoading, setInviteLoading] = useState(false)
 
-    const fetchContacts = async () => {
+    useEffect(() => {
+        // Always fetch personal contacts to keep track of what's already added
+        fetchPersonalContacts()
+        
+        if (activeTab === 'personal') {
+            // Personal contacts already fetched above
+        } else {
+            fetchGlobalServers()
+        }
+    }, [activeTab])
+
+    const fetchPersonalContacts = async () => {
+        setLoading(true)
         try {
             const token = sessionStorage.getItem('token')
             const user = JSON.parse(sessionStorage.getItem('user') || '{}')
             const userId = user.userId
 
             if (token && userId) {
-                // Fetch customer profile to get the real ID and default server
-                try {
-                    const profile = await api.getCustomerProfile(userId, token)
-                    setCustomerProfileId(profile.id)
-                    setDefaultProcessServerId(profile.defaultProcessServerId)
-                } catch (error) {
-                    console.error('Failed to fetch customer profile:', error)
-                }
-
                 const data = await api.getContactList(userId, token)
 
                 // Enrich contacts with detailed process server info
                 const enrichedContacts = await Promise.all(
                     data.map(async (contact: ContactEntry) => {
                         try {
-                            // Use getProcessServerDetails for full stats and info
                             const details = await api.getProcessServerDetails(contact.processServerId, token)
                             return {
                                 ...contact,
@@ -67,36 +80,67 @@ export default function Contacts() {
                     })
                 )
 
-                setContacts(enrichedContacts)
+                setPersonalContacts(enrichedContacts)
             }
         } catch (error) {
-            console.error('Failed to fetch contacts:', error)
+            console.error('Failed to fetch personal contacts:', error)
+            showToast('Failed to load personal contacts', 'error')
+        } finally {
+            setLoading(false)
         }
     }
 
-    useEffect(() => {
-        fetchContacts()
-    }, [])
-
-    const handleSetDefault = async (processServerId: string) => {
+    const fetchGlobalServers = async () => {
+        setLoading(true)
         try {
             const token = sessionStorage.getItem('token')
-            if (token && customerProfileId) {
-                await api.setDefaultProcessServer(customerProfileId, processServerId, token)
-                setDefaultProcessServerId(processServerId)
-                setToast({
-                    message: 'Default process server updated successfully! ⭐',
-                    type: 'success',
-                    visible: true
-                })
+            if (token) {
+                const data = await api.getGlobalProcessServers(token)
+                setGlobalServers(data)
             }
         } catch (error) {
-            console.error('Failed to set default:', error)
-            setToast({
-                message: 'Failed to set default process server. Please try again.',
-                type: 'error',
-                visible: true
-            })
+            console.error('Failed to fetch global servers:', error)
+            showToast('Failed to load global process servers', 'error')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleAddToPersonal = async (server: ProcessServer) => {
+        try {
+            const token = sessionStorage.getItem('token')
+            const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+            const userId = user.userId
+
+            if (token && userId) {
+                await api.addContact({
+                    ownerUserId: userId,
+                    processServerId: server.id,
+                    nickname: `${server.firstName} ${server.lastName}`,
+                    type: 'MANUAL'
+                }, token)
+
+                showToast(`${server.firstName} ${server.lastName} added to your contacts! ✨`, 'success')
+                // Refresh personal contacts to show the newly added server
+                await fetchPersonalContacts()
+            }
+        } catch (error: any) {
+            console.error('Failed to add contact:', error)
+            showToast(error.message || 'Failed to add to contacts', 'error')
+        }
+    }
+
+    const handleRemoveContact = async (entryId: string) => {
+        try {
+            const token = sessionStorage.getItem('token')
+            if (token) {
+                await api.removeContact(entryId, token)
+                showToast('Contact removed successfully', 'info')
+                fetchPersonalContacts()
+            }
+        } catch (error) {
+            console.error('Failed to remove contact:', error)
+            showToast('Failed to remove contact', 'error')
         }
     }
 
@@ -111,119 +155,153 @@ export default function Contacts() {
             await api.inviteProcessServer(inviteEmail, inviterName, token!)
 
             setInviteEmail('')
-            setToast({
-                message: `Invitation sent to ${inviteEmail} successfully! 📧`,
-                type: 'success',
-                visible: true
-            })
+            showToast(`Invitation sent to ${inviteEmail} successfully! 📧`, 'success')
         } catch (error: any) {
             console.error('Failed to send invitation:', error)
-            setToast({
-                message: error.message || 'Failed to send invitation. Please try again.',
-                type: 'error',
-                visible: true
-            })
+            showToast(error.message || 'Failed to send invitation', 'error')
         } finally {
             setInviteLoading(false)
         }
     }
 
-    const handleRemoveContact = async (id: string) => {
-        setContactToRemove(id)
-        setShowRemoveModal(true)
+    const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+        setToast({ message, type, visible: true })
+        setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000)
     }
 
-    const confirmRemoveContact = async () => {
-        if (!contactToRemove) return
-        try {
-            const token = sessionStorage.getItem('token')
-            await api.removeContact(contactToRemove, token!)
-            fetchContacts()
-            setShowRemoveModal(false)
-            setContactToRemove(null)
-            setToast({
-                message: 'Contact removed successfully',
-                type: 'info',
-                visible: true
-            })
-        } catch (error) {
-            console.error('Failed to remove contact:', error)
-            setToast({
-                message: 'Failed to remove contact. Please try again.',
-                type: 'error',
-                visible: true
-            })
-        }
+    const isInPersonalContacts = (serverId: string) => {
+        return personalContacts.some(contact => contact.processServerId === serverId)
+    }
+
+    const getContactEntryId = (serverId: string): string | null => {
+        const contact = personalContacts.find(c => c.processServerId === serverId)
+        return contact ? contact.id : null
     }
 
     return (
-        <div className="min-h-screen p-6 bg-gradient-to-br from-blue-50 via-white to-purple-50">
-            <div className="max-w-7xl mx-auto">
-                <motion.div 
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+            {/* Toast Notification */}
+            <AnimatePresence>
+                {toast.visible && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -50 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -50 }}
+                        className="fixed top-4 right-4 z-50"
+                    >
+                        <div className={`px-6 py-4 rounded-xl shadow-2xl backdrop-blur-xl border ${
+                            toast.type === 'success' ? 'bg-green-500/90 border-green-400 text-white' :
+                            toast.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' :
+                            'bg-blue-500/90 border-blue-400 text-white'
+                        }`}>
+                            <p className="font-medium">{toast.message}</p>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <div className="max-w-7xl mx-auto p-6">
+                {/* Header */}
+                <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="flex items-center justify-between mb-8"
+                    className="mb-8"
                 >
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 mb-6">
                         <motion.button
-                            whileHover={{ scale: 1.05 }}
+                            whileHover={{ scale: 1.05, x: -5 }}
                             whileTap={{ scale: 0.95 }}
                             onClick={() => router.back()}
-                            className="px-4 py-2 rounded-xl bg-white/90 backdrop-blur-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/90 backdrop-blur-xl border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow-md"
                         >
-                            ← Back
+                            <ArrowLeft className="w-5 h-5" />
+                            <span>Back</span>
                         </motion.button>
                         <div>
-                            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                                My Contact List
+                            <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+                                Process Server Directory
                             </h1>
-                            <p className="text-gray-500 mt-1">Manage your preferred process servers</p>
+                            <p className="text-gray-500 mt-2">Manage your contacts and discover global process servers</p>
                         </div>
+                    </div>
+
+                    {/* Tab Switcher */}
+                    <div className="flex gap-4">
+                        <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setActiveTab('personal')}
+                            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${
+                                activeTab === 'personal'
+                                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                                    : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
+                            }`}
+                        >
+                            <Users className="w-5 h-5" />
+                            My Personal Contacts
+                            {personalContacts.length > 0 && (
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                    activeTab === 'personal' ? 'bg-white/20' : 'bg-blue-100 text-blue-600'
+                                }`}>
+                                    {personalContacts.length}
+                                </span>
+                            )}
+                        </motion.button>
+                        <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setActiveTab('global')}
+                            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${
+                                activeTab === 'global'
+                                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                                    : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
+                            }`}
+                        >
+                            <Globe className="w-5 h-5" />
+                            Global Directory
+                            {globalServers.length > 0 && (
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                    activeTab === 'global' ? 'bg-white/20' : 'bg-green-100 text-green-600'
+                                }`}>
+                                    {globalServers.length}
+                                </span>
+                            )}
+                        </motion.button>
                     </div>
                 </motion.div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                    {/* Sidebar - Invite Process Server */}
-                    <motion.div 
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    {/* Sidebar - Invite */}
+                    <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.5, delay: 0.1 }}
                         className="lg:col-span-1"
                     >
                         <div className="bg-white/90 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 shadow-lg sticky top-6">
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                    </svg>
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                    <Mail className="w-6 h-6 text-white" />
                                 </div>
-                                <h2 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                                    Invite Process Server
+                                <h2 className="text-xl font-bold text-gray-800">
+                                    Invite Server
                                 </h2>
                             </div>
-                            <p className="text-sm text-gray-500 mb-6">
-                                Invite someone to join our platform as a process server. They'll receive an email with instructions to complete their profile.
+                            <p className="text-sm text-gray-600 mb-6">
+                                Invite someone to join as a process server. They'll receive an email with registration instructions.
                             </p>
                             <form onSubmit={handleInviteProcessServer} className="space-y-4">
                                 <div>
-                                    <label className="flex items-center gap-2 text-sm font-medium mb-2 text-gray-700">
-                                        <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-                                        </svg>
+                                    <label className="text-sm font-medium text-gray-700 mb-2 block">
                                         Email Address
                                     </label>
                                     <input
                                         type="email"
                                         value={inviteEmail}
                                         onChange={(e) => setInviteEmail(e.target.value)}
-                                        className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all"
+                                        className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                                         placeholder="server@example.com"
                                         required
                                     />
-                                    <p className="text-xs text-gray-500 mt-1.5">
-                                        We'll send them an invitation to join as a process server
-                                    </p>
                                 </div>
                                 <motion.button
                                     whileHover={{ scale: 1.02 }}
@@ -234,169 +312,270 @@ export default function Contacts() {
                                 >
                                     {inviteLoading ? (
                                         <>
-                                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
+                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                             Sending...
                                         </>
                                     ) : (
                                         <>
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                            </svg>
+                                            <UserPlus className="w-5 h-5" />
                                             Send Invitation
                                         </>
                                     )}
                                 </motion.button>
                             </form>
-
-                            {/* Legend */}
-                            {contacts.length > 0 && (
-                                <div className="mt-6 pt-6 border-t border-gray-200">
-                                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact Types</h3>
-                                    <div className="space-y-2 text-xs">
-                                        <div className="flex items-center gap-2">
-                                            <span className="bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">MANUAL</span>
-                                            <span className="text-gray-600">Added by you</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">AUTO</span>
-                                            <span className="text-gray-600">Auto-added from orders</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 px-2 py-0.5 rounded-full font-semibold">GLOBAL</span>
-                                            <span className="text-gray-600">System-wide available</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     </motion.div>
 
-                    {/* Main Content - List View */}
-                    <motion.div 
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.5, delay: 0.2 }}
-                        className="lg:col-span-3"
-                    >
-                        {contacts.length === 0 ? (
-                            <motion.div 
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="text-center py-16 bg-white/90 backdrop-blur-xl rounded-2xl border border-gray-200 shadow-lg"
-                            >
-                                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
-                                    <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                    </svg>
-                                </div>
-                                <p className="text-gray-600 text-lg font-medium">No contacts found.</p>
-                                <p className="text-sm text-gray-500 mt-2">Add a process server to get started.</p>
-                            </motion.div>
-                        ) : (
-                            <div className="space-y-3">
-                                {/* Default Server Section */}
-                                {contacts.filter(c => defaultProcessServerId === c.processServerId).length > 0 && (
-                                    <div className="mb-6">
-                                        <h3 className="text-sm font-semibold text-gray-600 mb-3 uppercase tracking-wide flex items-center gap-2">
-                                            <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                            </svg>
-                                            Default Process Server
-                                        </h3>
-                                        <AnimatePresence mode="popLayout">
-                                            {contacts
-                                                .filter(c => defaultProcessServerId === c.processServerId)
-                                                .map((contact, index) => (
-                                                    <motion.div
-                                                        key={contact.id}
-                                                        initial={{ opacity: 0, y: 20 }}
-                                                        animate={{ opacity: 1, y: 0 }}
-                                                        exit={{ opacity: 0, scale: 0.9 }}
-                                                        transition={{ duration: 0.3 }}
-                                                    >
-                                                        <ContactCard
-                                                            id={contact.id}
-                                                            processServerId={contact.processServerId}
-                                                            nickname={contact.nickname}
-                                                            entryType={contact.entryType}
-                                                            details={contact.processServerDetails || {}}
-                                                            onRemove={handleRemoveContact}
-                                                            index={contacts.indexOf(contact) + 1}
-                                                            isDefault={true}
-                                                            onSetDefault={handleSetDefault}
-                                                        />
-                                                    </motion.div>
-                                                ))}
-                                        </AnimatePresence>
+                    {/* Main Content */}
+                    <div className="lg:col-span-3">
+                        <AnimatePresence mode="wait">
+                            {loading ? (
+                                <motion.div
+                                    key="loading"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="flex items-center justify-center py-20"
+                                >
+                                    <div className="text-center">
+                                        <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-4" />
+                                        <p className="text-gray-600">Loading...</p>
                                     </div>
-                                )}
-
-                                {/* Other Contacts Section */}
-                                {contacts.filter(c => defaultProcessServerId !== c.processServerId).length > 0 && (
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-gray-600 mb-3 uppercase tracking-wide flex items-center gap-2">
-                                            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                            </svg>
-                                            All Contacts ({contacts.filter(c => defaultProcessServerId !== c.processServerId).length})
-                                        </h3>
-                                        <div className="space-y-3">
-                                            <AnimatePresence mode="popLayout">
-                                                {contacts
-                                                    .filter(c => defaultProcessServerId !== c.processServerId)
-                                                    .map((contact, index) => (
-                                                        <motion.div
-                                                            key={contact.id}
-                                                            initial={{ opacity: 0, y: 20 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, scale: 0.9 }}
-                                                            transition={{ duration: 0.3, delay: index * 0.03 }}
-                                                        >
-                                                            <ContactCard
-                                                                id={contact.id}
-                                                                processServerId={contact.processServerId}
-                                                                nickname={contact.nickname}
-                                                                entryType={contact.entryType}
-                                                                details={contact.processServerDetails || {}}
-                                                                onRemove={handleRemoveContact}
-                                                                index={contacts.indexOf(contact) + 1}
-                                                                isDefault={false}
-                                                                onSetDefault={handleSetDefault}
-                                                            />
-                                                        </motion.div>
-                                                    ))}
-                                            </AnimatePresence>
+                                </motion.div>
+                            ) : activeTab === 'personal' ? (
+                                <motion.div
+                                    key="personal"
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -20 }}
+                                    className="space-y-4"
+                                >
+                                    {personalContacts.length === 0 ? (
+                                        <div className="bg-white/90 backdrop-blur-xl rounded-2xl p-12 text-center border border-gray-200">
+                                            <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                                            <h3 className="text-xl font-semibold text-gray-600 mb-2">No Personal Contacts Yet</h3>
+                                            <p className="text-gray-500">
+                                                Add process servers from the Global Directory or invite new ones
+                                            </p>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </motion.div>
+                                    ) : (
+                                        personalContacts.map((contact, index) => {
+                                            const server = contact.processServerDetails
+                                            if (!server) return null
+
+                                            return (
+                                                <motion.div
+                                                    key={contact.id}
+                                                    initial={{ opacity: 0, y: 20 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ delay: index * 0.05 }}
+                                                    className="bg-white/90 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 shadow-lg hover:shadow-xl transition-all"
+                                                >
+                                                    <div className="flex items-start gap-6">
+                                                        <div className="relative">
+                                                            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
+                                                                {server.profilePhotoUrl ? (
+                                                                    <img 
+                                                                        src={`http://localhost:8080/api/process-servers/profile-photo/${server.profilePhotoUrl}`} 
+                                                                        alt={server.firstName} 
+                                                                        className="w-full h-full object-cover"
+                                                                        onError={(e) => {
+                                                                            e.currentTarget.style.display = 'none'
+                                                                            e.currentTarget.parentElement!.textContent = `${server.firstName?.[0]}${server.lastName?.[0]}`
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    `${server.firstName?.[0]}${server.lastName?.[0]}`
+                                                                )}
+                                                            </div>
+                                                            {server.isGlobal && (
+                                                                <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
+                                                                    <Globe className="w-3 h-3 text-white" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <div className="flex items-start justify-between mb-2">
+                                                                <div>
+                                                                    <h3 className="text-xl font-bold text-gray-800">
+                                                                        {server.firstName} {server.lastName}
+                                                                    </h3>
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                                                                            <span className="text-sm font-semibold text-gray-700">
+                                                                                {server.currentRating?.toFixed(1) || '0.0'}
+                                                                            </span>
+                                                                        </div>
+                                                                        <span className="text-gray-300">•</span>
+                                                                        <span className="text-sm text-gray-600">
+                                                                            {server.totalOrdersAssigned || 0} orders
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <motion.button
+                                                                    whileHover={{ scale: 1.05 }}
+                                                                    whileTap={{ scale: 0.95 }}
+                                                                    onClick={() => handleRemoveContact(contact.id)}
+                                                                    className="px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all text-sm font-medium"
+                                                                >
+                                                                    Remove
+                                                                </motion.button>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                                    <Mail className="w-4 h-4" />
+                                                                    {server.email}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                                    <Phone className="w-4 h-4" />
+                                                                    {server.phoneNumber || 'N/A'}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                                    <MapPin className="w-4 h-4" />
+                                                                    {server.operatingZipCodes ? JSON.parse(server.operatingZipCodes).slice(0, 3).join(', ') : 'N/A'}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                                    <TrendingUp className="w-4 h-4" />
+                                                                    {server.successfulDeliveries || 0} successful
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )
+                                        })
+                                    )}
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    key="global"
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -20 }}
+                                    className="space-y-4"
+                                >
+                                    {globalServers.length === 0 ? (
+                                        <div className="bg-white/90 backdrop-blur-xl rounded-2xl p-12 text-center border border-gray-200">
+                                            <Globe className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                                            <h3 className="text-xl font-semibold text-gray-600 mb-2">No Global Servers Available</h3>
+                                            <p className="text-gray-500">
+                                                Process servers can make themselves visible globally
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        globalServers.map((server, index) => {
+                                            const alreadyAdded = isInPersonalContacts(server.id)
+
+                                            return (
+                                                <motion.div
+                                                    key={server.id}
+                                                    initial={{ opacity: 0, y: 20 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ delay: index * 0.05 }}
+                                                    className="bg-white/90 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 shadow-lg hover:shadow-xl transition-all"
+                                                >
+                                                    <div className="flex items-start gap-6">
+                                                        <div className="relative">
+                                                            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
+                                                                {server.profilePhotoUrl ? (
+                                                                    <img 
+                                                                        src={`http://localhost:8080/api/process-servers/profile-photo/${server.profilePhotoUrl}`} 
+                                                                        alt={server.firstName} 
+                                                                        className="w-full h-full object-cover"
+                                                                        onError={(e) => {
+                                                                            e.currentTarget.style.display = 'none'
+                                                                            e.currentTarget.parentElement!.textContent = `${server.firstName?.[0]}${server.lastName?.[0]}`
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    `${server.firstName?.[0]}${server.lastName?.[0]}`
+                                                                )}
+                                                            </div>
+                                                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
+                                                                <Globe className="w-3 h-3 text-white" />
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <div className="flex items-start justify-between mb-2">
+                                                                <div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <h3 className="text-xl font-bold text-gray-800">
+                                                                            {server.firstName} {server.lastName}
+                                                                        </h3>
+                                                                        <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
+                                                                            GLOBAL
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                                                                            <span className="text-sm font-semibold text-gray-700">
+                                                                                {server.currentRating?.toFixed(1) || '0.0'}
+                                                                            </span>
+                                                                        </div>
+                                                                        <span className="text-gray-300">•</span>
+                                                                        <span className="text-sm text-gray-600">
+                                                                            {server.totalOrdersAssigned || 0} orders
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                {alreadyAdded ? (
+                                                                    <motion.button
+                                                                        whileHover={{ scale: 1.05 }}
+                                                                        whileTap={{ scale: 0.95 }}
+                                                                        onClick={() => {
+                                                                            const entryId = getContactEntryId(server.id)
+                                                                            if (entryId) {
+                                                                                handleRemoveContact(entryId)
+                                                                            }
+                                                                        }}
+                                                                        className="px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all text-sm font-medium"
+                                                                    >
+                                                                        Remove from Contacts
+                                                                    </motion.button>
+                                                                ) : (
+                                                                    <motion.button
+                                                                        whileHover={{ scale: 1.05 }}
+                                                                        whileTap={{ scale: 0.95 }}
+                                                                        onClick={() => handleAddToPersonal(server)}
+                                                                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:shadow-lg transition-all text-sm font-medium flex items-center gap-2"
+                                                                    >
+                                                                        <UserPlus className="w-4 h-4" />
+                                                                        Add to Contacts
+                                                                    </motion.button>
+                                                                )}
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                                    <Mail className="w-4 h-4" />
+                                                                    {server.email}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                                    <Phone className="w-4 h-4" />
+                                                                    {server.phoneNumber || 'N/A'}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                                    <MapPin className="w-4 h-4" />
+                                                                    {server.operatingZipCodes ? JSON.parse(server.operatingZipCodes).slice(0, 3).join(', ') : 'N/A'}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                                    <TrendingUp className="w-4 h-4" />
+                                                                    {server.successfulDeliveries || 0} successful
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )
+                                        })
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </div>
             </div>
-
-            <ConfirmModal
-                isOpen={showRemoveModal}
-                onClose={() => {
-                    setShowRemoveModal(false)
-                    setContactToRemove(null)
-                }}
-                onConfirm={confirmRemoveContact}
-                title="Remove Contact"
-                message="Are you sure you want to remove this process server from your contacts?"
-                confirmText="Yes, Remove"
-                cancelText="Cancel"
-            />
-
-            <Toast
-                message={toast.message}
-                type={toast.type}
-                isVisible={toast.visible}
-                onClose={() => setToast({ ...toast, visible: false })}
-            />
         </div>
     )
 }

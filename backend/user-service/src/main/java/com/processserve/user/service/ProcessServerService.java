@@ -98,6 +98,17 @@ public class ProcessServerService {
         log.warn("Red zone status for {} set to: {}", tenantUserRoleId, isRedZone);
     }
 
+    @Transactional
+    public void toggleGlobalVisibility(String tenantUserRoleId, boolean isGlobal) {
+        ProcessServerProfile profile = processServerRepository.findByTenantUserRoleId(tenantUserRoleId)
+                .orElseThrow(() -> new RuntimeException("Process server profile not found"));
+
+        profile.setIsGlobal(isGlobal);
+        processServerRepository.save(profile);
+
+        log.info("Global visibility for {} set to: {}", tenantUserRoleId, isGlobal);
+    }
+
     private final com.processserve.user.client.OrderClient orderClient;
 
     @Transactional

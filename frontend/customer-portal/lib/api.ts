@@ -174,5 +174,22 @@ export const api = {
         })
         if (!response.ok) throw new Error('Failed to get default process server')
         return response.json()
+    },
+
+    async getGlobalProcessServers(token: string) {
+        const response = await fetch(`${API_URL}/api/process-servers/global`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!response.ok) throw new Error('Failed to fetch global process servers')
+        return response.json()
+    },
+
+    async toggleGlobalVisibility(tenantUserRoleId: string, isGlobal: boolean, token: string) {
+        const response = await fetch(`${API_URL}/api/process-servers/${tenantUserRoleId}/toggle-global?isGlobal=${isGlobal}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!response.ok) throw new Error('Failed to toggle global visibility')
+        return response.json()
     }
 }

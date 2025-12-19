@@ -8,9 +8,9 @@ spring:
         - id: auth-service
           uri: lb://AUTH-SERVICE
           predicates:
-            - Path=/api/auth/**
+            - Path=/api/auth/**,/api/invites/**
           filters:
-            - RewritePath=/api/auth/(?<segment>.*), /api/auth/$\{segment}
+            - RewritePath=/api/(?<segment>.*), /api/$\{segment}
         
         # Tenant Service Routes
         - id: tenant-service

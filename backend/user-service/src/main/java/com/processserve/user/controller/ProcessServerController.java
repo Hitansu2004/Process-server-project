@@ -56,6 +56,35 @@ public class ProcessServerController {
         return ResponseEntity.ok(processServerService.getPendingApprovals());
     }
 
+    @GetMapping("/global")
+    public ResponseEntity<?> getGlobalProcessServers() {
+        try {
+            List<ProcessServerProfile> processServers = processServerService.getGlobalProcessServers();
+
+            // Convert to DTOs and enrich with user details
+            List<com.processserve.user.dto.ProcessServerProfileDTO> dtos = processServers.stream().map(profile -> {
+                com.processserve.user.dto.ProcessServerProfileDTO dto = new com.processserve.user.dto.ProcessServerProfileDTO(
+                        profile);
+                try {
+                    Map<String, Object> roleDetails = authClient.getRoleDetails(profile.getTenantUserRoleId());
+                    dto.setUserId((String) roleDetails.get("userId"));
+                    dto.setFirstName((String) roleDetails.get("firstName"));
+                    dto.setLastName((String) roleDetails.get("lastName"));
+                    dto.setEmail((String) roleDetails.get("email"));
+                    dto.setPhoneNumber((String) roleDetails.get("phoneNumber"));
+                    dto.setProfilePhotoUrl(profile.getProfilePhotoUrl());
+                } catch (Exception e) {
+                    log.error("Failed to fetch user details for {}: {}", profile.getTenantUserRoleId(), e.getMessage());
+                }
+                return dto;
+            }).collect(java.util.stream.Collectors.toList());
+
+            return ResponseEntity.ok(dtos);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PutMapping("/{tenantUserRoleId}/red-zone")
     public ResponseEntity<?> setRedZone(@PathVariable String tenantUserRoleId,
             @RequestParam boolean isRedZone) {
@@ -63,6 +92,21 @@ public class ProcessServerController {
             processServerService.setRedZone(tenantUserRoleId, isRedZone);
             Map<String, String> response = new HashMap<>();
             response.put("message", "Red zone status updated");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    @PutMapping("/{tenantUserRoleId}/toggle-global")
+    public ResponseEntity<?> toggleGlobalVisibility(@PathVariable String tenantUserRoleId,
+            @RequestParam boolean isGlobal) {
+        try {
+            processServerService.toggleGlobalVisibility(tenantUserRoleId, isGlobal);
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Global visibility updated");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();

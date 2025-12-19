@@ -12,7 +12,6 @@ import java.util.Map;
 @RequestMapping("/api/invites")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = "*")
 public class InviteController {
 
     private final EmailService emailService;
