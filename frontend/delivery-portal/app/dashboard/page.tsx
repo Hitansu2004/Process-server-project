@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Globe, CheckCircle, AlertCircle } from 'lucide-react'
 import { api } from '@/lib/api'
 import ConfirmModal from '@/components/ConfirmModal'
 
@@ -14,6 +16,13 @@ export default function Dashboard() {
     const [profile, setProfile] = useState<any>(null)
     const [assignedFilter, setAssignedFilter] = useState('ALL')
     const [showLogoutModal, setShowLogoutModal] = useState(false)
+    const [isGlobal, setIsGlobal] = useState(false)
+    const [toggleLoading, setToggleLoading] = useState(false)
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error'; visible: boolean }>({
+        message: '',
+        type: 'success',
+        visible: false
+    })
 
     const filteredAssignedOrders = assignedOrders.filter(order => {
         if (assignedFilter === 'ALL') return true
@@ -58,6 +67,7 @@ export default function Dashboard() {
             // 1. Get Profile to get the actual ProcessServerID (profile.id)
             const profileData = await api.getProcessServerProfile(tenantUserRoleId, token)
             setProfile(profileData)
+            setIsGlobal(profileData.isGlobal || false)
 
             const processServerId = profileData.id
 
@@ -79,60 +89,304 @@ export default function Dashboard() {
         }
     }
 
-    if (loading) return <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
-    </div>
+    const handleToggleGlobal = async () => {
+        setToggleLoading(true)
+        try {
+            const token = localStorage.getItem('token')
+            const processServerRole = user.roles.find((r: any) => r.role === 'PROCESS_SERVER')
+            
+            if (!token || !processServerRole) {
+                throw new Error('Authentication required')
+            }
+
+            const newGlobalStatus = !isGlobal
+            await api.toggleGlobalVisibility(processServerRole.id, newGlobalStatus, token)
+            
+            setIsGlobal(newGlobalStatus)
+            showToast(
+                newGlobalStatus 
+                    ? 'You are now visible in the global directory! 🌍' 
+                    : 'You are no longer visible in the global directory',
+                'success'
+            )
+        } catch (error) {
+            console.error('Failed to toggle global visibility:', error)
+            showToast('Failed to update global visibility', 'error')
+        } finally {
+            setToggleLoading(false)
+        }
+    }
+
+    const showToast = (message: string, type: 'success' | 'error') => {
+        setToast({ message, type, visible: true })
+        setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000)
+    }
+
+    if (loading) return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-emerald-50 relative overflow-hidden">
+            {/* Animated background elements */}
+            <motion.div
+                animate={{
+                    scale: [1, 1.2, 1],
+                    rotate: [0, 90, 0],
+                }}
+                transition={{ duration: 20, repeat: Infinity }}
+                className="absolute top-20 left-20 w-72 h-72 bg-green-200 rounded-full mix-blend-multiply filter blur-xl opacity-30"
+            />
+            <motion.div
+                animate={{
+                    scale: [1.2, 1, 1.2],
+                    rotate: [90, 0, 90],
+                }}
+                transition={{ duration: 15, repeat: Infinity }}
+                className="absolute bottom-20 right-20 w-72 h-72 bg-emerald-200 rounded-full mix-blend-multiply filter blur-xl opacity-30"
+            />
+            <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full relative z-10"
+            />
+        </div>
+    )
 
     return (
-        <div className="min-h-screen p-6">
-            <div className="max-w-7xl mx-auto">
-                <div className="flex justify-between items-center mb-8">
+        <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 p-6 relative overflow-hidden">
+            {/* Animated background elements */}
+            <motion.div
+                animate={{
+                    scale: [1, 1.2, 1],
+                    rotate: [0, 90, 0],
+                }}
+                transition={{ duration: 20, repeat: Infinity }}
+                className="absolute top-20 left-20 w-72 h-72 bg-green-200 rounded-full mix-blend-multiply filter blur-xl opacity-30"
+            />
+            <motion.div
+                animate={{
+                    scale: [1.2, 1, 1.2],
+                    rotate: [90, 0, 90],
+                }}
+                transition={{ duration: 15, repeat: Infinity }}
+                className="absolute bottom-20 right-20 w-72 h-72 bg-emerald-200 rounded-full mix-blend-multiply filter blur-xl opacity-30"
+            />
+            <motion.div
+                animate={{
+                    scale: [1, 1.3, 1],
+                    rotate: [0, -90, 0],
+                }}
+                transition={{ duration: 18, repeat: Infinity }}
+                className="absolute top-1/2 right-1/3 w-96 h-96 bg-green-300 rounded-full mix-blend-multiply filter blur-xl opacity-20"
+            />
+            
+            <div className="max-w-7xl mx-auto relative z-10">
+                {/* Toast Notification */}
+                <AnimatePresence>
+                    {toast.visible && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -50 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -50 }}
+                            className="fixed top-4 right-4 z-50"
+                        >
+                            <div className={`px-6 py-4 rounded-xl shadow-2xl backdrop-blur-xl border ${
+                                toast.type === 'success' ? 'bg-green-500/90 border-green-400 text-white' :
+                                'bg-red-500/90 border-red-400 text-white'
+                            }`}>
+                                <div className="flex items-center gap-3">
+                                    {toast.type === 'success' ? (
+                                        <CheckCircle className="w-5 h-5" />
+                                    ) : (
+                                        <AlertCircle className="w-5 h-5" />
+                                    )}
+                                    <p className="font-medium">{toast.message}</p>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="flex justify-between items-center mb-8"
+                >
                     <div>
-                        <h1 className="text-3xl font-bold">Process Server Dashboard</h1>
-                        <p className="text-gray-400 mt-1">Welcome, {user?.firstName}!</p>
+                        <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Process Server Dashboard</h1>
+                        <p className="text-gray-600 mt-2 text-lg">Welcome, {user?.firstName}!</p>
                         {profile && (
-                            <div className="flex items-center gap-4 mt-2">
-                                <span className="text-yellow-500 font-bold">★ {profile.currentRating}</span>
+                            <div className="flex items-center gap-4 mt-3">
+                                <span className="text-yellow-500 font-bold text-lg">★ {profile.currentRating}</span>
                                 <span className="text-sm text-gray-500">({profile.totalOrdersAssigned} Orders)</span>
+                                
+                                {/* Global Visibility Toggle */}
+                                <motion.div
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: 0.3, type: "spring", stiffness: 100 }}
+                                    className="ml-6"
+                                >
+                                    <motion.button
+                                        whileHover={{ scale: 1.05, y: -2 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={handleToggleGlobal}
+                                        disabled={toggleLoading}
+                                        className={`relative flex items-center gap-3 px-5 py-2.5 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all overflow-hidden ${
+                                            isGlobal
+                                                ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
+                                                : 'bg-white/90 backdrop-blur-xl text-gray-700 border-2 border-gray-300 hover:border-green-500'
+                                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    >
+                                        {/* Animated background shimmer when active */}
+                                        {isGlobal && !toggleLoading && (
+                                            <motion.div
+                                                animate={{
+                                                    x: ['-100%', '100%'],
+                                                }}
+                                                transition={{
+                                                    duration: 2,
+                                                    repeat: Infinity,
+                                                    ease: "linear"
+                                                }}
+                                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                                            />
+                                        )}
+                                        
+                                        {toggleLoading ? (
+                                            <>
+                                                <motion.div
+                                                    animate={{ rotate: 360 }}
+                                                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                                    className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                                                />
+                                                <span className="relative z-10">Updating...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <motion.div
+                                                    animate={isGlobal ? {
+                                                        rotate: [0, 360],
+                                                        scale: [1, 1.2, 1]
+                                                    } : {}}
+                                                    transition={{
+                                                        duration: 0.6,
+                                                        ease: "easeOut"
+                                                    }}
+                                                >
+                                                    <Globe className="w-5 h-5 relative z-10" />
+                                                </motion.div>
+                                                <span className="relative z-10">
+                                                    {isGlobal ? 'Visible Globally' : 'Go Global'}
+                                                </span>
+                                                {isGlobal && (
+                                                    <motion.div
+                                                        initial={{ scale: 0 }}
+                                                        animate={{ 
+                                                            scale: [0, 1.2, 1],
+                                                            opacity: [0, 1, 1]
+                                                        }}
+                                                        transition={{ duration: 0.4 }}
+                                                        className="w-2 h-2 bg-white rounded-full relative z-10 shadow-lg"
+                                                    >
+                                                        <motion.div
+                                                            animate={{
+                                                                scale: [1, 1.5, 1],
+                                                                opacity: [0.8, 0, 0.8]
+                                                            }}
+                                                            transition={{
+                                                                duration: 1.5,
+                                                                repeat: Infinity
+                                                            }}
+                                                            className="absolute inset-0 bg-white rounded-full"
+                                                        />
+                                                    </motion.div>
+                                                )}
+                                            </>
+                                        )}
+                                    </motion.button>
+                                    <motion.p
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{ delay: 0.5 }}
+                                        className="text-xs text-gray-500 mt-2 text-center"
+                                    >
+                                        {isGlobal ? (
+                                            <span className="flex items-center justify-center gap-1">
+                                                <motion.span
+                                                    animate={{ opacity: [0.5, 1, 0.5] }}
+                                                    transition={{ duration: 2, repeat: Infinity }}
+                                                    className="w-1.5 h-1.5 bg-green-500 rounded-full"
+                                                />
+                                                Customers can find you
+                                            </span>
+                                        ) : (
+                                            'Make yourself discoverable'
+                                        )}
+                                    </motion.p>
+                                </motion.div>
                             </div>
                         )}
                     </div>
-                    <div className="flex gap-4">
-                        <button
+                    <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.5, delay: 0.2 }}
+                        className="flex gap-4"
+                    >
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => router.push('/orders')}
-                            className="btn-primary"
+                            className="btn-primary shadow-lg hover:shadow-xl transition-all"
                         >
                             Browse Orders
-                        </button>
-                        <button
+                        </motion.button>
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => router.push('/bids')}
-                            className="px-6 py-3 rounded-lg glass hover:bg-primary/20 transition"
+                            className="px-6 py-3 rounded-lg glass hover:bg-primary/20 transition shadow-md"
                         >
                             My Bids
-                        </button>
-                        <button
+                        </motion.button>
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => setShowLogoutModal(true)}
-                            className="px-6 py-3 rounded-lg glass hover:bg-red-500/20 transition"
+                            className="px-6 py-3 rounded-lg glass hover:bg-red-500/20 transition shadow-md"
                         >
                             Logout
-                        </button>
-                    </div>
-                </div>
+                        </motion.button>
+                    </motion.div>
+                </motion.div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <div className="card">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
+                    className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8"
+                >
+                    <motion.div
+                        whileHover={{ scale: 1.02, y: -5 }}
+                        className="card bg-white/80 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all"
+                    >
                         <h3 className="text-gray-500 text-sm mb-2">Total Assigned</h3>
                         <p className="text-3xl font-bold text-gray-900">
                             {profile?.totalOrdersAssigned || 0}
                         </p>
-                    </div>
-                    <div className="card">
+                    </motion.div>
+                    <motion.div
+                        whileHover={{ scale: 1.02, y: -5 }}
+                        className="card bg-white/80 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all"
+                    >
                         <h3 className="text-gray-500 text-sm mb-2">Total Completed</h3>
                         <p className="text-3xl font-bold text-green-600">
                             {profile?.successfulDeliveries || 0}
                         </p>
-                    </div>
-                    <div className="card">
+                    </motion.div>
+                    <motion.div
+                        whileHover={{ scale: 1.02, y: -5 }}
+                        className="card bg-white/80 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all"
+                    >
                         <h3 className="text-gray-500 text-sm mb-2">Total Earnings</h3>
                         <p className="text-3xl font-bold text-green-400">
                             ${assignedOrders
@@ -140,35 +394,55 @@ export default function Dashboard() {
                                 .reduce((sum, order) => sum + (order.processServerPayout || (order.finalAgreedPrice * 0.85) || 0), 0)
                                 .toFixed(2)}
                         </p>
-                    </div>
-                    <div className="card">
+                    </motion.div>
+                    <motion.div
+                        whileHover={{ scale: 1.02, y: -5 }}
+                        className="card bg-white/80 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all"
+                    >
                         <h3 className="text-gray-500 text-sm mb-2">Total Pending</h3>
                         <p className="text-3xl font-bold text-yellow-500">
                             {(profile?.totalOrdersAssigned || 0) - (profile?.successfulDeliveries || 0)}
                         </p>
-                    </div>
-                </div>
+                    </motion.div>
+                </motion.div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <div className="card">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
+                    className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8"
+                >
+                    <motion.div
+                        whileHover={{ scale: 1.02, y: -5 }}
+                        className="card bg-white/80 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all"
+                    >
                         <h3 className="text-gray-500 text-sm mb-2">Success Rate</h3>
                         <p className="text-3xl font-bold text-blue-500">
                             {profile ? `${Math.min(((profile.successfulDeliveries / (profile.totalOrdersAssigned || 1)) * 100), 100).toFixed(1)}%` : '0.0%'}
                         </p>
-                    </div>
-                    <div className="card">
+                    </motion.div>
+                    <motion.div
+                        whileHover={{ scale: 1.02, y: -5 }}
+                        className="card bg-white/80 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all"
+                    >
                         <h3 className="text-gray-500 text-sm mb-2">Available Orders</h3>
                         <p className="text-3xl font-bold text-primary">
                             {availableOrders.length}
                         </p>
-                    </div>
-                    <div className="card">
+                    </motion.div>
+                    <motion.div
+                        whileHover={{ scale: 1.02, y: -5 }}
+                        className="card bg-white/80 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all"
+                    >
                         <h3 className="text-gray-500 text-sm mb-2">My Bids (Pending)</h3>
                         <p className="text-3xl font-bold text-yellow-500">
                             {myBids.filter(b => b.status === 'PENDING').length}
                         </p>
-                    </div>
-                    <div className="card">
+                    </motion.div>
+                    <motion.div
+                        whileHover={{ scale: 1.02, y: -5 }}
+                        className="card bg-white/80 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all"
+                    >
                         <h3 className="text-gray-500 text-sm mb-2">My Rating</h3>
                         <div className="flex items-baseline gap-2">
                             <p className="text-3xl font-bold text-yellow-500">
@@ -176,12 +450,17 @@ export default function Dashboard() {
                             </p>
                             <span className="text-sm text-gray-400">/ 5.0</span>
                         </div>
-                    </div>
-                </div>
+                    </motion.div>
+                </motion.div>
 
-                <div className="card">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.5 }}
+                    className="card bg-white/80 backdrop-blur-xl shadow-lg"
+                >
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold">My Assigned Deliveries</h2>
+                        <h2 className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">My Assigned Deliveries</h2>
                         <div className="flex bg-black/20 p-1 rounded-lg">
                             <button
                                 onClick={() => setAssignedFilter('ALL')}
@@ -247,7 +526,7 @@ export default function Dashboard() {
                             ))}
                         </div>
                     )}
-                </div>
+                </motion.div>
             </div>
 
             <ConfirmModal

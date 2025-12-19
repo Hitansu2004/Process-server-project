@@ -152,5 +152,13 @@ export const api = {
         }
         return res.json()
     },
-}
 
+    async toggleGlobalVisibility(tenantUserRoleId: string, isGlobal: boolean, token: string) {
+        const res = await fetch(`${API_URL}/api/process-servers/${tenantUserRoleId}/toggle-global?isGlobal=${isGlobal}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!res.ok) throw new Error('Failed to toggle global visibility')
+        return res.json()
+    },
+}
