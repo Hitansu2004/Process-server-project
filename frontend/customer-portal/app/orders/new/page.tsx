@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import ProcessServerCard from '@/components/ProcessServerCard'
+import { Search, Star, Phone, MapPin, Award } from 'lucide-react'
 
 interface ContactEntry {
     id: string
@@ -30,9 +31,10 @@ export default function NewOrder() {
     const [defaultProcessServerId, setDefaultProcessServerId] = useState<string | null>(null)
     const [customerProfileId, setCustomerProfileId] = useState<string | null>(null)
     const [sortFilter, setSortFilter] = useState<string>('default') // Filter state
+    const [searchQuery, setSearchQuery] = useState('')
+    const [minRating, setMinRating] = useState<number>(0)
+    const [minOrders, setMinOrders] = useState<number>(0)
     const [formData, setFormData] = useState({
-        pickupAddress: '',
-        pickupZipCode: '',
         specialInstructions: '',
         deadline: '',
     })
@@ -104,13 +106,36 @@ export default function NewOrder() {
 
     // Sort and filter process servers based on selected filter
     const getSortedContacts = (contacts: ContactEntry[]) => {
-        const contactsWithDetails = contacts
+        let contactsWithDetails = contacts
             .map(contact => ({
                 contact,
                 details: processServerDetails[contact.processServerId]
             }))
             .filter(item => item.details) // Only include contacts with details
 
+        // Apply search filter
+        if (searchQuery) {
+            contactsWithDetails = contactsWithDetails.filter(item => {
+                const name = item.contact.nickname || item.details.name
+                return name.toLowerCase().includes(searchQuery.toLowerCase())
+            })
+        }
+
+        // Apply rating filter
+        if (minRating > 0) {
+            contactsWithDetails = contactsWithDetails.filter(item => 
+                Number(item.details.currentRating) >= minRating
+            )
+        }
+
+        // Apply orders filter
+        if (minOrders > 0) {
+            contactsWithDetails = contactsWithDetails.filter(item => 
+                item.details.totalOrdersAssigned >= minOrders
+            )
+        }
+
+        // Apply sorting
         switch (sortFilter) {
             case 'highest-rated':
                 return contactsWithDetails
@@ -162,7 +187,8 @@ export default function NewOrder() {
             const token = sessionStorage.getItem('token')
             const user = JSON.parse(sessionStorage.getItem('user') || '{}')
 
-            const customerId = user.userId
+            // Use tenant_user_role_id from user's first role (this is the customer_id in orders)
+            const customerId = user.roles?.[0]?.id || user.userId
 
             // Format deadline to include seconds for proper LocalDateTime parsing
             const formattedDeadline = formData.deadline.includes(':00:')
@@ -207,35 +233,6 @@ export default function NewOrder() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="card space-y-6">
-                    {/* Pickup Info */}
-                    <div>
-                        <h2 className="text-xl font-semibold mb-4">Pickup Information</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium mb-2">Pickup Address</label>
-                                <input
-                                    type="text"
-                                    value={formData.pickupAddress}
-                                    onChange={(e) => setFormData({ ...formData, pickupAddress: e.target.value })}
-                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                                    placeholder="123 Main St, New York, NY"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-2">ZIP Code</label>
-                                <input
-                                    type="text"
-                                    value={formData.pickupZipCode}
-                                    onChange={(e) => setFormData({ ...formData, pickupZipCode: e.target.value })}
-                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                                    placeholder="10001"
-                                    required
-                                />
-                            </div>
-                        </div>
-                    </div>
-
                     {/* Dropoffs */}
                     <div>
                         <div className="flex justify-between items-center mb-4">
@@ -327,97 +324,138 @@ export default function NewOrder() {
                                                         )}
                                                     </label>
 
-                                                    {/* Filter/Sort Buttons */}
+                                                    {/* Inline Dropdown Filters */}
                                                     {contactList.length > 0 && (
-                                                        <div className="mb-4 flex flex-wrap gap-2">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSortFilter('default')}
-                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'default'
-                                                                    ? 'bg-primary text-white'
-                                                                    : 'glass hover:bg-white/10'
-                                                                    }`}
+                                                        <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-3 p-3 glass rounded-lg border border-gray-700">
+                                                            {/* Search */}
+                                                            <div className="relative">
+                                                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Search by name..."
+                                                                    value={searchQuery}
+                                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                                    className="w-full pl-10 pr-3 py-2 glass rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                                                />
+                                                            </div>
+
+                                                            {/* Rating Filter */}
+                                                            <select
+                                                                value={minRating}
+                                                                onChange={(e) => setMinRating(Number(e.target.value))}
+                                                                className="w-full px-3 py-2 glass rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                                             >
-                                                                Default
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSortFilter('highest-rated')}
-                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'highest-rated'
-                                                                    ? 'bg-primary text-white'
-                                                                    : 'glass hover:bg-white/10'
-                                                                    }`}
+                                                                <option value={0}>All Ratings</option>
+                                                                <option value={4}>4+ Stars</option>
+                                                                <option value={4.5}>4.5+ Stars</option>
+                                                                <option value={4.8}>4.8+ Stars</option>
+                                                            </select>
+
+                                                            {/* Orders Filter */}
+                                                            <select
+                                                                value={minOrders}
+                                                                onChange={(e) => setMinOrders(Number(e.target.value))}
+                                                                className="w-full px-3 py-2 glass rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                                             >
-                                                                ⭐ Highest Rated
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSortFilter('highest-success')}
-                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'highest-success'
-                                                                    ? 'bg-primary text-white'
-                                                                    : 'glass hover:bg-white/10'
-                                                                    }`}
+                                                                <option value={0}>All Orders</option>
+                                                                <option value={5}>5+ Orders</option>
+                                                                <option value={10}>10+ Orders</option>
+                                                                <option value={20}>20+ Orders</option>
+                                                            </select>
+
+                                                            {/* Sort By */}
+                                                            <select
+                                                                value={sortFilter}
+                                                                onChange={(e) => setSortFilter(e.target.value)}
+                                                                className="w-full px-3 py-2 glass rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                                             >
-                                                                📈 Highest Success Rate
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSortFilter('most-orders')}
-                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'most-orders'
-                                                                    ? 'bg-primary text-white'
-                                                                    : 'glass hover:bg-white/10'
-                                                                    }`}
-                                                            >
-                                                                📦 Most Orders Completed
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSortFilter('most-worked')}
-                                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortFilter === 'most-worked'
-                                                                    ? 'bg-primary text-white'
-                                                                    : 'glass hover:bg-white/10'
-                                                                    }`}
-                                                            >
-                                                                🤝 Most Worked With
-                                                            </button>
+                                                                <option value="default">Sort: Default</option>
+                                                                <option value="highest-rated">Sort: Highest Rated</option>
+                                                                <option value="highest-success">Sort: Success Rate</option>
+                                                                <option value="most-orders">Sort: Most Orders</option>
+                                                                <option value="most-worked">Sort: Most Worked</option>
+                                                            </select>
                                                         </div>
                                                     )}
 
-                                                    <div className="grid grid-cols-1 gap-4 max-h-[600px] overflow-y-auto pr-2">
+                                                    {/* Compact List View */}
+                                                    <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
                                                         {getSortedContacts(contactList).map(contact => {
                                                             const details = processServerDetails[contact.processServerId]
                                                             if (!details) return null
 
-                                                            return (
-                                                                <ProcessServerCard
-                                                                    key={contact.id}
-                                                                    id={contact.processServerId}
-                                                                    name={contact.nickname || details.name}
-                                                                    profilePhotoUrl={details.profilePhotoUrl}
-                                                                    currentRating={Number(details.currentRating) || 0}
-                                                                    successRate={details.successRate || 0}
-                                                                    totalOrdersAssigned={details.totalOrdersAssigned}
-                                                                    successfulDeliveries={details.successfulDeliveries}
-                                                                    isDefault={contact.processServerId === defaultProcessServerId}
-                                                                    isSelected={dropoff.assignedProcessServerId === contact.processServerId}
-                                                                    onSelect={() => updateDropoff(index, 'assignedProcessServerId', contact.processServerId)}
-                                                                    onSetDefault={async () => {
-                                                                        try {
-                                                                            const token = sessionStorage.getItem('token')
+                                                            const isSelected = dropoff.assignedProcessServerId === contact.processServerId
+                                                            const isDefault = contact.processServerId === defaultProcessServerId
 
-                                                                            if (token && customerProfileId) {
-                                                                                await api.setDefaultProcessServer(customerProfileId, contact.processServerId, token)
-                                                                                setDefaultProcessServerId(contact.processServerId)
-                                                                            } else {
-                                                                                console.error('Missing token or customerProfileId')
-                                                                                alert('Unable to set default: Customer profile not loaded.')
-                                                                            }
-                                                                        } catch (error) {
-                                                                            console.error('Failed to set default:', error)
-                                                                            alert('Failed to set default process server.')
-                                                                        }
-                                                                    }}
-                                                                />
+                                                            return (
+                                                                <div
+                                                                    key={contact.id}
+                                                                    onClick={() => updateDropoff(index, 'assignedProcessServerId', contact.processServerId)}
+                                                                    className={`glass rounded-lg p-4 border-2 transition-all cursor-pointer hover:bg-white/10 ${
+                                                                        isSelected ? 'border-primary bg-primary/10' : 'border-transparent'
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center gap-4">
+                                                                        {/* Avatar */}
+                                                                        <div className="relative flex-shrink-0">
+                                                                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold overflow-hidden">
+                                                                                {details.profilePhotoUrl ? (
+                                                                                    <img 
+                                                                                        src={`http://localhost:8080/api/process-servers/profile-photo/${details.profilePhotoUrl}`} 
+                                                                                        alt={contact.nickname || details.name} 
+                                                                                        className="w-full h-full object-cover"
+                                                                                        onError={(e) => {
+                                                                                            e.currentTarget.style.display = 'none'
+                                                                                            const initials = (contact.nickname || details.name).split(' ').map(n => n[0]).join('')
+                                                                                            e.currentTarget.parentElement!.textContent = initials
+                                                                                        }}
+                                                                                    />
+                                                                                ) : (
+                                                                                    (contact.nickname || details.name).split(' ').map(n => n[0]).join('')
+                                                                                )}
+                                                                            </div>
+                                                                            {isDefault && (
+                                                                                <div className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-yellow-500 rounded-full border border-white flex items-center justify-center">
+                                                                                    <Star className="w-2.5 h-2.5 text-white fill-white" />
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {/* Info */}
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="flex items-center gap-2 mb-1.5">
+                                                                                <h3 className="font-semibold text-base truncate">
+                                                                                    {contact.nickname || details.name}
+                                                                                </h3>
+                                                                                {isSelected && (
+                                                                                    <span className="px-2 py-1 rounded-full bg-green-500 text-white text-xs font-semibold flex-shrink-0">
+                                                                                        ✓ SELECTED
+                                                                                    </span>
+                                                                                )}
+                                                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                                                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                                                                                    <span className="text-sm font-medium">
+                                                                                        {Number(details.currentRating).toFixed(1)}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-4 text-sm text-gray-400">
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <span className="font-medium text-green-400">{details.successRate?.toFixed(0)}%</span>
+                                                                                    <span>Success</span>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <Award className="w-4 h-4" />
+                                                                                    <span>{details.totalOrdersAssigned || 0} orders</span>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <span className="text-green-400">{details.successfulDeliveries || 0}</span>
+                                                                                    <span>/ {details.totalOrdersAssigned || 0} delivered</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             )
                                                         })}
                                                     </div>

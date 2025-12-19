@@ -213,6 +213,7 @@ public class ProcessServerController {
                 details.setFirstName((String) roleDetails.get("firstName"));
                 details.setLastName((String) roleDetails.get("lastName"));
                 details.setEmail((String) roleDetails.get("email"));
+                details.setPhoneNumber((String) roleDetails.get("phoneNumber"));
                 // Update display name if available
                 if (details.getFirstName() != null || details.getLastName() != null) {
                     details.setName((details.getFirstName() + " " + details.getLastName()).trim());

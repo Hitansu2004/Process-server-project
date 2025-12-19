@@ -3,16 +3,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Lock, User, Phone, Send, CheckCircle, AlertCircle, Sparkles, ArrowRight } from 'lucide-react'
+import { Mail, Lock, User, Phone, CheckCircle, AlertCircle, Sparkles, ArrowRight } from 'lucide-react'
 
 export default function RegisterPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
-    const [otp, setOtp] = useState('')
-    const [otpSent, setOtpSent] = useState(false)
-    const [sendingOtp, setSendingOtp] = useState(false)
     const [formData, setFormData] = useState({
         email: '',
         password: '',
@@ -25,67 +22,6 @@ export default function RegisterPage() {
     const tenantId = typeof window !== 'undefined'
         ? sessionStorage.getItem('selectedTenant') || new URLSearchParams(window.location.search).get('tenant') || 'tenant-1'
         : 'tenant-1'
-
-    const isGmail = (email: string) => email.toLowerCase().endsWith('@gmail.com')
-
-    const sendOtp = async () => {
-        setError('')
-        setSendingOtp(true)
-
-        try {
-            const response = await fetch('http://localhost:8080/api/auth/send-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email: formData.email,
-                    firstName: formData.firstName,
-                    lastName: formData.lastName
-                })
-            })
-
-            const data = await response.json()
-
-            if (response.ok) {
-                setOtpSent(true)
-                setError('')
-            } else {
-                setError(data.error || 'Failed to send OTP')
-            }
-        } catch (err) {
-            setError('Failed to connect to server')
-        } finally {
-            setSendingOtp(false)
-        }
-    }
-
-    const verifyOtpAndRegister = async () => {
-        setError('')
-        setLoading(true)
-
-        try {
-            const verifyResponse = await fetch('http://localhost:8080/api/auth/verify-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email: formData.email,
-                    otp: otp
-                })
-            })
-
-            const verifyData = await verifyResponse.json()
-
-            if (!verifyResponse.ok) {
-                setError(verifyData.error || 'Invalid OTP')
-                setLoading(false)
-                return
-            }
-
-            await registerUser()
-        } catch (err) {
-            setError('Failed to verify OTP')
-            setLoading(false)
-        }
-    }
 
     const registerUser = async () => {
         try {
@@ -133,20 +69,8 @@ export default function RegisterPage() {
             return
         }
 
-        if (isGmail(formData.email)) {
-            setLoading(true)
-            await registerUser()
-        } else {
-            if (!otpSent) {
-                setError('Please send and verify OTP first')
-                return
-            }
-            if (!otp) {
-                setError('Please enter the OTP')
-                return
-            }
-            await verifyOtpAndRegister()
-        }
+        setLoading(true)
+        await registerUser()
     }
 
     if (success) {
@@ -320,100 +244,9 @@ export default function RegisterPage() {
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                 className="w-full pl-10 pr-3 py-2 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-white/50"
                                 placeholder="you@example.com"
-                                disabled={otpSent}
                             />
                         </div>
-                        
-                        {/* Send OTP Button */}
-                        {!isGmail(formData.email) && formData.email && formData.firstName && formData.lastName && !otpSent && (
-                            <motion.button
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                type="button"
-                                onClick={sendOtp}
-                                disabled={sendingOtp}
-                                className="mt-2 w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
-                            >
-                                {sendingOtp ? (
-                                    <>
-                                        <motion.div
-                                            animate={{ rotate: 360 }}
-                                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                        >
-                                            <Send size={20} />
-                                        </motion.div>
-                                        Sending OTP...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Send size={20} />
-                                        Send OTP to Email
-                                    </>
-                                )}
-                            </motion.button>
-                        )}
-
-                        {/* OTP Sent Success Message */}
-                        {otpSent && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="mt-2 p-2 bg-green-50 border-l-4 border-green-500 rounded-lg flex items-center gap-2"
-                            >
-                                <CheckCircle className="text-green-500" size={18} />
-                                <p className="text-sm text-green-700 font-medium">
-                                    OTP sent! Check your email inbox
-                                </p>
-                            </motion.div>
-                        )}
-
-                        {/* Gmail Detected Message */}
-                        {isGmail(formData.email) && formData.email && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-500 rounded-lg flex items-center gap-2"
-                            >
-                                <CheckCircle className="text-blue-500" size={18} />
-                                <p className="text-sm text-blue-700 font-medium">
-                                    Gmail detected - OTP not required
-                                </p>
-                            </motion.div>
-                        )}
                     </motion.div>
-
-                    {/* OTP Input */}
-                    <AnimatePresence>
-                        {!isGmail(formData.email) && otpSent && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                transition={{ duration: 0.3 }}
-                            >
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                    Enter OTP
-                                </label>
-                                <div className="relative">
-                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                    <input
-                                        type="text"
-                                        required
-                                        value={otp}
-                                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                        className="w-full pl-10 pr-3 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none bg-white/50 text-center text-xl font-bold tracking-widest"
-                                        placeholder="000000"
-                                        maxLength={6}
-                                    />
-                                </div>
-                                <p className="mt-2 text-xs text-gray-500 text-center">
-                                    Enter the 6-digit code sent to your email
-                                </p>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
 
                     {/* Phone Number */}
                     <motion.div
@@ -490,7 +323,7 @@ export default function RegisterPage() {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         type="submit"
-                        disabled={loading || (!isGmail(formData.email) && !otpSent)}
+                        disabled={loading}
                         className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl font-bold shadow-xl hover:shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed mt-3"
                     >
                         {loading ? (
@@ -509,16 +342,6 @@ export default function RegisterPage() {
                             </>
                         )}
                     </motion.button>
-
-                    {!isGmail(formData.email) && !otpSent && (
-                        <motion.p
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="text-sm text-gray-500 text-center"
-                        >
-                            Please send and verify OTP to enable registration
-                        </motion.p>
-                    )}
                 </form>
 
                 {/* Login Link */}

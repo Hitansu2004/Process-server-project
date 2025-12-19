@@ -1,56 +1,64 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Lock, LogIn, CheckCircle, AlertCircle, Sparkles, ArrowRight } from 'lucide-react'
-import { api } from '@/lib/api'
-import SessionManager from '@/lib/sessionManager'
+import { Mail, Lock, AlertCircle, ArrowRight, Briefcase, CheckCircle } from 'lucide-react'
 import OTPVerificationModal from '@/components/OTPVerificationModal'
 
-export default function LoginPage() {
+export default function ProcessServerLoginPage() {
     const router = useRouter()
-    const searchParams = useSearchParams()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
-    const [successMessage, setSuccessMessage] = useState('')
+    const [showSuccess, setShowSuccess] = useState(false)
     const [showOTPModal, setShowOTPModal] = useState(false)
     const [userEmail, setUserEmail] = useState('')
     const [pendingToken, setPendingToken] = useState('')
     const [pendingUserData, setPendingUserData] = useState<any>(null)
 
     const tenantId = typeof window !== 'undefined'
-        ? sessionStorage.getItem('selectedTenant') || searchParams?.get('tenant') || 'tenant-main-001'
+        ? sessionStorage.getItem('selectedTenant') || 'tenant-main-001'
         : 'tenant-main-001'
 
     useEffect(() => {
-        if (searchParams?.get('timeout') === 'true') {
-            setError('Session expired due to inactivity. Please login again.')
-        } else if (searchParams?.get('registered') === 'true') {
-            setSuccessMessage('Registration successful! Please login with your credentials.')
+        const urlParams = new URLSearchParams(window.location.search)
+        if (urlParams.get('registered') === 'true') {
+            setShowSuccess(true)
+            setTimeout(() => setShowSuccess(false), 5000)
         }
-
-        if (typeof window !== 'undefined' && tenantId) {
-            sessionStorage.setItem('selectedTenant', tenantId)
-        }
-    }, [searchParams, tenantId])
+    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
-        setSuccessMessage('')
         setLoading(true)
 
         try {
-            const response = await api.login(email, password, tenantId)
+            const response = await fetch('http://localhost:8080/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email,
+                    password,
+                    tenantId
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Login failed')
+            }
+
+            const data = await response.json()
 
             // Check if email is verified
-            if (response.emailVerified === false || response.emailVerified === 0) {
+            if (data.emailVerified === false || data.emailVerified === 0) {
                 // Store user data temporarily
-                setPendingToken(response.token)
-                setPendingUserData(response)
+                setPendingToken(data.token)
+                setPendingUserData(data)
                 setUserEmail(email)
 
                 // Send OTP to email
@@ -65,16 +73,14 @@ export default function LoginPage() {
                 }
             } else {
                 // Email already verified, proceed with login
-                sessionStorage.setItem('token', response.token)
-                sessionStorage.setItem('user', JSON.stringify(response))
+                sessionStorage.setItem('token', data.token)
+                sessionStorage.setItem('user', JSON.stringify(data))
                 sessionStorage.setItem('selectedTenant', tenantId)
-
-                SessionManager.init()
 
                 router.push('/dashboard')
             }
         } catch (err) {
-            setError('Invalid email or password')
+            setError('Invalid credentials. Please check your email and password.')
         } finally {
             setLoading(false)
         }
@@ -95,10 +101,9 @@ export default function LoginPage() {
                 sessionStorage.setItem('user', JSON.stringify({ ...pendingUserData, emailVerified: true }))
                 sessionStorage.setItem('selectedTenant', tenantId)
 
-                SessionManager.init()
-
                 setShowOTPModal(false)
                 router.push('/dashboard')
+                return true
             } else {
                 throw new Error('OTP verification failed')
             }
@@ -120,7 +125,7 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4 relative overflow-hidden">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-emerald-50 p-4 relative overflow-hidden">
             {/* Animated background elements */}
             <motion.div
                 animate={{
@@ -128,7 +133,7 @@ export default function LoginPage() {
                     rotate: [0, 90, 0],
                 }}
                 transition={{ duration: 20, repeat: Infinity }}
-                className="absolute top-20 left-20 w-72 h-72 bg-blue-200 rounded-full mix-blend-multiply filter blur-xl opacity-30"
+                className="absolute top-20 left-20 w-72 h-72 bg-green-200 rounded-full mix-blend-multiply filter blur-xl opacity-30"
             />
             <motion.div
                 animate={{
@@ -136,7 +141,7 @@ export default function LoginPage() {
                     rotate: [90, 0, 90],
                 }}
                 transition={{ duration: 15, repeat: Infinity }}
-                className="absolute bottom-20 right-20 w-72 h-72 bg-purple-200 rounded-full mix-blend-multiply filter blur-xl opacity-30"
+                className="absolute bottom-20 right-20 w-72 h-72 bg-emerald-200 rounded-full mix-blend-multiply filter blur-xl opacity-30"
             />
 
             <motion.div
@@ -155,27 +160,30 @@ export default function LoginPage() {
                     <motion.div
                         animate={{ rotate: [0, 10, -10, 0] }}
                         transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-                        className="inline-block mb-4"
+                        className="inline-block mb-3"
                     >
-                        <Sparkles className="text-purple-600" size={40} />
+                        <Briefcase className="text-green-600" size={40} />
                     </motion.div>
-                    <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-                        Welcome Back
+                    <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mb-2">
+                        ProcessServe
                     </h1>
-                    <p className="text-gray-600">Login to your ProcessServe account</p>
+                    <p className="text-gray-600">Process Server Portal</p>
                 </motion.div>
 
                 {/* Success Message */}
                 <AnimatePresence>
-                    {successMessage && (
+                    {showSuccess && (
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 20 }}
+                            initial={{ opacity: 0, y: -20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
                             className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 rounded-lg flex items-start gap-3"
                         >
                             <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
-                            <p className="text-green-700 text-sm">{successMessage}</p>
+                            <div>
+                                <p className="text-green-700 font-semibold text-sm">Registration Submitted!</p>
+                                <p className="text-green-600 text-xs mt-1">Your application is pending admin approval. You'll be notified once approved.</p>
+                            </div>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -195,7 +203,7 @@ export default function LoginPage() {
                     )}
                 </AnimatePresence>
 
-                <form onSubmit={handleSubmit} className="space-y-5">
+                <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Email Field */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -203,16 +211,16 @@ export default function LoginPage() {
                         transition={{ delay: 0.3 }}
                     >
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                            Email Address
+                            Email
                         </label>
                         <div className="relative">
-                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                             <input
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-white/50"
-                                placeholder="you@example.com"
+                                className="w-full pl-11 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none bg-white/50"
+                                placeholder="server@example.com"
                                 required
                             />
                         </div>
@@ -228,13 +236,13 @@ export default function LoginPage() {
                             Password
                         </label>
                         <div className="relative">
-                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                             <input
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-white/50"
-                                placeholder="Enter your password"
+                                className="w-full pl-11 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none bg-white/50"
+                                placeholder="••••••••"
                                 required
                             />
                         </div>
@@ -249,7 +257,7 @@ export default function LoginPage() {
                         whileTap={{ scale: 0.98 }}
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed mt-6"
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-xl font-bold shadow-xl hover:shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? (
                             <>
@@ -262,7 +270,6 @@ export default function LoginPage() {
                             </>
                         ) : (
                             <>
-                                <LogIn size={20} />
                                 Login
                                 <ArrowRight size={20} />
                             </>
@@ -281,7 +288,7 @@ export default function LoginPage() {
                         Don't have an account?{' '}
                         <button
                             onClick={() => router.push('/register')}
-                            className="text-blue-600 hover:text-purple-600 font-semibold transition-colors"
+                            className="text-green-600 hover:text-emerald-600 font-semibold transition-colors"
                         >
                             Register here
                         </button>

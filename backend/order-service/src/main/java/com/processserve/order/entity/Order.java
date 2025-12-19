@@ -38,12 +38,6 @@ public class Order {
     @Column(nullable = false, length = 50)
     private OrderStatus status;
 
-    @Column(name = "pickup_address", columnDefinition = "TEXT", nullable = false)
-    private String pickupAddress;
-
-    @Column(name = "pickup_zip_code", length = 10, nullable = false)
-    private String pickupZipCode;
-
     @Column(name = "special_instructions", columnDefinition = "TEXT")
     private String specialInstructions;
 

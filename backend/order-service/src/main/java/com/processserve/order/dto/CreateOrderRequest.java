@@ -22,12 +22,6 @@ public class CreateOrderRequest {
     @NotBlank(message = "Customer ID is required")
     private String customerId;
 
-    @NotBlank(message = "Pickup address is required")
-    private String pickupAddress;
-
-    @NotBlank(message = "Pickup ZIP code is required")
-    private String pickupZipCode;
-
     private String specialInstructions;
 
     @NotNull(message = "Deadline is required")

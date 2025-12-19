@@ -187,6 +187,7 @@ public class ProcessServerService {
         dto.setTenantUserRoleId(profile.getTenantUserRoleId());
         dto.setName(name);
         dto.setProfilePhotoUrl(profile.getProfilePhotoUrl());
+        dto.setOperatingZipCodes(profile.getOperatingZipCodes());
         dto.setCurrentRating(profile.getCurrentRating());
         dto.setSuccessRate(successRate);
         dto.setTotalOrdersAssigned(profile.getTotalOrdersAssigned());

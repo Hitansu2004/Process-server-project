@@ -66,7 +66,7 @@ public class AuthService {
         globalUser.setLastName(request.getLastName());
         globalUser.setPhoneNumber(request.getPhoneNumber());
         globalUser.setIsSuperAdmin(false);
-        globalUser.setEmailVerified(true); // Auto-verify for now
+        globalUser.setEmailVerified(false);
         globalUser.setIsActive(true);
 
         globalUser = globalUserRepository.save(globalUser);
@@ -244,7 +244,7 @@ public class AuthService {
             globalUser.setLastName(request.getLastName());
             globalUser.setPhoneNumber(request.getPhoneNumber());
             globalUser.setIsSuperAdmin(false);
-            globalUser.setEmailVerified(true);
+            globalUser.setEmailVerified(false);
             globalUser.setIsActive(true);
 
             globalUser = globalUserRepository.save(globalUser);
@@ -411,6 +411,7 @@ public class AuthService {
                 .firstName(globalUser.getFirstName())
                 .lastName(globalUser.getLastName())
                 .isSuperAdmin(globalUser.getIsSuperAdmin())
+                .emailVerified(globalUser.getEmailVerified())
                 .roles(responseRoles)
                 .build();
     }
@@ -427,5 +428,9 @@ public class AuthService {
 
     public boolean emailExists(String email) {
         return globalUserRepository.existsByEmail(email);
+    }
+
+    public GlobalUser saveUser(GlobalUser user) {
+        return globalUserRepository.save(user);
     }
 }

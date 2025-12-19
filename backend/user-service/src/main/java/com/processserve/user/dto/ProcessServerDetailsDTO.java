@@ -15,8 +15,10 @@ public class ProcessServerDetailsDTO {
     private String firstName;
     private String lastName;
     private String email;
+    private String phoneNumber;
     private String tenantUserRoleId;
     private String profilePhotoUrl;
+    private String operatingZipCodes;
     private BigDecimal currentRating;
     private Double successRate;
     private Integer totalOrdersAssigned;

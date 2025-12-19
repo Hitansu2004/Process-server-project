@@ -38,8 +38,6 @@ public class OrderService {
         long nextOrderNum = orderRepository.countByCustomerId(request.getCustomerId()) + 1;
         order.setOrderNumber("C" + shortId + "-ORD" + nextOrderNum);
         order.setStatus(Order.OrderStatus.OPEN);
-        order.setPickupAddress(request.getPickupAddress());
-        order.setPickupZipCode(request.getPickupZipCode());
         order.setSpecialInstructions(request.getSpecialInstructions());
         order.setDeadline(request.getDeadline());
         order.setHasMultipleDropoffs(request.getDropoffs().size() > 1);
@@ -192,6 +190,10 @@ public class OrderService {
             if (allDelivered) {
                 order.setStatus(Order.OrderStatus.COMPLETED);
                 order.setCompletedAt(LocalDateTime.now());
+                
+                // Ensure payment breakdown is calculated for COMPLETED orders
+                ensurePaymentCalculated(order);
+                
                 orderRepository.save(order);
 
                 log.info("Order {} completed successfully", order.getId());
@@ -237,6 +239,10 @@ public class OrderService {
                 // This ensures the process server gets paid for their valid attempts.
                 order.setStatus(Order.OrderStatus.COMPLETED);
                 order.setCompletedAt(LocalDateTime.now());
+                
+                // Ensure payment breakdown is calculated for COMPLETED orders
+                ensurePaymentCalculated(order);
+                
                 orderRepository.save(order);
             }
 
@@ -341,4 +347,76 @@ public class OrderService {
             order.setCustomerName("Unknown Customer");
         }
     }
+
+    /**
+     * Ensure payment breakdown is calculated for an order
+     * This handles both GUIDED and AUTOMATED orders
+     */
+    private void ensurePaymentCalculated(Order order) {
+        // If payment is already calculated, skip
+        if (order.getFinalAgreedPrice() != null && order.getFinalAgreedPrice().compareTo(BigDecimal.ZERO) > 0) {
+            log.debug("Payment already calculated for order {}", order.getOrderNumber());
+            return;
+        }
+
+        log.info("Calculating payment for completed order {}", order.getOrderNumber());
+
+        // Get all dropoffs for this order
+        List<OrderDropoff> dropoffs = order.getDropoffs();
+        
+        BigDecimal totalAgreedPrice = BigDecimal.ZERO;
+        BigDecimal totalPayout = BigDecimal.ZERO;
+        BigDecimal totalCommission = BigDecimal.ZERO;
+        BigDecimal totalSuperAdminFee = BigDecimal.ZERO;
+        BigDecimal totalTenantProfit = BigDecimal.ZERO;
+        BigDecimal totalCustomerPayment = BigDecimal.ZERO;
+
+        for (OrderDropoff dropoff : dropoffs) {
+            BigDecimal dropoffPrice = dropoff.getFinalAgreedPrice();
+            
+            // If dropoff doesn't have a price, use a default based on distance or $150
+            if (dropoffPrice == null || dropoffPrice.compareTo(BigDecimal.ZERO) == 0) {
+                dropoffPrice = new BigDecimal("150.00");
+                dropoff.setFinalAgreedPrice(dropoffPrice);
+                dropoffRepository.save(dropoff);
+                log.info("Set default price $150 for dropoff {} in order {}", 
+                    dropoff.getId(), order.getOrderNumber());
+            }
+
+            // Calculate commission breakdown (15% commission rate)
+            BigDecimal commissionRate = new BigDecimal("0.15");
+            BigDecimal commission = dropoffPrice.multiply(commissionRate).setScale(2, java.math.RoundingMode.HALF_UP);
+            
+            // Super admin fee is 5% of commission
+            BigDecimal superAdminFee = commission.multiply(new BigDecimal("0.05")).setScale(2, java.math.RoundingMode.HALF_UP);
+            
+            // Tenant profit is commission minus super admin fee
+            BigDecimal tenantProfit = commission.subtract(superAdminFee);
+            
+            // Customer pays: dropoff price + commission
+            BigDecimal customerPayment = dropoffPrice.add(commission);
+
+            // Accumulate totals
+            totalAgreedPrice = totalAgreedPrice.add(dropoffPrice);
+            totalPayout = totalPayout.add(dropoffPrice);
+            totalCommission = totalCommission.add(commission);
+            totalSuperAdminFee = totalSuperAdminFee.add(superAdminFee);
+            totalTenantProfit = totalTenantProfit.add(tenantProfit);
+            totalCustomerPayment = totalCustomerPayment.add(customerPayment);
+        }
+
+        // Update order with calculated values
+        order.setFinalAgreedPrice(totalAgreedPrice);
+        order.setProcessServerPayout(totalPayout);
+        order.setTenantCommission(totalCommission);
+        order.setSuperAdminFee(totalSuperAdminFee);
+        order.setTenantProfit(totalTenantProfit);
+        order.setCustomerPaymentAmount(totalCustomerPayment);
+        order.setCommissionRateApplied(new BigDecimal("15.00"));
+
+        log.info("Payment calculated for order {}: Customer=${}, Payout=${}, Commission=${}, SuperAdmin=${}, TenantProfit=${}",
+            order.getOrderNumber(), totalCustomerPayment, totalPayout, totalCommission, 
+            totalSuperAdminFee, totalTenantProfit);
+    }
 }
+

@@ -225,8 +225,6 @@ public class BidService {
                 .id(bid.getId())
                 .orderId(order != null ? order.getId() : null)
                 .orderNumber(order != null ? order.getOrderNumber() : null)
-                .pickupAddress(order != null ? order.getPickupAddress() : null)
-                .pickupZipCode(order != null ? order.getPickupZipCode() : null)
                 .bidAmount(bid.getBidAmount())
                 .status(bid.getStatus())
                 .createdAt(bid.getCreatedAt())

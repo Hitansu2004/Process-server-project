@@ -19,6 +19,7 @@ public class LoginResponse {
     private String firstName;
     private String lastName;
     private Boolean isSuperAdmin;
+    private Boolean emailVerified;
     private List<java.util.Map<String, String>> roles;
 
     @Data

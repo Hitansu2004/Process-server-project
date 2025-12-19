@@ -17,8 +17,6 @@ public class BidDTO {
     private String id;
     private String orderId;
     private String orderNumber;
-    private String pickupAddress;
-    private String pickupZipCode;
     private BigDecimal bidAmount;
     private Bid.BidStatus status;
     private LocalDateTime createdAt;

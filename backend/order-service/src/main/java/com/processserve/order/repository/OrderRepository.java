@@ -27,6 +27,4 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     List<Order> findByTenantIdAndStatus(String tenantId, Order.OrderStatus status);
 
     long countByCustomerId(String customerId);
-
-    List<Order> findByStatusInAndPickupZipCodeIn(List<Order.OrderStatus> statuses, List<String> zipCodes);
 }

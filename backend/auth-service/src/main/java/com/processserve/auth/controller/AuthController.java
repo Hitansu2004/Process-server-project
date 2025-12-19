@@ -181,21 +181,18 @@ public class AuthController {
     }
 
     @PostMapping("/send-otp")
-    public ResponseEntity<?> sendOtp(@Valid @RequestBody SendOtpRequest request) {
+    public ResponseEntity<?> sendOtp(@RequestParam String email) {
         try {
-            log.info("OTP request for email: {}", request.getEmail());
+            log.info("OTP request for email: {}", email);
             
-            // Check if email already exists
-            if (authService.emailExists(request.getEmail())) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of("error", "Email already registered. Please login instead."));
-            }
+            // Get user details for OTP email
+            GlobalUser user = authService.getUserByEmail(email);
             
-            otpService.sendOtp(request.getEmail(), request.getFirstName(), request.getLastName());
+            otpService.sendOtp(email, user.getFirstName(), user.getLastName());
             
             return ResponseEntity.ok(Map.of(
-                    "message", "OTP sent successfully to " + request.getEmail(),
-                    "email", request.getEmail()
+                    "message", "OTP sent successfully to " + email,
+                    "email", email
             ));
         } catch (Exception e) {
             log.error("Failed to send OTP: {}", e.getMessage());
@@ -205,17 +202,22 @@ public class AuthController {
     }
 
     @PostMapping("/verify-otp")
-    public ResponseEntity<?> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+    public ResponseEntity<?> verifyOtp(@RequestParam String email, @RequestParam String otp) {
         try {
-            log.info("OTP verification for email: {}", request.getEmail());
+            log.info("OTP verification for email: {}", email);
             
-            boolean isValid = otpService.verifyOtp(request.getEmail(), request.getOtp());
+            boolean isValid = otpService.verifyOtp(email, otp);
             
             if (isValid) {
+                // Update email_verified status in database
+                GlobalUser user = authService.getUserByEmail(email);
+                user.setEmailVerified(true);
+                authService.saveUser(user);
+                
                 return ResponseEntity.ok(Map.of(
                         "message", "Email verified successfully",
                         "verified", true,
-                        "email", request.getEmail()
+                        "email", email
                 ));
             } else {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)

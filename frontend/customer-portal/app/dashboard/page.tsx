@@ -86,8 +86,9 @@ export default function Dashboard() {
         // Initialize session manager
         SessionManager.init()
 
-        // Use user ID directly as we now use Global User IDs for orders
-        loadOrders(parsedUser.userId, token)
+        // Use tenant_user_role_id from user's first role (this is the customer_id in orders)
+        const customerId = parsedUser.roles?.[0]?.id || parsedUser.userId
+        loadOrders(customerId, token)
     }, [router])
 
     const loadOrders = async (customerId: string, token: string) => {
@@ -405,7 +406,8 @@ export default function Dashboard() {
                                                 <option value="oldest">Oldest First</option>
                                             </select>
                                         </div>
-                                        <div className="flex items-end">
+                                        <div>
+                                            <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">&nbsp;</label>
                                             <motion.button
                                                 whileHover={{ scale: 1.02 }}
                                                 whileTap={{ scale: 0.98 }}
