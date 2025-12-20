@@ -182,6 +182,7 @@ module.exports = {
         DB_PASSWORD: process.env.DB_PASSWORD,
         APP_LOG_LEVEL: process.env.APP_LOG_LEVEL || 'DEBUG',
         JPA_SHOW_SQL: process.env.JPA_SHOW_SQL || 'true',
+        SPRING_JPA_HIBERNATE_DDL_AUTO: 'update',
         SPRING_PROFILES_ACTIVE: process.env.SPRING_PROFILES_ACTIVE || 'local'
       },
       error_file: './logs/tenant-service-error.log',
@@ -212,6 +213,7 @@ module.exports = {
         APP_LOG_LEVEL: process.env.APP_LOG_LEVEL || 'DEBUG',
         CLOUD_LOG_LEVEL: process.env.CLOUD_LOG_LEVEL || 'DEBUG',
         JPA_SHOW_SQL: process.env.JPA_SHOW_SQL || 'true',
+        SPRING_JPA_HIBERNATE_DDL_AUTO: 'update',
         SPRING_PROFILES_ACTIVE: process.env.SPRING_PROFILES_ACTIVE || 'local'
       },
       error_file: './logs/order-service-error.log',
@@ -240,6 +242,7 @@ module.exports = {
         DB_PASSWORD: process.env.DB_PASSWORD,
         APP_LOG_LEVEL: process.env.APP_LOG_LEVEL || 'DEBUG',
         JPA_SHOW_SQL: process.env.JPA_SHOW_SQL || 'true',
+        SPRING_JPA_HIBERNATE_DDL_AUTO: 'update',
         SPRING_PROFILES_ACTIVE: process.env.SPRING_PROFILES_ACTIVE || 'local'
       },
       error_file: './logs/notification-service-error.log',
