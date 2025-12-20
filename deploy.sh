@@ -46,6 +46,9 @@ done
 # 3. Build Frontend Services
 echo "⚛️ Building Frontend Services (Next.js)..."
 
+# Set API URL for Next.js builds (points to Nginx -> Gateway Proxy)
+export NEXT_PUBLIC_API_URL=http://51.222.26.163/api
+
 FRONTEND_SERVICES=(
     "frontend/gateway-proxy"
     "frontend/home-page"
