@@ -47,7 +47,7 @@ module.exports = {
       max_memory_restart: '500M',
       env: {
         DISCOVERY_SERVER_PORT: process.env.DISCOVERY_SERVER_PORT || 8761,
-        DISCOVERY_SERVER_HOST: process.env.DISCOVERY_SERVER_HOST || 'localhost',
+        DISCOVERY_SERVER_HOST: process.env.DISCOVERY_SERVER_HOST || '0.0.0.0',
         EUREKA_URL: process.env.EUREKA_URL || 'http://localhost:8761/eureka/',
         SPRING_PROFILES_ACTIVE: process.env.SPRING_PROFILES_ACTIVE || 'local'
       },
