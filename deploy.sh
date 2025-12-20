@@ -11,6 +11,10 @@ echo "=========================================="
 echo "📥 Pulling latest code from GitHub..."
 git pull origin main
 
+# 1.5 Install Root Dependencies (dotenv for PM2)
+echo "📦 Installing root dependencies..."
+npm install dotenv
+
 # 2. Build Backend Services
 echo "☕️ Building Backend Services (Maven)..."
 # We can build all from the root if there is a parent pom, or iterate.
