@@ -61,6 +61,11 @@ FRONTEND_SERVICES=(
 for service in "${FRONTEND_SERVICES[@]}"; do
     echo "🔨 Building $service..."
     cd $service
+    
+    # Force production API URL
+    echo "NEXT_PUBLIC_API_URL=http://51.222.26.163/api" > .env.production
+    echo "Created .env.production for $service"
+
     npm install
     npm run build
     if [ $? -ne 0 ]; then
