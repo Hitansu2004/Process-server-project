@@ -2,14 +2,14 @@ spring:
   application:
     name: auth-service
   datasource:
-    url: jdbc:mysql://localhost:3306/processserve_db
-    username: dbuser
-    password: "dbuser!!"
+    url: ${DB_URL:jdbc:mysql://localhost:3306/processserve_db?useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:dbuser}
+    password: ${DB_PASSWORD:dbuser!!}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: none
-    show-sql: true
+    show-sql: ${JPA_SHOW_SQL:true}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
@@ -32,10 +32,10 @@ spring:
             user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
             user-name-attribute: email
   mail:
-    host: smtp.gmail.com
-    port: 587
-    username: hitansu0007@gmail.com
-    password: oyqelxwuuqrqhzde
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:hitansu0007@gmail.com}
+    password: ${MAIL_PASSWORD:oyqelxwuuqrqhzde}
     properties:
       mail:
         smtp:
@@ -47,32 +47,37 @@ spring:
           timeout: 5000
           writetimeout: 5000
 
+# Server Configuration - Uses environment variables with defaults
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
 
+# Eureka Client Configuration
 eureka:
   client:
     serviceUrl:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
   instance:
     prefer-ip-address: true
 
+# Actuator Configuration
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
   endpoint:
     health:
       show-details: always
 
+# JWT Configuration
 jwt:
-  secret: processserve-jwt-secret-key-2024-secure
-  expiration: 86400000  # 24 hours in milliseconds
+  secret: ${JWT_SECRET:processserve-jwt-secret-key-2024-secure}
+  expiration: ${JWT_EXPIRATION:86400000}
 
+# Logging Configuration
 logging:
   level:
-    com.processserve: DEBUG
-    org.springframework.security: DEBUG
+    com.processserve: ${APP_LOG_LEVEL:DEBUG}
+    org.springframework.security: ${SECURITY_LOG_LEVEL:DEBUG}

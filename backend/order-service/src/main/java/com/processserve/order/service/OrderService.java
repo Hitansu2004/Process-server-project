@@ -35,7 +35,28 @@ public class OrderService {
         order.setCustomerId(request.getCustomerId());
         // Generate customer-specific order number (e.g., C3771-ORD1)
         String shortId = request.getCustomerId().substring(request.getCustomerId().length() - 4);
-        long nextOrderNum = orderRepository.countByCustomerId(request.getCustomerId()) + 1;
+
+        long nextOrderNum = 1;
+        java.util.Optional<Order> lastOrder = orderRepository
+                .findTopByCustomerIdOrderByCreatedAtDesc(request.getCustomerId());
+
+        if (lastOrder.isPresent()) {
+            String lastOrderNumber = lastOrder.get().getOrderNumber();
+            try {
+                // Expected format: Cxxxx-ORDn
+                if (lastOrderNumber != null && lastOrderNumber.contains("-ORD")) {
+                    String numPart = lastOrderNumber.substring(lastOrderNumber.lastIndexOf("-ORD") + 4);
+                    nextOrderNum = Long.parseLong(numPart) + 1;
+                } else {
+                    // Fallback if format doesn't match
+                    nextOrderNum = orderRepository.countByCustomerId(request.getCustomerId()) + 1;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse last order number: {}", lastOrderNumber);
+                nextOrderNum = orderRepository.countByCustomerId(request.getCustomerId()) + 1;
+            }
+        }
+
         order.setOrderNumber("C" + shortId + "-ORD" + nextOrderNum);
         order.setStatus(Order.OrderStatus.OPEN);
         order.setSpecialInstructions(request.getSpecialInstructions());
@@ -190,10 +211,10 @@ public class OrderService {
             if (allDelivered) {
                 order.setStatus(Order.OrderStatus.COMPLETED);
                 order.setCompletedAt(LocalDateTime.now());
-                
+
                 // Ensure payment breakdown is calculated for COMPLETED orders
                 ensurePaymentCalculated(order);
-                
+
                 orderRepository.save(order);
 
                 log.info("Order {} completed successfully", order.getId());
@@ -239,10 +260,10 @@ public class OrderService {
                 // This ensures the process server gets paid for their valid attempts.
                 order.setStatus(Order.OrderStatus.COMPLETED);
                 order.setCompletedAt(LocalDateTime.now());
-                
+
                 // Ensure payment breakdown is calculated for COMPLETED orders
                 ensurePaymentCalculated(order);
-                
+
                 orderRepository.save(order);
             }
 
@@ -363,7 +384,7 @@ public class OrderService {
 
         // Get all dropoffs for this order
         List<OrderDropoff> dropoffs = order.getDropoffs();
-        
+
         BigDecimal totalAgreedPrice = BigDecimal.ZERO;
         BigDecimal totalPayout = BigDecimal.ZERO;
         BigDecimal totalCommission = BigDecimal.ZERO;
@@ -373,26 +394,27 @@ public class OrderService {
 
         for (OrderDropoff dropoff : dropoffs) {
             BigDecimal dropoffPrice = dropoff.getFinalAgreedPrice();
-            
+
             // If dropoff doesn't have a price, use a default based on distance or $150
             if (dropoffPrice == null || dropoffPrice.compareTo(BigDecimal.ZERO) == 0) {
                 dropoffPrice = new BigDecimal("150.00");
                 dropoff.setFinalAgreedPrice(dropoffPrice);
                 dropoffRepository.save(dropoff);
-                log.info("Set default price $150 for dropoff {} in order {}", 
-                    dropoff.getId(), order.getOrderNumber());
+                log.info("Set default price $150 for dropoff {} in order {}",
+                        dropoff.getId(), order.getOrderNumber());
             }
 
             // Calculate commission breakdown (15% commission rate)
             BigDecimal commissionRate = new BigDecimal("0.15");
             BigDecimal commission = dropoffPrice.multiply(commissionRate).setScale(2, java.math.RoundingMode.HALF_UP);
-            
+
             // Super admin fee is 5% of commission
-            BigDecimal superAdminFee = commission.multiply(new BigDecimal("0.05")).setScale(2, java.math.RoundingMode.HALF_UP);
-            
+            BigDecimal superAdminFee = commission.multiply(new BigDecimal("0.05")).setScale(2,
+                    java.math.RoundingMode.HALF_UP);
+
             // Tenant profit is commission minus super admin fee
             BigDecimal tenantProfit = commission.subtract(superAdminFee);
-            
+
             // Customer pays: dropoff price + commission
             BigDecimal customerPayment = dropoffPrice.add(commission);
 
@@ -414,9 +436,9 @@ public class OrderService {
         order.setCustomerPaymentAmount(totalCustomerPayment);
         order.setCommissionRateApplied(new BigDecimal("15.00"));
 
-        log.info("Payment calculated for order {}: Customer=${}, Payout=${}, Commission=${}, SuperAdmin=${}, TenantProfit=${}",
-            order.getOrderNumber(), totalCustomerPayment, totalPayout, totalCommission, 
-            totalSuperAdminFee, totalTenantProfit);
+        log.info(
+                "Payment calculated for order {}: Customer=${}, Payout=${}, Commission=${}, SuperAdmin=${}, TenantProfit=${}",
+                order.getOrderNumber(), totalCustomerPayment, totalPayout, totalCommission,
+                totalSuperAdminFee, totalTenantProfit);
     }
 }
-

@@ -32,6 +32,7 @@ public class BidService {
     private final OrderDropoffRepository dropoffRepository;
     private final PaymentCalculationService paymentCalculationService;
     private final TenantClient tenantClient;
+    private final com.processserve.order.client.NotificationClient notificationClient;
 
     @Transactional
     public Bid placeBid(PlaceBidRequest request) {
@@ -170,6 +171,21 @@ public class BidService {
 
         log.info("Bid accepted. Dropoff {} assigned to process server {}.",
                 dropoff.getId(), bid.getProcessServerId());
+
+        // Send notification to Process Server
+        try {
+            notificationClient.createNotification(com.processserve.order.dto.NotificationRequest.builder()
+                    .tenantId(order.getTenantId())
+                    .userId(bid.getProcessServerId())
+                    .type("BID_ACCEPTED")
+                    .title("Bid Accepted")
+                    .message("Your bid for order " + order.getOrderNumber() + " has been accepted.")
+                    .relatedOrderId(order.getId())
+                    .build());
+            log.info("Notification sent to process server {}", bid.getProcessServerId());
+        } catch (Exception e) {
+            log.error("Failed to send notification: {}", e.getMessage());
+        }
     }
 
     private void updateOrderTotals(Order order, PaymentBreakdown breakdown) {

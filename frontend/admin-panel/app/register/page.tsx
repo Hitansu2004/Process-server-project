@@ -57,7 +57,7 @@ export default function AdminRegisterPage() {
     const sendOtp = async () => {
         setLoading(true)
         try {
-            const response = await fetch('http://localhost:8080/api/auth/send-otp', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/send-otp`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -94,7 +94,7 @@ export default function AdminRegisterPage() {
         setLoading(true)
         try {
             // First verify OTP
-            const verifyResponse = await fetch('http://localhost:8080/api/auth/verify-otp', {
+            const verifyResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/verify-otp`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -123,7 +123,7 @@ export default function AdminRegisterPage() {
     const registerUser = async () => {
         setLoading(true)
         try {
-            const response = await fetch('http://localhost:8080/api/auth/register/admin', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register/admin`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -159,7 +159,7 @@ export default function AdminRegisterPage() {
         setLoading(true)
         setError('')
         try {
-            const response = await fetch('http://localhost:8080/api/auth/google', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -220,8 +220,8 @@ export default function AdminRegisterPage() {
 
                 {/* Google Sign-In Button */}
                 <div className="mb-6">
-                    <GoogleSignInButton 
-                        onSuccess={handleGoogleSuccess} 
+                    <GoogleSignInButton
+                        onSuccess={handleGoogleSuccess}
                         onError={handleGoogleError}
                         text="signup_with"
                     />
@@ -241,94 +241,94 @@ export default function AdminRegisterPage() {
                     {step === 'form' && (
                         <>
                             <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                First Name *
-                            </label>
-                            <input
-                                type="text"
-                                required
-                                value={formData.firstName}
-                                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Last Name *
-                            </label>
-                            <input
-                                type="text"
-                                required
-                                value={formData.lastName}
-                                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                        </div>
-                    </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        First Name *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={formData.firstName}
+                                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Last Name *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={formData.lastName}
+                                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                            </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Email *
-                        </label>
-                        <input
-                            type="email"
-                            required
-                            value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                            placeholder="admin@example.com"
-                        />
-                    </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Email *
+                                </label>
+                                <input
+                                    type="email"
+                                    required
+                                    value={formData.email}
+                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="admin@example.com"
+                                />
+                            </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Phone Number *
-                        </label>
-                        <input
-                            type="tel"
-                            required
-                            value={formData.phoneNumber}
-                            onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                            className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                            placeholder="+1 234 567 8900"
-                        />
-                    </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Phone Number *
+                                </label>
+                                <input
+                                    type="tel"
+                                    required
+                                    value={formData.phoneNumber}
+                                    onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="+1 234 567 8900"
+                                />
+                            </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Password *
-                        </label>
-                        <input
-                            type="password"
-                            required
-                            value={formData.password}
-                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                            className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                            placeholder="Min 6 characters"
-                        />
-                    </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Password *
+                                </label>
+                                <input
+                                    type="password"
+                                    required
+                                    value={formData.password}
+                                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="Min 6 characters"
+                                />
+                            </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Confirm Password *
-                        </label>
-                        <input
-                            type="password"
-                            required
-                            value={formData.confirmPassword}
-                            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                            className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                        />
-                    </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Confirm Password *
+                                </label>
+                                <input
+                                    type="password"
+                                    required
+                                    value={formData.confirmPassword}
+                                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                            </div>
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full btn-primary py-3 text-lg font-semibold"
-                    >
-                        {loading ? (formData.email.toLowerCase().endsWith('@gmail.com') ? 'Creating Account...' : 'Sending OTP...') : (formData.email.toLowerCase().endsWith('@gmail.com') ? 'Create Admin Account' : 'Send OTP & Continue')}
-                    </button>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full btn-primary py-3 text-lg font-semibold"
+                            >
+                                {loading ? (formData.email.toLowerCase().endsWith('@gmail.com') ? 'Creating Account...' : 'Sending OTP...') : (formData.email.toLowerCase().endsWith('@gmail.com') ? 'Create Admin Account' : 'Send OTP & Continue')}
+                            </button>
                         </>
                     )}
 

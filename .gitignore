@@ -3,6 +3,7 @@
 **/.DS_Store
 **/.env
 **/.env.local
+**/.env.production
 **/dist/
 **/build/
 **/.next/
@@ -15,3 +16,5 @@
 .project
 .settings/
 mysql_data/
+PRODUCTION_CREDENTIALS.md
+

@@ -37,14 +37,14 @@ export default function Contacts() {
     const [loading, setLoading] = useState(false)
     const [inviteEmail, setInviteEmail] = useState('')
     const [inviteLoading, setInviteLoading] = useState(false)
-    
+
     // Filter states
     const [searchQuery, setSearchQuery] = useState('')
     const [showFilters, setShowFilters] = useState(false)
     const [ratingFilter, setRatingFilter] = useState<number>(0)
     const [minOrders, setMinOrders] = useState<number>(0)
     const [sortBy, setSortBy] = useState<'name' | 'rating' | 'orders'>('rating')
-    
+
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; visible: boolean }>({
         message: '',
         type: 'success',
@@ -54,7 +54,7 @@ export default function Contacts() {
     useEffect(() => {
         // Always fetch personal contacts to keep track of what's already added
         fetchPersonalContacts()
-        
+
         if (activeTab === 'personal') {
             // Personal contacts already fetched above
         } else {
@@ -232,7 +232,7 @@ export default function Contacts() {
         if (!searchQuery) return true
         const server = contact.processServerDetails
         return `${server.firstName} ${server.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-               server.email.toLowerCase().includes(searchQuery.toLowerCase())
+            server.email.toLowerCase().includes(searchQuery.toLowerCase())
     })
 
     return (
@@ -246,11 +246,10 @@ export default function Contacts() {
                         exit={{ opacity: 0, y: -50 }}
                         className="fixed top-4 right-4 z-50"
                     >
-                        <div className={`px-6 py-4 rounded-xl shadow-2xl backdrop-blur-xl border ${
-                            toast.type === 'success' ? 'bg-green-500/90 border-green-400 text-white' :
-                            toast.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' :
-                            'bg-blue-500/90 border-blue-400 text-white'
-                        }`}>
+                        <div className={`px-6 py-4 rounded-xl shadow-2xl backdrop-blur-xl border ${toast.type === 'success' ? 'bg-green-500/90 border-green-400 text-white' :
+                                toast.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' :
+                                    'bg-blue-500/90 border-blue-400 text-white'
+                            }`}>
                             <p className="font-medium">{toast.message}</p>
                         </div>
                     </motion.div>
@@ -288,18 +287,16 @@ export default function Contacts() {
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setActiveTab('personal')}
-                            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${
-                                activeTab === 'personal'
+                            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${activeTab === 'personal'
                                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
                                     : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
-                            }`}
+                                }`}
                         >
                             <Users className="w-5 h-5" />
                             My Personal Contacts
                             {personalContacts.length > 0 && (
-                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                    activeTab === 'personal' ? 'bg-white/20' : 'bg-blue-100 text-blue-600'
-                                }`}>
+                                <span className={`px-2 py-1 rounded-full text-xs ${activeTab === 'personal' ? 'bg-white/20' : 'bg-blue-100 text-blue-600'
+                                    }`}>
                                     {personalContacts.length}
                                 </span>
                             )}
@@ -308,18 +305,16 @@ export default function Contacts() {
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setActiveTab('global')}
-                            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${
-                                activeTab === 'global'
+                            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${activeTab === 'global'
                                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
                                     : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
-                            }`}
+                                }`}
                         >
                             <Globe className="w-5 h-5" />
                             Global Directory
                             {globalServers.length > 0 && (
-                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                    activeTab === 'global' ? 'bg-white/20' : 'bg-green-100 text-green-600'
-                                }`}>
+                                <span className={`px-2 py-1 rounded-full text-xs ${activeTab === 'global' ? 'bg-white/20' : 'bg-green-100 text-green-600'
+                                    }`}>
                                     {globalServers.length}
                                 </span>
                             )}
@@ -487,9 +482,9 @@ export default function Contacts() {
                                                             <div className="relative flex-shrink-0">
                                                                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold overflow-hidden">
                                                                     {server.profilePhotoUrl ? (
-                                                                        <img 
-                                                                            src={`http://localhost:8080/api/process-servers/profile-photo/${server.profilePhotoUrl}`} 
-                                                                            alt={server.firstName} 
+                                                                        <img
+                                                                            src={`${process.env.NEXT_PUBLIC_API_URL}/api/process-servers/profile-photo/${server.profilePhotoUrl}`}
+                                                                            alt={server.firstName}
                                                                             className="w-full h-full object-cover"
                                                                             onError={(e) => {
                                                                                 e.currentTarget.style.display = 'none'
@@ -551,8 +546,8 @@ export default function Contacts() {
                                                     </motion.div>
                                                 )
                                             })
-                                        }
-                                    </div>
+                                            }
+                                        </div>
                                     )}
                                 </motion.div>
                             ) : (
@@ -601,9 +596,9 @@ export default function Contacts() {
                                                                 <div className="relative flex-shrink-0">
                                                                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white text-lg font-bold overflow-hidden">
                                                                         {server.profilePhotoUrl ? (
-                                                                            <img 
-                                                                                src={`http://localhost:8080/api/process-servers/profile-photo/${server.profilePhotoUrl}`} 
-                                                                                alt={server.firstName} 
+                                                                            <img
+                                                                                src={`http://localhost:8080/api/process-servers/profile-photo/${server.profilePhotoUrl}`}
+                                                                                alt={server.firstName}
                                                                                 className="w-full h-full object-cover"
                                                                                 onError={(e) => {
                                                                                     e.currentTarget.style.display = 'none'
@@ -683,13 +678,13 @@ export default function Contacts() {
                                                         </motion.div>
                                                     )
                                                 })
-                                            }
-                                        </div>
-                                    </>
-                                )}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                                                }
+                                            </div>
+                                        </>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </div>
             </div>

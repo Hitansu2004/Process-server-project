@@ -19,7 +19,7 @@ export default function TestCustomerAPI() {
 
         const customerId = userIdToProfileId[user.userId] || user.userId
 
-        const url = `http://localhost:8080/api/orders/customer/${customerId}`
+        const url = `${process.env.NEXT_PUBLIC_API_URL}/api/orders/customer/${customerId}`
 
         try {
             const response = await fetch(url, {

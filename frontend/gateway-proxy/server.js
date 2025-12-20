@@ -40,7 +40,7 @@ app.get('/health', (req, res) => {
         uptime: process.uptime(),
         services: {
             home: `http://localhost:${process.env.HOME_PAGE_PORT}`,
-            delivery: `http://localhost:${process.env.DELIVERY_PORTAL_PORT}`,
+            processServer: `http://localhost:${process.env.PROCESS_SERVER_PORTAL_PORT}`,
             admin: `http://localhost:${process.env.ADMIN_PANEL_PORT}`,
             superAdmin: `http://localhost:${process.env.SUPER_ADMIN_PORT}`,
             customer: `http://localhost:${process.env.CUSTOMER_PORTAL_PORT}`
@@ -88,8 +88,8 @@ app.use('/admin', createProxy(`http://localhost:${process.env.ADMIN_PANEL_PORT}`
 // Customer Portal
 app.use('/customer', createProxy(`http://localhost:${process.env.CUSTOMER_PORTAL_PORT}`));
 
-// Delivery Portal (Process Servers)
-app.use('/delivery', createProxy(`http://localhost:${process.env.DELIVERY_PORTAL_PORT}`));
+// Process Server Portal
+app.use('/process-server', createProxy(`http://localhost:${process.env.PROCESS_SERVER_PORTAL_PORT}`));
 
 // Backend API Proxy (optional - if you want to proxy API calls too)
 app.use('/api', createProxy(process.env.BACKEND_API_URL, {
@@ -119,7 +119,7 @@ app.listen(PORT, () => {
     console.log(`   🏠 Home Page:        http://localhost:${PORT}/`);
     console.log(`   ⚙️  Admin Panel:      http://localhost:${PORT}/admin`);
     console.log(`   👥 Customer Portal:  http://localhost:${PORT}/customer`);
-    console.log(`   🚚 Delivery Portal:  http://localhost:${PORT}/delivery`);
+    console.log(`   ⚖️  Process Server:   http://localhost:${PORT}/process-server`);
     console.log(`   👑 Super Admin:      http://localhost:${PORT}/super-admin`);
     console.log(`   🔌 Backend API:      http://localhost:${PORT}/api`);
     console.log(`   ❤️  Health Check:    http://localhost:${PORT}/health`);

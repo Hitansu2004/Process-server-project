@@ -10,20 +10,20 @@ export default function LoginPage() {
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
-    
+
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault(); 
-        setError(''); 
+        e.preventDefault();
+        setError('');
         setLoading(true)
-        try { 
-            const res = await api.login(email, password); 
-            localStorage.setItem('token', res.token); 
-            localStorage.setItem('user', JSON.stringify(res)); 
-            router.push('/dashboard') 
-        } catch (err) { 
-            setError('Invalid credentials') 
-        } finally { 
-            setLoading(false) 
+        try {
+            const res = await api.login(email, password);
+            localStorage.setItem('token', res.token);
+            localStorage.setItem('user', JSON.stringify(res));
+            router.push('/dashboard')
+        } catch (err) {
+            setError('Invalid credentials')
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -31,7 +31,7 @@ export default function LoginPage() {
         setLoading(true)
         setError('')
         try {
-            const response = await fetch('http://localhost:8080/api/auth/google', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -67,13 +67,13 @@ export default function LoginPage() {
             <div className="card max-w-md w-full">
                 <h1 className="text-3xl font-bold text-center mb-2 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">ProcessServe</h1>
                 <p className="text-center text-gray-400 mb-8">Admin Panel</p>
-                
+
                 {error && <div className="bg-red-500/10 border border-red-500 text-red-500 px-4 py-3 rounded-lg mb-4">{error}</div>}
-                
+
                 {/* Google Sign-In Button */}
                 <div className="mb-6">
-                    <GoogleSignInButton 
-                        onSuccess={handleGoogleSuccess} 
+                    <GoogleSignInButton
+                        onSuccess={handleGoogleSuccess}
                         onError={handleGoogleError}
                         text="signin_with"
                     />

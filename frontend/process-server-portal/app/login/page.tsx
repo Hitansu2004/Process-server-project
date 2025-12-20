@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, Lock, AlertCircle, ArrowRight, Briefcase, CheckCircle } from 'lucide-react'
+import { api } from '@/lib/api'
 import OTPVerificationModal from '@/components/OTPVerificationModal'
 
-export default function ProcessServerLoginPage() {
+export default function LoginPage() {
     const router = useRouter()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
@@ -18,11 +19,8 @@ export default function ProcessServerLoginPage() {
     const [pendingToken, setPendingToken] = useState('')
     const [pendingUserData, setPendingUserData] = useState<any>(null)
 
-    const tenantId = typeof window !== 'undefined'
-        ? sessionStorage.getItem('selectedTenant') || 'tenant-main-001'
-        : 'tenant-main-001'
-
     useEffect(() => {
+        // Check for registration success message
         const urlParams = new URLSearchParams(window.location.search)
         if (urlParams.get('registered') === 'true') {
             setShowSuccess(true)
@@ -34,36 +32,19 @@ export default function ProcessServerLoginPage() {
         e.preventDefault()
         setError('')
         setLoading(true)
-
         try {
-            const response = await fetch('http://localhost:8080/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    email,
-                    password,
-                    tenantId
-                })
-            })
-
-            if (!response.ok) {
-                throw new Error('Login failed')
-            }
-
-            const data = await response.json()
+            const response = await api.login(email, password)
 
             // Check if email is verified
-            if (data.emailVerified === false || data.emailVerified === 0) {
+            if (response.emailVerified === false || response.emailVerified === 0) {
                 // Store user data temporarily
-                setPendingToken(data.token)
-                setPendingUserData(data)
+                setPendingToken(response.token)
+                setPendingUserData(response)
                 setUserEmail(email)
 
                 // Send OTP to email
                 try {
-                    await fetch(`http://localhost:8080/api/auth/send-otp?email=${encodeURIComponent(email)}`, {
+                    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/send-otp?email=${encodeURIComponent(email)}`, {
                         method: 'POST',
                     })
                     setShowOTPModal(true)
@@ -73,9 +54,23 @@ export default function ProcessServerLoginPage() {
                 }
             } else {
                 // Email already verified, proceed with login
-                sessionStorage.setItem('token', data.token)
-                sessionStorage.setItem('user', JSON.stringify(data))
-                sessionStorage.setItem('selectedTenant', tenantId)
+                localStorage.setItem('token', response.token)
+                localStorage.setItem('user', JSON.stringify(response))
+
+                // Fetch process server profile to get the profile ID
+                try {
+                    // Extract tenantUserRoleId from the first role (assuming single tenant context for now)
+                    const tenantUserRoleId = response.roles?.[0]?.id
+                    if (!tenantUserRoleId) throw new Error('No tenant role found')
+
+                    const profileData = await api.getProcessServerProfile(tenantUserRoleId, response.token)
+                    // Store profile ID for use in bidding and attempts
+                    const userWithProfile = { ...response, processServerProfileId: profileData.id }
+                    localStorage.setItem('user', JSON.stringify(userWithProfile))
+                } catch (profileError) {
+                    console.error('Failed to fetch profile:', profileError)
+                    // Continue anyway - will try to use user ID as fallback
+                }
 
                 router.push('/dashboard')
             }
@@ -89,7 +84,7 @@ export default function ProcessServerLoginPage() {
     const handleOTPVerify = async (otp: string) => {
         try {
             const response = await fetch(
-                `http://localhost:8080/api/auth/verify-otp?email=${encodeURIComponent(userEmail)}&otp=${otp}`,
+                `${process.env.NEXT_PUBLIC_API_URL}/api/auth/verify-otp?email=${encodeURIComponent(userEmail)}&otp=${otp}`,
                 {
                     method: 'POST',
                 }
@@ -97,9 +92,20 @@ export default function ProcessServerLoginPage() {
 
             if (response.ok) {
                 // OTP verified successfully, now complete the login
-                sessionStorage.setItem('token', pendingToken)
-                sessionStorage.setItem('user', JSON.stringify({ ...pendingUserData, emailVerified: true }))
-                sessionStorage.setItem('selectedTenant', tenantId)
+                localStorage.setItem('token', pendingToken)
+                localStorage.setItem('user', JSON.stringify({ ...pendingUserData, emailVerified: true }))
+
+                // Fetch process server profile logic (duplicated here for safety after OTP)
+                try {
+                    const tenantUserRoleId = pendingUserData.roles?.[0]?.id
+                    if (tenantUserRoleId) {
+                        const profileData = await api.getProcessServerProfile(tenantUserRoleId, pendingToken)
+                        const userWithProfile = { ...pendingUserData, emailVerified: true, processServerProfileId: profileData.id }
+                        localStorage.setItem('user', JSON.stringify(userWithProfile))
+                    }
+                } catch (profileError) {
+                    console.error('Failed to fetch profile after OTP:', profileError)
+                }
 
                 setShowOTPModal(false)
                 router.push('/dashboard')
@@ -115,7 +121,7 @@ export default function ProcessServerLoginPage() {
 
     const handleResendOTP = async () => {
         try {
-            await fetch(`http://localhost:8080/api/auth/send-otp?email=${encodeURIComponent(userEmail)}`, {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/send-otp?email=${encodeURIComponent(userEmail)}`, {
                 method: 'POST',
             })
         } catch (error) {
@@ -181,8 +187,8 @@ export default function ProcessServerLoginPage() {
                         >
                             <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
                             <div>
-                                <p className="text-green-700 font-semibold text-sm">Registration Submitted!</p>
-                                <p className="text-green-600 text-xs mt-1">Your application is pending admin approval. You'll be notified once approved.</p>
+                                <p className="text-green-700 font-semibold text-sm">Registration Successful!</p>
+                                <p className="text-green-600 text-xs mt-1">Your account is pending admin approval. You'll be notified once approved.</p>
                             </div>
                         </motion.div>
                     )}
@@ -220,7 +226,7 @@ export default function ProcessServerLoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full pl-11 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none bg-white/50"
-                                placeholder="server@example.com"
+                                placeholder="server1@example.com"
                                 required
                             />
                         </div>
@@ -282,7 +288,7 @@ export default function ProcessServerLoginPage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.6 }}
-                    className="mt-8 text-center"
+                    className="mt-6 text-center"
                 >
                     <p className="text-gray-600">
                         Don't have an account?{' '}

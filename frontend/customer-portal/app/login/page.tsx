@@ -55,7 +55,7 @@ export default function LoginPage() {
 
                 // Send OTP to email
                 try {
-                    await fetch(`http://localhost:8080/api/auth/send-otp?email=${encodeURIComponent(email)}`, {
+                    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/send-otp?email=${encodeURIComponent(email)}`, {
                         method: 'POST',
                     })
                     setShowOTPModal(true)
@@ -83,7 +83,7 @@ export default function LoginPage() {
     const handleOTPVerify = async (otp: string) => {
         try {
             const response = await fetch(
-                `http://localhost:8080/api/auth/verify-otp?email=${encodeURIComponent(userEmail)}&otp=${otp}`,
+                `${process.env.NEXT_PUBLIC_API_URL}/api/auth/verify-otp?email=${encodeURIComponent(userEmail)}&otp=${otp}`,
                 {
                     method: 'POST',
                 }
@@ -99,18 +99,19 @@ export default function LoginPage() {
 
                 setShowOTPModal(false)
                 router.push('/dashboard')
+                return true
             } else {
                 throw new Error('OTP verification failed')
             }
         } catch (error) {
             console.error('OTP verification error:', error)
-            throw error
+            return false
         }
     }
 
     const handleResendOTP = async () => {
         try {
-            await fetch(`http://localhost:8080/api/auth/send-otp?email=${encodeURIComponent(userEmail)}`, {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/send-otp?email=${encodeURIComponent(userEmail)}`, {
                 method: 'POST',
             })
         } catch (error) {

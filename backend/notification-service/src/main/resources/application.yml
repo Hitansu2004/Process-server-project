@@ -2,28 +2,33 @@ spring:
   application:
     name: notification-service
   datasource:
-    url: jdbc:mysql://localhost:3306/processserve_db
-    username: dbuser
-    password: "dbuser!!"
+    url: ${DB_URL:jdbc:mysql://localhost:3306/processserve_db?useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:dbuser}
+    password: ${DB_PASSWORD:dbuser!!}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: none
-    show-sql: true
+    show-sql: ${JPA_SHOW_SQL:true}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
 
+# Server Configuration - Uses environment variables with defaults
 server:
-  port: 8084
+  port: ${SERVER_PORT:8085}
 
+# Eureka Client Configuration
 eureka:
   client:
     serviceUrl:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
+  instance:
+    prefer-ip-address: true
 
+# Logging Configuration
 logging:
   level:
-    com.processserve: DEBUG
+    com.processserve: ${APP_LOG_LEVEL:DEBUG}

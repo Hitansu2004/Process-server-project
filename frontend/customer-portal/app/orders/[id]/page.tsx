@@ -21,7 +21,7 @@ export default function OrderDetails() {
             const token = sessionStorage.getItem('token')
 
             // Load order details with dropoffs
-            const orderData = await fetch(`http://localhost:8080/api/orders/${params.id}`, {
+            const orderData = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${params.id}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             }).then(res => res.json())
 

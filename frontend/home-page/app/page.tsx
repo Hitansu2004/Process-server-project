@@ -48,7 +48,7 @@ export default function Home() {
     const handleTenantSelect = async (tenantId: string) => {
         setSelectedTenant(tenantId)
         setLoadingTenantDetails(true)
-        
+
         // Fetch detailed tenant information
         try {
             const { api } = await import('@/lib/api')
@@ -63,7 +63,7 @@ export default function Home() {
             setLoadingTenantDetails(false)
             setShowRoleSelection(true)
         }
-        
+
         // Store selected tenant in localStorage for portals to use (client-side only)
         if (typeof window !== 'undefined') {
             localStorage.setItem('selectedTenantId', tenantId)
@@ -78,9 +78,9 @@ export default function Home() {
         if (!selectedTenant) return
 
         const routeMap = {
-            'admin': 'http://localhost:3002/admin',
-            'customer': 'http://localhost:3004/customer',
-            'server': 'http://localhost:3001/delivery'
+            'admin': '/admin',
+            'customer': '/customer',
+            'server': '/process-server'
         }
 
         const route = routeMap[role]
@@ -139,7 +139,7 @@ export default function Home() {
                                 </button>
                             )}
                             <a
-                                href="http://localhost:3003/super-admin"
+                                href="/super-admin"
                                 className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-lg transition-all text-white text-sm font-medium shadow-md hover:shadow-lg"
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,19 +172,17 @@ export default function Home() {
                                     key={tenant.id}
                                     onClick={() => handleTenantSelect(tenant.id)}
                                     disabled={!tenant.isActive}
-                                    className={`group relative overflow-hidden rounded-2xl transition-all duration-300 ${
-                                        tenant.isActive
-                                            ? 'bg-white hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 border-2 border-gray-200 hover:border-blue-400 shadow-lg hover:shadow-2xl hover:scale-105'
-                                            : 'bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed'
-                                    }`}
+                                    className={`group relative overflow-hidden rounded-2xl transition-all duration-300 ${tenant.isActive
+                                        ? 'bg-white hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 border-2 border-gray-200 hover:border-blue-400 shadow-lg hover:shadow-2xl hover:scale-105'
+                                        : 'bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed'
+                                        }`}
                                 >
                                     <div className="p-8">
                                         <div className="flex flex-col items-center text-center">
-                                            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mb-6 shadow-lg ${
-                                                tenant.isActive 
-                                                    ? 'bg-gradient-to-br from-blue-600 to-indigo-600' 
-                                                    : 'bg-gray-400'
-                                            }`}>
+                                            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mb-6 shadow-lg ${tenant.isActive
+                                                ? 'bg-gradient-to-br from-blue-600 to-indigo-600'
+                                                : 'bg-gray-400'
+                                                }`}>
                                                 <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                                 </svg>
@@ -193,12 +191,10 @@ export default function Home() {
                                                 {tenant.name}
                                             </h3>
                                             <div className="flex items-center gap-2 mb-4">
-                                                <div className={`w-2 h-2 rounded-full ${
-                                                    tenant.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-                                                }`}></div>
-                                                <span className={`text-sm font-medium ${
-                                                    tenant.isActive ? 'text-green-600' : 'text-gray-500'
-                                                }`}>
+                                                <div className={`w-2 h-2 rounded-full ${tenant.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+                                                    }`}></div>
+                                                <span className={`text-sm font-medium ${tenant.isActive ? 'text-green-600' : 'text-gray-500'
+                                                    }`}>
                                                     {tenant.isActive ? 'Active' : 'Inactive'}
                                                 </span>
                                             </div>

@@ -27,4 +27,6 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     List<Order> findByTenantIdAndStatus(String tenantId, Order.OrderStatus status);
 
     long countByCustomerId(String customerId);
+
+    Optional<Order> findTopByCustomerIdOrderByCreatedAtDesc(String customerId);
 }

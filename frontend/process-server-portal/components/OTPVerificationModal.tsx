@@ -191,7 +191,7 @@ export default function OTPVerificationModal({
                                     {otp.map((digit, index) => (
                                         <motion.input
                                             key={index}
-                                            ref={el => inputRefs.current[index] = el}
+                                            ref={el => { inputRefs.current[index] = el }}
                                             type="text"
                                             inputMode="numeric"
                                             maxLength={1}
@@ -203,13 +203,11 @@ export default function OTPVerificationModal({
                                             initial={{ scale: 0, rotate: -180 }}
                                             animate={{ scale: 1, rotate: 0 }}
                                             transition={{ delay: index * 0.05, type: 'spring' }}
-                                            className={`w-12 h-14 text-center text-2xl font-bold rounded-xl border-2 transition-all outline-none ${
-                                                digit
-                                                    ? 'border-blue-500 bg-blue-50 text-blue-600'
-                                                    : 'border-gray-300 bg-white'
-                                            } ${
-                                                success ? 'border-green-500 bg-green-50' : ''
-                                            } focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:opacity-50`}
+                                            className={`w-12 h-14 text-center text-2xl font-bold rounded-xl border-2 transition-all outline-none ${digit
+                                                ? 'border-blue-500 bg-blue-50 text-blue-600'
+                                                : 'border-gray-300 bg-white'
+                                                } ${success ? 'border-green-500 bg-green-50' : ''
+                                                } focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:opacity-50`}
                                         />
                                     ))}
                                 </div>

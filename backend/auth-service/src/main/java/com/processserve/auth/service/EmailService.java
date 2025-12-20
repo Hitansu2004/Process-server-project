@@ -2,6 +2,7 @@ package com.processserve.auth.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -15,6 +16,12 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
 
+    @Value("${MAIL_USERNAME:hitansu0007@gmail.com}")
+    private String fromEmail;
+
+    @Value("${DELIVERY_PORTAL_URL:http://localhost:3001}")
+    private String deliveryPortalUrl;
+
     public void sendOtpEmail(String toEmail, String otp, String userName) {
         try {
             log.info("=== OTP EMAIL DEBUG ===");
@@ -22,11 +29,11 @@ public class EmailService {
             log.info("OTP: {}", otp);
             log.info("Username: {}", userName);
             log.info("=====================");
-            
+
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            helper.setFrom("hitansu0007@gmail.com");
+            helper.setFrom(fromEmail);
             helper.setTo(toEmail);
             helper.setSubject("ProcessServe - Email Verification OTP");
 
@@ -47,7 +54,7 @@ public class EmailService {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            helper.setFrom("hitansu0007@gmail.com");
+            helper.setFrom(fromEmail);
             helper.setTo(toEmail);
             helper.setSubject("Welcome to ProcessServe Platform!");
 
@@ -64,10 +71,12 @@ public class EmailService {
     private String buildOtpEmailTemplate(String otp, String userName) {
         return "ProcessServe Platform - Email Verification\n\n" +
                 "Hello " + userName + "!\n\n" +
-                "Thank you for registering with ProcessServe. To complete your registration, please verify your email address using the OTP below:\n\n" +
+                "Thank you for registering with ProcessServe. To complete your registration, please verify your email address using the OTP below:\n\n"
+                +
                 "Your verification code: " + otp + "\n\n" +
                 "Valid for 10 minutes\n\n" +
-                "WARNING - Security Notice: Never share this OTP with anyone. ProcessServe will never ask for your OTP via phone or email.\n\n" +
+                "WARNING - Security Notice: Never share this OTP with anyone. ProcessServe will never ask for your OTP via phone or email.\n\n"
+                +
                 "If you didn't request this verification, please ignore this email.\n\n" +
                 "Best regards,\n" +
                 "ProcessServe Team\n\n" +
@@ -95,7 +104,7 @@ public class EmailService {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            helper.setFrom("hitansu0007@gmail.com");
+            helper.setFrom(fromEmail);
             helper.setTo(toEmail);
             helper.setSubject("You're Invited to Join ProcessServe as a Process Server!");
 
@@ -111,12 +120,13 @@ public class EmailService {
     }
 
     private String buildInvitationEmailTemplate(String email, String inviterName) {
-        String registerUrl = "http://localhost:3001/delivery/register?email=" + email;
-        
+        String registerUrl = deliveryPortalUrl + "/delivery/register?email=" + email;
+
         return "ProcessServe Platform - You're Invited!\n\n" +
                 "Hello!\n\n" +
                 inviterName + " has invited you to join ProcessServe as a Process Server.\n\n" +
-                "ProcessServe is a platform connecting customers with professional process servers for efficient document delivery and service.\n\n" +
+                "ProcessServe is a platform connecting customers with professional process servers for efficient document delivery and service.\n\n"
+                +
                 "To accept this invitation and create your process server account:\n\n" +
                 "1. Click this link to register: " + registerUrl + "\n" +
                 "2. Your email will be pre-filled - please use this exact email\n" +

@@ -25,7 +25,7 @@ export default function RegisterPage() {
 
     const registerUser = async () => {
         try {
-            const response = await fetch('http://localhost:8080/api/auth/register/customer', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register/customer`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -89,11 +89,11 @@ export default function RegisterPage() {
                         className="bg-white rounded-3xl shadow-2xl p-12 max-w-md"
                     >
                         <motion.div
-                            animate={{ 
+                            animate={{
                                 scale: [1, 1.2, 1],
                                 rotate: [0, 10, -10, 0]
                             }}
-                            transition={{ 
+                            transition={{
                                 duration: 0.6,
                                 repeat: Infinity,
                                 repeatDelay: 1

@@ -10,7 +10,7 @@ spring:
           predicates:
             - Path=/api/auth/**,/api/invites/**
           filters:
-            - RewritePath=/api/(?<segment>.*), /api/$\{segment}
+            - RewritePath=/api/(?<segment>.*), /api/${segment}
         
         # Tenant Service Routes
         - id: tenant-service
@@ -18,7 +18,7 @@ spring:
           predicates:
             - Path=/tenant-service/**,/api/tenants/**
           filters:
-            - RewritePath=/tenant-service/(?<segment>.*), /$\{segment}
+            - RewritePath=/tenant-service/(?<segment>.*), /${segment}
         
         # Order Service Routes
         - id: order-service
@@ -26,7 +26,7 @@ spring:
           predicates:
             - Path=/api/orders/**,/api/bids/**
           filters:
-            - RewritePath=/api/(?<segment>.*), /api/$\{segment}
+            - RewritePath=/api/(?<segment>.*), /api/${segment}
         
         # User Service Routes
         - id: user-service
@@ -34,7 +34,7 @@ spring:
           predicates:
             - Path=/api/users/**,/api/customers/**,/api/delivery-persons/**,/api/contact-book/**,/api/process-servers/**
           filters:
-            - RewritePath=/api/(?<segment>.*), /api/$\{segment}
+            - RewritePath=/api/(?<segment>.*), /api/${segment}
         
         # Notification Service Routes
         - id: notification-service
@@ -42,17 +42,19 @@ spring:
           predicates:
             - Path=/api/notifications/**
           filters:
-            - RewritePath=/api/notifications/(?<segment>.*), /api/notifications/$\{segment}
+            - RewritePath=/api/notifications/(?<segment>.*), /api/notifications/${segment}
       
       globalcors:
         corsConfigurations:
           '[/**]':
             allowedOrigins:
-              - "http://localhost:3000"
-              - "http://localhost:3001"
-              - "http://localhost:3002"
-              - "http://localhost:3003"
-              - "http://localhost:3004"
+              - "${CORS_ORIGIN_1:http://localhost:3000}"
+              - "${CORS_ORIGIN_2:http://localhost:3001}"
+              - "${CORS_ORIGIN_3:http://localhost:3002}"
+              - "${CORS_ORIGIN_4:http://localhost:3003}"
+              - "${CORS_ORIGIN_5:http://localhost:3004}"
+              - "${CORS_ORIGIN_6:http://localhost:3005}"
+              - "${CORS_ORIGIN_VPS:http://51.222.26.163:3000}"
             allowedMethods:
               - GET
               - POST
@@ -63,31 +65,37 @@ spring:
             allowedHeaders: "*"
             allowCredentials: true
 
+# Server Configuration - Uses environment variables with defaults
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
+# Eureka Client Configuration
 eureka:
   client:
     serviceUrl:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
   instance:
     prefer-ip-address: true
 
+# Actuator Configuration
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway
+        include: health,info,gateway,routes,metrics
   endpoint:
     health:
       show-details: always
 
+# JWT Configuration
 jwt:
-  secret: processserve-jwt-secret-key-2024-secure
+  secret: ${JWT_SECRET:processserve-jwt-secret-key-2024-secure}
 
+# Logging Configuration
 logging:
   level:
-    org.springframework.cloud.gateway: DEBUG
+    org.springframework.cloud.gateway: ${GATEWAY_LOG_LEVEL:DEBUG}
     reactor.netty: INFO
+    com.processserve.gateway: DEBUG

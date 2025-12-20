@@ -47,4 +47,16 @@ public class NotificationController {
             return ResponseEntity.badRequest().body(error);
         }
     }
+
+    @PostMapping
+    public ResponseEntity<Notification> createNotification(
+            @RequestBody com.processserve.notification.dto.NotificationRequest request) {
+        return ResponseEntity.ok(notificationService.createNotification(
+                request.getTenantId(),
+                request.getUserId(),
+                request.getType(),
+                request.getTitle(),
+                request.getMessage(),
+                request.getRelatedOrderId()));
+    }
 }

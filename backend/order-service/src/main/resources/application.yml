@@ -2,31 +2,34 @@ spring:
   application:
     name: order-service
   datasource:
-    url: jdbc:mysql://localhost:3306/processserve_db
-    username: dbuser
-    password: "dbuser!!"
+    url: ${DB_URL:jdbc:mysql://localhost:3306/processserve_db?useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:dbuser}
+    password: ${DB_PASSWORD:dbuser!!}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: ${JPA_SHOW_SQL:true}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
 
+# Server Configuration - Uses environment variables with defaults
 server:
-  port: 8083
+  port: ${SERVER_PORT:8084}
 
+# Eureka Client Configuration
 eureka:
   client:
     serviceUrl:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
   instance:
     prefer-ip-address: true
 
+# Feign Client Configuration
 feign:
   client:
     config:
@@ -34,16 +37,23 @@ feign:
         connectTimeout: 5000
         readTimeout: 5000
 
+# Tenant Service URL (fallback if Eureka is unavailable)
+tenant:
+  service:
+    url: ${TENANT_SERVICE_URL:http://localhost:8083}
+
+# Actuator Configuration
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
   endpoint:
     health:
       show-details: always
 
+# Logging Configuration
 logging:
   level:
-    com.processserve: DEBUG
-    org.springframework.cloud: DEBUG
+    com.processserve: ${APP_LOG_LEVEL:DEBUG}
+    org.springframework.cloud: ${CLOUD_LOG_LEVEL:DEBUG}

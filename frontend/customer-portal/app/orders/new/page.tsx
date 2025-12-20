@@ -123,14 +123,14 @@ export default function NewOrder() {
 
         // Apply rating filter
         if (minRating > 0) {
-            contactsWithDetails = contactsWithDetails.filter(item => 
+            contactsWithDetails = contactsWithDetails.filter(item =>
                 Number(item.details.currentRating) >= minRating
             )
         }
 
         // Apply orders filter
         if (minOrders > 0) {
-            contactsWithDetails = contactsWithDetails.filter(item => 
+            contactsWithDetails = contactsWithDetails.filter(item =>
                 item.details.totalOrdersAssigned >= minOrders
             )
         }
@@ -391,18 +391,17 @@ export default function NewOrder() {
                                                                 <div
                                                                     key={contact.id}
                                                                     onClick={() => updateDropoff(index, 'assignedProcessServerId', contact.processServerId)}
-                                                                    className={`glass rounded-lg p-4 border-2 transition-all cursor-pointer hover:bg-white/10 ${
-                                                                        isSelected ? 'border-primary bg-primary/10' : 'border-transparent'
-                                                                    }`}
+                                                                    className={`glass rounded-lg p-4 border-2 transition-all cursor-pointer hover:bg-white/10 ${isSelected ? 'border-primary bg-primary/10' : 'border-transparent'
+                                                                        }`}
                                                                 >
                                                                     <div className="flex items-center gap-4">
                                                                         {/* Avatar */}
                                                                         <div className="relative flex-shrink-0">
                                                                             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold overflow-hidden">
                                                                                 {details.profilePhotoUrl ? (
-                                                                                    <img 
-                                                                                        src={`http://localhost:8080/api/process-servers/profile-photo/${details.profilePhotoUrl}`} 
-                                                                                        alt={contact.nickname || details.name} 
+                                                                                    <img
+                                                                                        src={`${process.env.NEXT_PUBLIC_API_URL}/api/process-servers/profile-photo/${details.profilePhotoUrl}`}
+                                                                                        alt={contact.nickname || details.name}
                                                                                         className="w-full h-full object-cover"
                                                                                         onError={(e) => {
                                                                                             e.currentTarget.style.display = 'none'

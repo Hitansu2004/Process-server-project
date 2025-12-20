@@ -1,5 +1,5 @@
 {
-    "name": "delivery-portal",
+    "name": "process-server-portal",
     "version": "1.0.0",
     "private": true,
     "scripts": {
