@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     compress: true,
-    basePath: '/admin',
     poweredByHeader: false,
     reactStrictMode: true,
     swcMinify: true,
@@ -15,6 +14,24 @@ const nextConfig = {
 
     experimental: {
         optimizeCss: true,
+    },
+
+    async headers() {
+        return [
+            {
+                source: '/(.*)',
+                headers: [
+                    {
+                        key: 'Cross-Origin-Opener-Policy',
+                        value: 'same-origin-allow-popups',
+                    },
+                    {
+                        key: 'Cross-Origin-Embedder-Policy',
+                        value: 'credentialless',
+                    },
+                ],
+            },
+        ];
     },
 
     compiler: {
