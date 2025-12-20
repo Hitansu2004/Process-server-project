@@ -81,7 +81,7 @@ module.exports = {
         CORS_ORIGIN_4: process.env.CORS_ORIGIN_4 || 'http://localhost:3003',
         CORS_ORIGIN_5: process.env.CORS_ORIGIN_5 || 'http://localhost:3004',
         CORS_ORIGIN_6: process.env.CORS_ORIGIN_6 || 'http://localhost:3005',
-        CORS_ORIGIN_VPS: process.env.CORS_ORIGIN_VPS || 'http://51.222.26.163:3000',
+        CORS_ORIGIN_VPS: process.env.CORS_ORIGIN_VPS || 'http://app.ezcollab.com',
         GATEWAY_LOG_LEVEL: process.env.GATEWAY_LOG_LEVEL || 'DEBUG',
         SPRING_PROFILES_ACTIVE: process.env.SPRING_PROFILES_ACTIVE || 'local'
       },

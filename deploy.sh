@@ -47,7 +47,7 @@ done
 echo "⚛️ Building Frontend Services (Next.js)..."
 
 # Set API URL for Next.js builds (points to Nginx -> Gateway Proxy)
-export NEXT_PUBLIC_API_URL=http://51.222.26.163/api
+export NEXT_PUBLIC_API_URL=http://app.ezcollab.com/api
 
 FRONTEND_SERVICES=(
     "frontend/gateway-proxy"
@@ -63,7 +63,7 @@ for service in "${FRONTEND_SERVICES[@]}"; do
     cd $service
     
     # Force production API URL
-    echo "NEXT_PUBLIC_API_URL=http://51.222.26.163/api" > .env.production
+    echo "NEXT_PUBLIC_API_URL=http://app.ezcollab.com/api" > .env.production
     echo "Created .env.production for $service"
 
     npm install
