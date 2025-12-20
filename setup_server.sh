@@ -24,9 +24,13 @@ apt install -y nodejs
 echo "🚀 Installing PM2..."
 npm install -g pm2
 
-# 5. Install Nginx
+# 5. Install & Configure Nginx
 echo "🌐 Installing Nginx..."
 apt install -y nginx
+echo "🔧 Configuring Nginx..."
+cp ./nginx.conf /etc/nginx/sites-available/default
+nginx -t
+systemctl restart nginx
 
 # 6. Configure Firewall (UFW)
 echo "🛡️  Configuring Firewall..."
