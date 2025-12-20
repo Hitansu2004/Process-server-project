@@ -35,12 +35,7 @@ export default function Home() {
             setLoading(false)
         } catch (error) {
             console.error('Failed to load tenants:', error)
-            // Fallback to mock data if API fails
-            const mockTenants: Tenant[] = [
-                { id: 'tenant-1', name: 'Demo Shop', domainUrl: 'http://localhost:3000', isActive: true },
-                { id: 'tenant-2', name: 'Legal Services Pro', domainUrl: 'http://localhost:3000', isActive: true }
-            ]
-            setTenants(mockTenants)
+            setTenants([])
             setLoading(false)
         }
     }
