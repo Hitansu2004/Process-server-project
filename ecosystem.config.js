@@ -143,7 +143,7 @@ module.exports = {
       watch: false,
       max_memory_restart: '512M',
       env: {
-        SERVER_PORT: process.env.USER_SERVICE_PORT || 8085,
+        SERVER_PORT: process.env.USER_SERVICE_PORT || 8082,
         EUREKA_URL: process.env.EUREKA_URL || 'http://localhost:8761/eureka/',
         DB_URL: process.env.DB_URL,
         DB_USERNAME: process.env.DB_USERNAME,
