@@ -121,6 +121,7 @@ module.exports = {
         APP_LOG_LEVEL: process.env.APP_LOG_LEVEL || 'DEBUG',
         SECURITY_LOG_LEVEL: process.env.SECURITY_LOG_LEVEL || 'DEBUG',
         JPA_SHOW_SQL: process.env.JPA_SHOW_SQL || 'true',
+        SPRING_JPA_HIBERNATE_DDL_AUTO: 'update',
         SPRING_PROFILES_ACTIVE: process.env.SPRING_PROFILES_ACTIVE || 'local'
       },
       error_file: './logs/auth-service-error.log',
