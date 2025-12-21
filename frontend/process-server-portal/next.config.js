@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    basePath: '/process-server',
     compress: true,
     poweredByHeader: false,
     reactStrictMode: true,

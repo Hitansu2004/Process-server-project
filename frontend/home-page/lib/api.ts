@@ -9,13 +9,13 @@ export const api = {
             headers['Authorization'] = `Bearer ${token}`
         }
 
-        const response = await fetch(`${API_BASE_URL}/tenant-service/api/tenants`, {
+        const response = await fetch(`${API_BASE_URL}/api/tenants`, {
             headers,
         })
         if (!response.ok) throw new Error('Failed to fetch tenants')
         return response.json()
     },
-    
+
     getTenant: async (tenantId: string, token?: string) => {
         const headers: HeadersInit = {
             'Content-Type': 'application/json',
@@ -24,7 +24,7 @@ export const api = {
             headers['Authorization'] = `Bearer ${token}`
         }
 
-        const response = await fetch(`${API_BASE_URL}/tenant-service/api/tenants/${tenantId}`, {
+        const response = await fetch(`${API_BASE_URL}/api/tenants/${tenantId}`, {
             headers,
         })
         if (!response.ok) throw new Error('Failed to fetch tenant details')
