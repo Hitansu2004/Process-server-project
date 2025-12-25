@@ -114,4 +114,19 @@ public class CustomerService {
                 .map(CustomerProfile::getDefaultProcessServerId)
                 .orElse(null);
     }
+
+    public CustomerDTO getCustomerByTenantUserRoleId(String tenantUserRoleId) {
+        TenantUserRole role = tenantUserRoleRepository.findById(tenantUserRoleId)
+                .orElseThrow(() -> new RuntimeException("Tenant user role not found"));
+
+        if (role.getGlobalUser() == null) {
+            throw new RuntimeException("Global user not found for this role");
+        }
+
+        // Try to find profile, but if not exists, just return basic info
+        CustomerProfile profile = customerRepository.findByTenantUserRoleId(tenantUserRoleId)
+                .orElse(new CustomerProfile(null, tenantUserRoleId, null, null));
+
+        return enrichCustomerProfileWithRole(profile, role);
+    }
 }

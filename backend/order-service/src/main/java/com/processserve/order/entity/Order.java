@@ -35,8 +35,28 @@ public class Order {
     private String orderNumber;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "order_type", length = 20)
+    private OrderType orderType = OrderType.PROCESS_SERVICE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "document_type", length = 30)
+    private DocumentType documentType;
+
+    @Column(name = "other_document_type", length = 255)
+    private String otherDocumentType;
+
+    @Column(name = "case_number", length = 100)
+    private String caseNumber;
+
+    @Column(name = "jurisdiction", length = 255)
+    private String jurisdiction;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private OrderStatus status;
+
+    @Column(name = "is_editable")
+    private Boolean isEditable = true;
 
     @Column(name = "special_instructions", columnDefinition = "TEXT")
     private String specialInstructions;
@@ -85,6 +105,12 @@ public class Order {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "last_modified_at")
+    private LocalDateTime lastModifiedAt;
+
+    @Column(name = "modification_count")
+    private Integer modificationCount = 0;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference("order-dropoffs")
     private List<OrderDropoff> dropoffs = new ArrayList<>();
@@ -94,5 +120,41 @@ public class Order {
 
     public enum OrderStatus {
         DRAFT, OPEN, BIDDING, PARTIALLY_ASSIGNED, ASSIGNED, IN_PROGRESS, COMPLETED, FAILED, CANCELLED
+    }
+
+    public enum OrderType {
+        PROCESS_SERVICE, CERTIFIED_MAIL
+    }
+
+    public enum DocumentType {
+        CRIMINAL_CASE,
+        CIVIL_COMPLAINT,
+        RESTRAINING_ORDER,
+        HOUSE_ARREST,
+        EVICTION_NOTICE,
+        SUBPOENA,
+        DIVORCE_PAPERS,
+        CHILD_CUSTODY,
+        SMALL_CLAIMS,
+        BANKRUPTCY,
+        OTHER
+    }
+
+    // Requirement 8: Check if order can be edited based on status
+    // Only DRAFT, OPEN, and BIDDING statuses allow editing
+    // ASSIGNED, IN_PROGRESS, COMPLETED, FAILED, CANCELLED are locked
+    public boolean canBeEdited() {
+        return this.status == OrderStatus.DRAFT ||
+                this.status == OrderStatus.OPEN ||
+                this.status == OrderStatus.BIDDING;
+    }
+
+    // Helper method to increment modification count
+    public void incrementModificationCount() {
+        if (this.modificationCount == null) {
+            this.modificationCount = 0;
+        }
+        this.modificationCount++;
+        this.lastModifiedAt = LocalDateTime.now();
     }
 }

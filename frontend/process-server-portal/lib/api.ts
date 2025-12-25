@@ -161,4 +161,16 @@ export const api = {
         if (!res.ok) throw new Error('Failed to toggle global visibility')
         return res.json()
     },
+
+    async getUser(userId: string) {
+        const res = await fetch(`${API_URL}/api/users/${userId}`)
+        if (!res.ok) throw new Error('Failed to fetch user')
+        return res.json()
+    },
+
+    async getCustomerByTenantUserRoleId(tenantUserRoleId: string) {
+        const res = await fetch(`${API_URL}/api/customers/by-role/${tenantUserRoleId}`)
+        if (!res.ok) throw new Error('Failed to fetch customer')
+        return res.json()
+    },
 }

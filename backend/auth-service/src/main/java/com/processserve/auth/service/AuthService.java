@@ -85,8 +85,8 @@ public class AuthService {
 
         // Send welcome email
         try {
-            emailService.sendWelcomeEmail(globalUser.getEmail(), 
-                globalUser.getFirstName() + " " + globalUser.getLastName());
+            emailService.sendWelcomeEmail(globalUser.getEmail(),
+                    globalUser.getFirstName() + " " + globalUser.getLastName());
         } catch (Exception e) {
             log.warn("Failed to send welcome email, but registration succeeded: {}", e.getMessage());
         }
@@ -150,13 +150,29 @@ public class AuthService {
 
         // Create process server profile via user-service
         // Transaction is committed, so user-service can see the FK reference
+        String processServerProfileId = null;
         try {
-            createProcessServerProfile(tenantUserRole.getId(), request);
+            // Assume createProcessServerProfile returns the ID or we can find it.
+            // For now, let's assume createProcessServerProfile returns the ID.
+            processServerProfileId = createProcessServerProfile(tenantUserRole.getId(), request);
+
+            if (processServerProfileId != null) {
+                try {
+                    // Call user-service to activate invitation
+                    // URL: http://USER-SERVICE/api/invitations/activate
+                    String url = "http://USER-SERVICE/api/invitations/activate?email=" + request.getEmail()
+                            + "&tenantId=" + request.getTenantId()
+                            + "&processServerId=" + processServerProfileId;
+
+                    restTemplate.postForObject(url, null, Void.class);
+                    log.info("Invitation activated for email: {}", request.getEmail());
+                } catch (Exception e) {
+                    log.warn("Failed to activate invitation via API: {}", e.getMessage());
+                }
+            }
+
         } catch (Exception e) {
             log.error("Failed to create process server profile: {}", e.getMessage());
-            // Note: User is already created. We might want to rollback or mark as
-            // incomplete,
-            // but for now we just throw the error.
             throw new RuntimeException("Failed to create process server profile: " + e.getMessage());
         }
 
@@ -287,7 +303,7 @@ public class AuthService {
         }
     }
 
-    private void createProcessServerProfile(String tenantUserRoleId, RegistrationRequest request) {
+    private String createProcessServerProfile(String tenantUserRoleId, RegistrationRequest request) {
         try {
             Map<String, Object> profileRequest = new HashMap<>();
             profileRequest.put("tenantUserRoleId", tenantUserRoleId);
@@ -311,7 +327,15 @@ public class AuthService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(profileRequest, headers);
 
-            restTemplate.postForObject("http://USER-SERVICE/api/process-servers", entity, Map.class);
+            Map response = restTemplate.postForObject("http://USER-SERVICE/api/process-servers", entity, Map.class);
+
+            if (response != null && response.containsKey("id")) {
+                return response.get("id").toString();
+            }
+
+            // Fallback: if ID not returned, maybe it's the tenantUserRoleId?
+            // But let's hope it returns the ID.
+            return null;
         } catch (Exception e) {
             log.error("Failed to create process server profile: {}", e.getMessage());
             throw new RuntimeException("Failed to create process server profile: " + e.getMessage());

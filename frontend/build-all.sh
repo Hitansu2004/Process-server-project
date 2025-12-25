@@ -33,7 +33,7 @@ build_portal() {
 
 # Build all portals
 build_portal "home-page"
-build_portal "delivery-portal"
+build_portal "process-server-portal"
 build_portal "admin-panel"
 build_portal "super-admin"
 build_portal "customer-portal"

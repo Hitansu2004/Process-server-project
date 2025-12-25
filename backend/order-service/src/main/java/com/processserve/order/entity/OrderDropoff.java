@@ -47,6 +47,21 @@ public class OrderDropoff {
     @Column(name = "final_agreed_price", precision = 10, scale = 2)
     private BigDecimal finalAgreedPrice;
 
+    @Column(name = "rush_service")
+    private Boolean rushService = false;
+
+    @Column(name = "remote_location")
+    private Boolean remoteLocation = false;
+
+    @Column(name = "base_price", precision = 10, scale = 2)
+    private BigDecimal basePrice;
+
+    @Column(name = "rush_service_fee", precision = 10, scale = 2)
+    private BigDecimal rushServiceFee;
+
+    @Column(name = "remote_location_fee", precision = 10, scale = 2)
+    private BigDecimal remoteLocationFee;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "dropoff_type")
     private DropoffType dropoffType = DropoffType.AUTOMATED;
@@ -79,4 +94,12 @@ public class OrderDropoff {
     public enum DropoffType {
         GUIDED, AUTOMATED
     }
+
+    public enum ServiceType {
+        PROCESS_SERVICE, CERTIFIED_MAIL
+    }
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "service_type")
+    private ServiceType serviceType = ServiceType.PROCESS_SERVICE;
 }

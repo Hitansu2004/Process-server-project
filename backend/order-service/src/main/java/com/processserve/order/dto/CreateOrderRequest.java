@@ -28,6 +28,15 @@ public class CreateOrderRequest {
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime deadline;
 
+    // Requirement 3: Order Type Selection
+    private String orderType; // PROCESS_SERVICE or CERTIFIED_MAIL
+
+    // Requirement 4: Document Type and Case Information
+    private String documentType; // Legal document category
+    private String otherDocumentType; // For "OTHER" type
+    private String caseNumber;
+    private String jurisdiction;
+
     @NotNull(message = "At least one dropoff is required")
     private List<DropoffRequest> dropoffs = new ArrayList<>();
 
@@ -48,5 +57,12 @@ public class CreateOrderRequest {
         private String assignedProcessServerId;
         private java.math.BigDecimal finalAgreedPrice; // Payout to Process Server
         private java.math.BigDecimal customerPrice; // Price customer pays (for Concierge)
+
+        // Pricing options
+        private Boolean rushService = false;
+        private Boolean remoteLocation = false;
+
+        // Requirement 3: Order Type Selection (Per Dropoff)
+        private String serviceType; // PROCESS_SERVICE or CERTIFIED_MAIL
     }
 }

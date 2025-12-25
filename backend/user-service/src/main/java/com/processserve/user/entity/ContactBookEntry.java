@@ -30,6 +30,13 @@ public class ContactBookEntry {
     @Enumerated(EnumType.STRING)
     private EntryType entryType;
 
+    @Column(name = "activation_status", length = 20, nullable = false)
+    @Enumerated(EnumType.STRING)
+    private ActivationStatus activationStatus = ActivationStatus.ACTIVATED;
+
+    @Column(name = "invitation_id", length = 36)
+    private String invitationId;
+
     @Column(name = "nickname")
     private String nickname;
 
@@ -39,5 +46,9 @@ public class ContactBookEntry {
 
     public enum EntryType {
         MANUAL, AUTO_ADDED
+    }
+
+    public enum ActivationStatus {
+        ACTIVATED, NOT_ACTIVATED
     }
 }

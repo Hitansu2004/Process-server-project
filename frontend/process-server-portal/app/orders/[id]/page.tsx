@@ -36,6 +36,25 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                 api.getOrderById(orderId, token),
                 api.getOrderBids(orderId, token)
             ])
+
+            // If customer name is unknown, try to fetch it
+            if (orderData.customerName === 'Unknown Customer' || !orderData.customerName) {
+                try {
+                    let customer;
+                    if (orderData.customerId.startsWith('tur-')) {
+                        customer = await api.getCustomerByTenantUserRoleId(orderData.customerId)
+                    } else {
+                        customer = await api.getUser(orderData.customerId)
+                    }
+
+                    if (customer) {
+                        orderData.customerName = `${customer.firstName} ${customer.lastName}`
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch customer details:', err)
+                }
+            }
+
             setOrder(orderData)
             setBids(bidsData)
         } catch (error) {
@@ -166,22 +185,7 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Order Information */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Pickup Information */}
-                        <div className="card">
-                            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                                <span className="text-primary">📦</span> Pickup Information
-                            </h2>
-                            <div className="space-y-2">
-                                <div>
-                                    <p className="text-gray-400 text-sm">Address</p>
-                                    <p className="font-medium">{order.pickupAddress}</p>
-                                </div>
-                                <div>
-                                    <p className="text-gray-400 text-sm">ZIP Code</p>
-                                    <p className="font-medium text-primary">{order.pickupZipCode}</p>
-                                </div>
-                            </div>
-                        </div>
+                        {/* Pickup Information Removed as per request */}
 
                         {/* Dropoff Information with Delivery Actions */}
                         <div className="card">
@@ -291,15 +295,15 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                         <div className="space-y-1">
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-gray-300">Bid Amount:</span>
-                                                <span className="font-medium">${(order.customerPaymentAmount || order.finalAgreedPrice || 0).toFixed(2)}</span>
+                                                <span className="font-medium">${(order.customerPaymentAmount || order.finalAgreedPrice || (order.dropoffs?.reduce((sum: number, d: any) => sum + (d.finalAgreedPrice || 0), 0)) || 0).toFixed(2)}</span>
                                             </div>
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-red-400">Platform Fee (15%):</span>
-                                                <span className="font-medium text-red-400">-${((order.customerPaymentAmount || order.finalAgreedPrice || 0) * 0.15).toFixed(2)}</span>
+                                                <span className="font-medium text-red-400">-${((order.customerPaymentAmount || order.finalAgreedPrice || (order.dropoffs?.reduce((sum: number, d: any) => sum + (d.finalAgreedPrice || 0), 0)) || 0) * 0.15).toFixed(2)}</span>
                                             </div>
                                             <div className="flex justify-between text-sm border-t border-white/10 pt-1 mt-1">
                                                 <span className="text-green-400 font-bold">Your Earnings:</span>
-                                                <span className="font-bold text-green-400">${(order.processServerPayout || (order.finalAgreedPrice * 0.85) || 0).toFixed(2)}</span>
+                                                <span className="font-bold text-green-400">${(order.processServerPayout || ((order.finalAgreedPrice || (order.dropoffs?.reduce((sum: number, d: any) => sum + (d.finalAgreedPrice || 0), 0)) || 0) * 0.85)).toFixed(2)}</span>
                                             </div>
                                         </div>
                                     </div>

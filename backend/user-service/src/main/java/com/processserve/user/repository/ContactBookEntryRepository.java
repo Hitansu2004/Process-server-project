@@ -16,4 +16,6 @@ public interface ContactBookEntryRepository extends JpaRepository<ContactBookEnt
     List<ContactBookEntry> findByOwnerUserIdAndEntryType(String ownerUserId, ContactBookEntry.EntryType entryType);
 
     Optional<ContactBookEntry> findByOwnerUserIdAndProcessServerId(String ownerUserId, String processServerId);
+
+    List<ContactBookEntry> findByInvitationId(String invitationId);
 }

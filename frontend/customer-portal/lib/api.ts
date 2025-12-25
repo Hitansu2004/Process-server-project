@@ -34,13 +34,91 @@ export const api = {
         return response.json()
     },
 
+    async getProcessServerOrders(processServerId: string, token: string) {
+        const res = await fetch(`${API_URL}/api/orders/process-server/${processServerId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        if (!res.ok) throw new Error('Failed to fetch orders')
+        return res.json()
+    },
+
+    async getAvailableOrders(token: string) {
+        const res = await fetch(`${API_URL}/api/orders/available`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        if (!res.ok) throw new Error('Failed to fetch available orders')
+        return res.json()
+    },
+
     async getCustomerOrders(customerId: string, token: string) {
         const response = await fetch(`${API_URL}/api/orders/customer/${customerId}`, {
-            headers: { 'Authorization': `Bearer ${token}` },
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
         })
         if (!response.ok) throw new Error('Failed to fetch orders')
         return response.json()
     },
+
+    // Requirement 8: Order Management & Editing APIs
+    async getOrderCounts(customerId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/counts?customerId=${customerId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        if (!response.ok) throw new Error('Failed to fetch order counts')
+        return response.json()
+    },
+
+    async checkOrderEditability(orderId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/${orderId}/edit-status`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        if (!response.ok) throw new Error('Failed to check order editability')
+        return response.json()
+    },
+
+    async updateOrder(orderId: string, updateData: any, token: string, userId: string) {
+        const response = await fetch(`${API_URL}/api/orders/${orderId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId
+            },
+            body: JSON.stringify(updateData)
+        })
+        if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to update order')
+        }
+        return response.json()
+    },
+
+    async cancelOrder(orderId: string, cancellationData: any, token: string, userId: string) {
+        const response = await fetch(`${API_URL}/api/orders/${orderId}/cancel`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId
+            },
+            body: JSON.stringify(cancellationData)
+        })
+        if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to cancel order')
+        }
+        return response.json()
+    },
+
 
     async getOrderBids(orderId: string, token: string) {
         const response = await fetch(`${API_URL}/api/bids/order/${orderId}`, {
@@ -93,14 +171,14 @@ export const api = {
         return response.json()
     },
 
-    async inviteProcessServer(email: string, inviterName: string, token: string) {
+    async inviteProcessServer(email: string, inviterName: string, invitedByUserId: string, tenantId: string, token: string) {
         const response = await fetch(`${API_URL}/api/invites/process-server`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
             },
-            body: JSON.stringify({ email, inviterName }),
+            body: JSON.stringify({ email, inviterName, invitedByUserId, tenantId }),
         })
         if (!response.ok) {
             const error = await response.text()
@@ -191,5 +269,103 @@ export const api = {
         })
         if (!response.ok) throw new Error('Failed to toggle global visibility')
         return response.json()
-    }
+    },
+
+    // Requirement 10: Geography APIs  
+    async getStates() {
+        const response = await fetch(`${API_URL}/api/geography/states`)
+        if (!response.ok) throw new Error('Failed to fetch states')
+        return response.json()
+    },
+
+    async getCitiesByState(stateId: number) {
+        const response = await fetch(`${API_URL}/api/geography/states/${stateId}/cities`)
+        if (!response.ok) throw new Error('Failed to fetch cities')
+        return response.json()
+    },
+
+    async getCityById(cityId: number) {
+        const response = await fetch(`${API_URL}/api/geography/cities/${cityId}`)
+        if (!response.ok) throw new Error('Failed to fetch city')
+        return response.json()
+    },
+
+    async searchCities(name: string) {
+        const response = await fetch(`${API_URL}/api/geography/cities/search?name=${encodeURIComponent(name)}`)
+        if (!response.ok) throw new Error('Failed to search cities')
+        return response.json()
+    },
+
+    // Requirement 9: Message/Chat APIs
+    async sendMessage(orderId: string, messageText: string, token: string, userId: string, userRole: string) {
+        const response = await fetch(`${API_URL}/api/messages`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId,
+                'userRole': userRole
+            },
+            body: JSON.stringify({ orderId, messageText })
+        })
+        if (!response.ok) throw new Error('Failed to send message')
+        return response.json()
+    },
+
+    async getOrderMessages(orderId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/messages/order/${orderId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to fetch messages')
+        return response.json()
+    },
+
+    async markMessageAsRead(messageId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/messages/${messageId}/read`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to mark message as read')
+    },
+
+    async getUnreadCount(orderId: string, userId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/messages/order/${orderId}/unread-count`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'userId': userId
+            }
+        })
+        if (!response.ok) throw new Error('Failed to get unread count')
+        return response.json()
+    },
+
+    async addChatParticipant(orderId: string, userId: string, userRole: string, token: string, addedBy: string) {
+        const response = await fetch(`${API_URL}/api/messages/participants`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': addedBy
+            },
+            body: JSON.stringify({ orderId, userId, userRole })
+        })
+        if (!response.ok) throw new Error('Failed to add participant')
+        return response.json()
+    },
+
+    async removeChatParticipant(participantId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/messages/participants/${participantId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to remove participant')
+    },
+
+    async getChatParticipants(orderId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/messages/participants/order/${orderId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to fetch participants')
+        return response.json()
+    },
 }

@@ -81,4 +81,14 @@ public class CustomerController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    @GetMapping("/by-role/{tenantUserRoleId}")
+    public ResponseEntity<?> getCustomerByTenantUserRoleId(@PathVariable String tenantUserRoleId) {
+        try {
+            CustomerDTO customer = customerService.getCustomerByTenantUserRoleId(tenantUserRoleId);
+            return ResponseEntity.ok(customer);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

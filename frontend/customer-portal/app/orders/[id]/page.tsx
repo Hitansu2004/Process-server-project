@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { api } from '@/lib/api'
+import { Edit, Lock, X, MessageCircle } from 'lucide-react'
+import ChatWindow from '@/components/chat/ChatWindow'
 
 export default function OrderDetails() {
     const router = useRouter()
@@ -11,6 +13,13 @@ export default function OrderDetails() {
     const [bids, setBids] = useState<any[]>([])
     const [processServers, setProcessServers] = useState<Record<string, any>>({})
     const [loading, setLoading] = useState(true)
+    const [editability, setEditability] = useState<any>(null)
+    const [showCancelModal, setShowCancelModal] = useState(false)
+    const [cancelling, setCancelling] = useState(false)
+    const [cancelReason, setCancelReason] = useState('')
+    const [cancelNotes, setCancelNotes] = useState('')
+    const [showChat, setShowChat] = useState(false)
+    const [unreadCount, setUnreadCount] = useState(0)
 
     useEffect(() => {
         loadOrderDetails()
@@ -54,6 +63,14 @@ export default function OrderDetails() {
                     setProcessServers(profiles)
                 }
             }
+
+            // Requirement 8: Check if order is editable
+            try {
+                const editabilityData = await api.checkOrderEditability(params.id as string, token!)
+                setEditability(editabilityData)
+            } catch (error) {
+                console.error('Failed to check editability:', error)
+            }
         } catch (error) {
             console.error('Failed to load order details:', error)
         } finally {
@@ -95,6 +112,38 @@ export default function OrderDetails() {
 
         // Fallback to order-level prices
         return order.finalAgreedPrice || order.customerPaymentAmount || null
+    }
+
+    // Requirement 8: Cancel order handler
+    const handleCancelOrder = async () => {
+        if (!cancelReason.trim()) {
+            alert('Please provide a cancellation reason')
+            return
+        }
+
+        setCancelling(true)
+        try {
+            const token = sessionStorage.getItem('token')
+            const userData = JSON.parse(sessionStorage.getItem('user') || '{}')
+
+            await api.cancelOrder(
+                params.id as string,
+                {
+                    cancellationReason: cancelReason,
+                    additionalNotes: cancelNotes
+                },
+                token!,
+                userData.userId
+            )
+
+            alert('Order cancelled successfully')
+            setShowCancelModal(false)
+            await loadOrderDetails() // Reload order
+        } catch (error: any) {
+            alert(error.message || 'Failed to cancel order')
+        } finally {
+            setCancelling(false)
+        }
     }
 
     const getBidsForDropoff = (dropoffId: string) => {
@@ -154,9 +203,55 @@ export default function OrderDetails() {
                             </p>
                         </div>
                     </div>
-                    <span className={`px-4 py-2 rounded-full text-sm font-semibold ${getStatusColor(order.status)}`}>
-                        {order.status}
-                    </span>
+                    <div className="flex items-center gap-3">
+                        {/* Requirement 8: Edit Button */}
+                        {editability?.canEdit && (
+                            <button
+                                onClick={() => router.push(`/orders/${params.id}/edit`)}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors"
+                            >
+                                <Edit className="w-4 h-4" />
+                                Edit Order
+                            </button>
+                        )}
+
+                        {/* Requirement 9: Chat Button */}
+                        <button
+                            onClick={() => setShowChat(true)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary font-medium transition-colors relative"
+                        >
+                            <MessageCircle className="w-4 h-4" />
+                            Chat
+                            {unreadCount > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                    {unreadCount}
+                                </span>
+                            )}
+                        </button>
+
+                        {/* Cancel Button (for editable orders) */}
+                        {editability?.canEdit && order.status !== 'CANCELLED' && (
+                            <button
+                                onClick={() => setShowCancelModal(true)}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 font-medium transition-colors border border-red-500/30"
+                            >
+                                <X className="w-4 h-4" />
+                                Cancel Order
+                            </button>
+                        )}
+
+                        {/* Lock Indicator */}
+                        {editability && !editability.canEdit && (
+                            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-500/10 text-gray-500 border border-gray-500/30">
+                                <Lock className="w-4 h-4" />
+                                <span className="text-sm font-medium">{editability.lockReason}</span>
+                            </div>
+                        )}
+
+                        <span className={`px-4 py-2 rounded-full text-sm font-semibold ${getStatusColor(order.status)}`}>
+                            {order.status}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -460,6 +555,85 @@ export default function OrderDetails() {
                     </div>
                 </div>
             </div>
+
+            {/* Requirement 8: Cancel Order Modal */}
+            {showCancelModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-900 rounded-2xl p-6 max-w-md w-full border border-gray-700 shadow-2xl">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-2xl font-bold text-white">Cancel Order</h3>
+                            <button
+                                onClick={() => {
+                                    setShowCancelModal(false)
+                                    setCancelReason('')
+                                    setCancelNotes('')
+                                }}
+                                className="text-gray-400 hover:text-white transition-colors"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-2 text-gray-300">
+                                    Cancellation Reason *
+                                </label>
+                                <textarea
+                                    value={cancelReason}
+                                    onChange={(e) => setCancelReason(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                                    rows={3}
+                                    placeholder="Please provide a reason for cancellation"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2 text-gray-300">
+                                    Additional Notes (optional)
+                                </label>
+                                <textarea
+                                    value={cancelNotes}
+                                    onChange={(e) => setCancelNotes(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                                    rows={2}
+                                    placeholder="Any additional information"
+                                />
+                            </div>
+
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    onClick={() => {
+                                        setShowCancelModal(false)
+                                        setCancelReason('')
+                                        setCancelNotes('')
+                                    }}
+                                    className="flex-1 px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-medium transition-colors"
+                                    disabled={cancelling}
+                                >
+                                    Keep Order
+                                </button>
+                                <button
+                                    onClick={handleCancelOrder}
+                                    className="flex-1 px-4 py-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={cancelling || !cancelReason.trim()}
+                                >
+                                    {cancelling ? 'Cancelling...' : 'Cancel Order'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Requirement 9: Chat Window */}
+            {showChat && (
+                <ChatWindow
+                    orderId={params.id as string}
+                    onClose={() => setShowChat(false)}
+                />
+            )}
         </div>
     )
 }

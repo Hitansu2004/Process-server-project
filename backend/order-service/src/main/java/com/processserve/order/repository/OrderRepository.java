@@ -29,4 +29,14 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     long countByCustomerId(String customerId);
 
     Optional<Order> findTopByCustomerIdOrderByCreatedAtDesc(String customerId);
+
+    // Requirement 5: Case Object Searchability
+    List<Order> findByCaseNumber(String caseNumber);
+
+    List<Order> findByJurisdiction(String jurisdiction);
+
+    List<Order> findByCaseNumberAndJurisdiction(String caseNumber, String jurisdiction);
+
+    @Query("SELECT o FROM Order o WHERE o.caseNumber LIKE %:query% OR o.jurisdiction LIKE %:query%")
+    List<Order> searchByCaseInfo(@Param("query") String query);
 }

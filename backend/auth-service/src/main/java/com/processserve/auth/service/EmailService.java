@@ -101,6 +101,11 @@ public class EmailService {
 
     public void sendProcessServerInvitation(String toEmail, String inviterName) {
         try {
+            log.info("=== INVITATION EMAIL DEBUG ===");
+            log.info("To: {}", toEmail);
+            log.info("Inviter: {}", inviterName);
+            log.info("=============================");
+
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
@@ -115,7 +120,8 @@ public class EmailService {
             log.info("Process server invitation sent successfully to: {}", toEmail);
         } catch (Exception e) {
             log.error("Failed to send invitation email to: {}", toEmail, e);
-            throw new RuntimeException("Failed to send invitation email");
+            log.info("Invitation for {} (not sent via email) - Inviter: {}", toEmail, inviterName);
+            // Don't throw exception - allow invitation to continue without email
         }
     }
 

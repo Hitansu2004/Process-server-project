@@ -6,6 +6,8 @@ import { Globe, CheckCircle, AlertCircle } from 'lucide-react'
 import { api } from '@/lib/api'
 import ConfirmModal from '@/components/ConfirmModal'
 
+import AssignedOrdersModal from '@/components/AssignedOrdersModal'
+
 export default function Dashboard() {
     const router = useRouter()
     const [user, setUser] = useState<any>(null)
@@ -16,6 +18,7 @@ export default function Dashboard() {
     const [profile, setProfile] = useState<any>(null)
     const [assignedFilter, setAssignedFilter] = useState('ALL')
     const [showLogoutModal, setShowLogoutModal] = useState(false)
+    const [showAssignedModal, setShowAssignedModal] = useState(false)
     const [isGlobal, setIsGlobal] = useState(false)
     const [toggleLoading, setToggleLoading] = useState(false)
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error'; visible: boolean }>({
@@ -75,6 +78,15 @@ export default function Dashboard() {
             const assigned = await api.getDeliveryPersonOrders(processServerId, token)
             setAssignedOrders(assigned)
 
+            // Check for new assignments to show popup
+            const newAssignments = assigned.filter((o: any) => o.status === 'ASSIGNED')
+            const hasSeenPopup = sessionStorage.getItem('hasSeenAssignedPopup')
+
+            if (newAssignments.length > 0 && !hasSeenPopup) {
+                setShowAssignedModal(true)
+                sessionStorage.setItem('hasSeenAssignedPopup', 'true')
+            }
+
             // Load available orders
             const available = await api.getAvailableOrders(token)
             setAvailableOrders(available)
@@ -94,18 +106,18 @@ export default function Dashboard() {
         try {
             const token = localStorage.getItem('token')
             const processServerRole = user.roles.find((r: any) => r.role === 'PROCESS_SERVER')
-            
+
             if (!token || !processServerRole) {
                 throw new Error('Authentication required')
             }
 
             const newGlobalStatus = !isGlobal
             await api.toggleGlobalVisibility(processServerRole.id, newGlobalStatus, token)
-            
+
             setIsGlobal(newGlobalStatus)
             showToast(
-                newGlobalStatus 
-                    ? 'You are now visible in the global directory! 🌍' 
+                newGlobalStatus
+                    ? 'You are now visible in the global directory! 🌍'
                     : 'You are no longer visible in the global directory',
                 'success'
             )
@@ -151,6 +163,12 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 p-6 relative overflow-hidden">
+            <AssignedOrdersModal
+                isOpen={showAssignedModal}
+                onClose={() => setShowAssignedModal(false)}
+                orders={assignedOrders.filter(o => o.status === 'ASSIGNED')}
+            />
+
             {/* Animated background elements */}
             <motion.div
                 animate={{
@@ -176,7 +194,7 @@ export default function Dashboard() {
                 transition={{ duration: 18, repeat: Infinity }}
                 className="absolute top-1/2 right-1/3 w-96 h-96 bg-green-300 rounded-full mix-blend-multiply filter blur-xl opacity-20"
             />
-            
+
             <div className="max-w-7xl mx-auto relative z-10">
                 {/* Toast Notification */}
                 <AnimatePresence>
@@ -187,10 +205,9 @@ export default function Dashboard() {
                             exit={{ opacity: 0, y: -50 }}
                             className="fixed top-4 right-4 z-50"
                         >
-                            <div className={`px-6 py-4 rounded-xl shadow-2xl backdrop-blur-xl border ${
-                                toast.type === 'success' ? 'bg-green-500/90 border-green-400 text-white' :
-                                'bg-red-500/90 border-red-400 text-white'
-                            }`}>
+                            <div className={`px-6 py-4 rounded-xl shadow-2xl backdrop-blur-xl border ${toast.type === 'success' ? 'bg-green-500/90 border-green-400 text-white' :
+                                    'bg-red-500/90 border-red-400 text-white'
+                                }`}>
                                 <div className="flex items-center gap-3">
                                     {toast.type === 'success' ? (
                                         <CheckCircle className="w-5 h-5" />
@@ -217,7 +234,7 @@ export default function Dashboard() {
                             <div className="flex items-center gap-4 mt-3">
                                 <span className="text-yellow-500 font-bold text-lg">★ {profile.currentRating}</span>
                                 <span className="text-sm text-gray-500">({profile.totalOrdersAssigned} Orders)</span>
-                                
+
                                 {/* Global Visibility Toggle */}
                                 <motion.div
                                     initial={{ opacity: 0, x: -20 }}
@@ -230,11 +247,10 @@ export default function Dashboard() {
                                         whileTap={{ scale: 0.95 }}
                                         onClick={handleToggleGlobal}
                                         disabled={toggleLoading}
-                                        className={`relative flex items-center gap-3 px-5 py-2.5 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all overflow-hidden ${
-                                            isGlobal
+                                        className={`relative flex items-center gap-3 px-5 py-2.5 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all overflow-hidden ${isGlobal
                                                 ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
                                                 : 'bg-white/90 backdrop-blur-xl text-gray-700 border-2 border-gray-300 hover:border-green-500'
-                                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
                                         {/* Animated background shimmer when active */}
                                         {isGlobal && !toggleLoading && (
@@ -250,7 +266,7 @@ export default function Dashboard() {
                                                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
                                             />
                                         )}
-                                        
+
                                         {toggleLoading ? (
                                             <>
                                                 <motion.div
@@ -280,7 +296,7 @@ export default function Dashboard() {
                                                 {isGlobal && (
                                                     <motion.div
                                                         initial={{ scale: 0 }}
-                                                        animate={{ 
+                                                        animate={{
                                                             scale: [0, 1.2, 1],
                                                             opacity: [0, 1, 1]
                                                         }}

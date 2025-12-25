@@ -26,7 +26,8 @@ interface ContactEntry {
     processServerId: string
     nickname: string
     entryType: string
-    processServerDetails?: ProcessServer
+    activationStatus?: string
+    processServerDetails?: ProcessServer | null
 }
 
 export default function Contacts() {
@@ -75,6 +76,14 @@ export default function Contacts() {
                 // Enrich contacts with detailed process server info
                 const enrichedContacts = await Promise.all(
                     data.map(async (contact: ContactEntry) => {
+                        // Skip fetching details for NOT_ACTIVATED contacts (they don't have a profile yet)
+                        if (contact.activationStatus === 'NOT_ACTIVATED') {
+                            return {
+                                ...contact,
+                                processServerDetails: null
+                            }
+                        }
+
                         try {
                             const details = await api.getProcessServerDetails(contact.processServerId, token)
                             return {
@@ -159,11 +168,16 @@ export default function Contacts() {
             const token = sessionStorage.getItem('token')
             const user = JSON.parse(sessionStorage.getItem('user') || '{}')
             const inviterName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
+            const userId = user.userId
+            const tenantId = user.tenantId || 'tenant-1' // Use tenant from user or default
 
-            await api.inviteProcessServer(inviteEmail, inviterName, token!)
+            await api.inviteProcessServer(inviteEmail, inviterName, userId, tenantId, token!)
 
             setInviteEmail('')
             showToast(`Invitation sent to ${inviteEmail} successfully! 📧`, 'success')
+
+            // Refresh personal contacts to show the newly invited user
+            await fetchPersonalContacts()
         } catch (error: any) {
             console.error('Failed to send invitation:', error)
             showToast(error.message || 'Failed to send invitation', 'error')
@@ -192,11 +206,35 @@ export default function Contacts() {
 
         // Apply search filter
         if (searchQuery) {
-            filtered = filtered.filter(server =>
-                `${server.firstName} ${server.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                server.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (server.operatingZipCodes && JSON.parse(server.operatingZipCodes).some((zip: string) => zip.includes(searchQuery)))
-            )
+            filtered = filtered.filter(server => {
+                const nameMatch = `${server.firstName} ${server.lastName}`.toLowerCase().includes(searchQuery.toLowerCase())
+                const emailMatch = server.email.toLowerCase().includes(searchQuery.toLowerCase())
+
+                // Check zip codes
+                let zipMatch = false
+                if (server.operatingZipCodes) {
+                    try {
+                        // Remove escape characters and parse
+                        const cleanedZipCodes = server.operatingZipCodes.replace(/\\/g, '')
+                        const zipCodes = JSON.parse(cleanedZipCodes)
+                        if (Array.isArray(zipCodes)) {
+                            zipMatch = zipCodes.some((zip: any) => {
+                                const zipStr = String(zip)
+                                const match = zipStr.includes(searchQuery)
+                                console.log(`Checking ${server.firstName}: zip=${zipStr}, search=${searchQuery}, match=${match}`)
+                                return match
+                            })
+                        }
+                    } catch (e) {
+                        console.log(`Parse error for ${server.firstName}:`, e)
+                        // If parsing fails, try direct string match
+                        zipMatch = server.operatingZipCodes.includes(searchQuery)
+                    }
+                }
+                console.log(`${server.firstName} ${server.lastName}: nameMatch=${nameMatch}, emailMatch=${emailMatch}, zipMatch=${zipMatch}`)
+
+                return nameMatch || emailMatch || zipMatch
+            })
         }
 
         // Apply rating filter
@@ -227,12 +265,77 @@ export default function Contacts() {
     }
 
     const filteredGlobalServers = filterAndSortServers(globalServers)
-    const filteredPersonalContacts = personalContacts.filter(contact => {
+    let filteredPersonalContacts = personalContacts.filter(contact => {
+        // Always show NOT_ACTIVATED contacts
+        if (contact.activationStatus === 'NOT_ACTIVATED') {
+            if (!searchQuery) return true
+            return contact.nickname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                contact.processServerId.toLowerCase().includes(searchQuery.toLowerCase())
+        }
+
         if (!contact.processServerDetails) return false
         if (!searchQuery) return true
+
         const server = contact.processServerDetails
-        return `${server.firstName} ${server.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            server.email.toLowerCase().includes(searchQuery.toLowerCase())
+        const nameMatch = `${server.firstName} ${server.lastName}`.toLowerCase().includes(searchQuery.toLowerCase())
+        const emailMatch = server.email.toLowerCase().includes(searchQuery.toLowerCase())
+
+        // Check zip codes
+        let zipMatch = false
+        if (server.operatingZipCodes) {
+            try {
+                // Remove escape characters and parse
+                const cleanedZipCodes = server.operatingZipCodes.replace(/\\/g, '')
+                const zipCodes = JSON.parse(cleanedZipCodes)
+                if (Array.isArray(zipCodes)) {
+                    zipMatch = zipCodes.some((zip: any) => {
+                        const zipStr = String(zip)
+                        return zipStr.includes(searchQuery)
+                    })
+                }
+            } catch (e) {
+                // If parsing fails, try direct string match
+                zipMatch = server.operatingZipCodes.includes(searchQuery)
+            }
+        }
+
+        return nameMatch || emailMatch || zipMatch
+    })
+
+    // Apply rating filter to personal contacts
+    if (ratingFilter > 0) {
+        filteredPersonalContacts = filteredPersonalContacts.filter(contact =>
+            contact.processServerDetails && (contact.processServerDetails.currentRating || 0) >= ratingFilter
+        )
+    }
+
+    // Apply minimum orders filter to personal contacts
+    if (minOrders > 0) {
+        filteredPersonalContacts = filteredPersonalContacts.filter(contact =>
+            contact.processServerDetails && (contact.processServerDetails.totalOrdersAssigned || 0) >= minOrders
+        )
+    }
+
+    // Apply sorting to personal contacts
+    filteredPersonalContacts.sort((a, b) => {
+        const detailsA = a.processServerDetails
+        const detailsB = b.processServerDetails
+
+        // Handle missing details (put them at the bottom or treat as 0)
+        if (!detailsA && !detailsB) return 0
+        if (!detailsA) return 1
+        if (!detailsB) return -1
+
+        switch (sortBy) {
+            case 'name':
+                return `${detailsA.firstName} ${detailsA.lastName}`.localeCompare(`${detailsB.firstName} ${detailsB.lastName}`)
+            case 'rating':
+                return (detailsB.currentRating || 0) - (detailsA.currentRating || 0)
+            case 'orders':
+                return (detailsB.totalOrdersAssigned || 0) - (detailsA.totalOrdersAssigned || 0)
+            default:
+                return 0
+        }
     })
 
     return (
@@ -247,8 +350,8 @@ export default function Contacts() {
                         className="fixed top-4 right-4 z-50"
                     >
                         <div className={`px-6 py-4 rounded-xl shadow-2xl backdrop-blur-xl border ${toast.type === 'success' ? 'bg-green-500/90 border-green-400 text-white' :
-                                toast.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' :
-                                    'bg-blue-500/90 border-blue-400 text-white'
+                            toast.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' :
+                                'bg-blue-500/90 border-blue-400 text-white'
                             }`}>
                             <p className="font-medium">{toast.message}</p>
                         </div>
@@ -288,8 +391,8 @@ export default function Contacts() {
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setActiveTab('personal')}
                             className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${activeTab === 'personal'
-                                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
-                                    : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
+                                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                                : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
                                 }`}
                         >
                             <Users className="w-5 h-5" />
@@ -306,8 +409,8 @@ export default function Contacts() {
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setActiveTab('global')}
                             className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${activeTab === 'global'
-                                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
-                                    : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
+                                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                                : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
                                 }`}
                         >
                             <Globe className="w-5 h-5" />
@@ -467,6 +570,61 @@ export default function Contacts() {
                                         <div className="space-y-2">
                                             {filteredPersonalContacts.map((contact, index) => {
                                                 const server = contact.processServerDetails
+                                                const isNotActivated = contact.activationStatus === 'NOT_ACTIVATED'
+
+                                                // Handle NOT_ACTIVATED contacts (invited but not registered yet)
+                                                if (isNotActivated) {
+                                                    return (
+                                                        <motion.div
+                                                            key={contact.id}
+                                                            initial={{ opacity: 0, x: -10 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            transition={{ delay: index * 0.02 }}
+                                                            className="bg-amber-50/90 backdrop-blur-xl rounded-lg p-4 border border-amber-200 hover:border-amber-300 hover:shadow-md transition-all group"
+                                                        >
+                                                            <div className="flex items-center gap-4">
+                                                                {/* Avatar */}
+                                                                <div className="relative flex-shrink-0">
+                                                                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-lg font-bold">
+                                                                        <UserPlus className="w-8 h-8" />
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Info */}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-2 mb-1.5">
+                                                                        <h3 className="font-semibold text-gray-800 text-base truncate">
+                                                                            {contact.nickname || contact.processServerId}
+                                                                        </h3>
+                                                                        <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-800 text-xs font-medium">
+                                                                            Pending
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Mail className="w-4 h-4" />
+                                                                            <span className="truncate">{contact.processServerId}</span>
+                                                                        </div>
+                                                                        <span className="text-amber-600 text-xs">
+                                                                            Invitation sent - awaiting registration
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Action */}
+                                                                <motion.button
+                                                                    whileHover={{ scale: 1.05 }}
+                                                                    whileTap={{ scale: 0.95 }}
+                                                                    onClick={() => handleRemoveContact(contact.id)}
+                                                                    className="px-4 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-all text-sm font-medium flex-shrink-0"
+                                                                >
+                                                                    Remove
+                                                                </motion.button>
+                                                            </div>
+                                                        </motion.div>
+                                                    )
+                                                }
+
                                                 if (!server) return null
 
                                                 return (

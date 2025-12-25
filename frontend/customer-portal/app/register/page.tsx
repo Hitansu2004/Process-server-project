@@ -1,15 +1,18 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, Lock, User, Phone, CheckCircle, AlertCircle, Sparkles, ArrowRight } from 'lucide-react'
 
 export default function RegisterPage() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
+    const [isEmailLocked, setIsEmailLocked] = useState(false)
+
     const [formData, setFormData] = useState({
         email: '',
         password: '',
@@ -20,8 +23,16 @@ export default function RegisterPage() {
     })
 
     const tenantId = typeof window !== 'undefined'
-        ? sessionStorage.getItem('selectedTenant') || new URLSearchParams(window.location.search).get('tenant') || 'tenant-1'
+        ? sessionStorage.getItem('selectedTenant') || searchParams.get('tenant') || 'tenant-1'
         : 'tenant-1'
+
+    useEffect(() => {
+        const emailParam = searchParams.get('email')
+        if (emailParam) {
+            setFormData(prev => ({ ...prev, email: emailParam }))
+            setIsEmailLocked(true)
+        }
+    }, [searchParams])
 
     const registerUser = async () => {
         try {
@@ -42,6 +53,10 @@ export default function RegisterPage() {
 
             if (response.ok) {
                 setSuccess(true)
+                // If email was locked (invitation), set flag for dashboard welcome popup
+                if (isEmailLocked) {
+                    sessionStorage.setItem('isNewUser', 'true')
+                }
                 setTimeout(() => {
                     router.push('/login?registered=true')
                 }, 2000)
@@ -240,12 +255,21 @@ export default function RegisterPage() {
                             <input
                                 type="email"
                                 required
+                                disabled={isEmailLocked}
                                 value={formData.email}
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                className="w-full pl-10 pr-3 py-2 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-white/50"
+                                className={`w-full pl-10 pr-3 py-2 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-white/50 ${isEmailLocked ? 'opacity-60 cursor-not-allowed bg-gray-100' : ''}`}
                                 placeholder="you@example.com"
                             />
+                            {isEmailLocked && (
+                                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            )}
                         </div>
+                        {isEmailLocked && (
+                            <p className="text-xs text-blue-600 mt-1 ml-1">
+                                Email is locked for this invitation
+                            </p>
+                        )}
                     </motion.div>
 
                     {/* Phone Number */}

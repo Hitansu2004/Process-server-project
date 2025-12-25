@@ -33,11 +33,6 @@ public class ContactBookService {
             String nickname) {
         // Validate process server exists
         if (!processServerRepository.existsById(processServerId)) {
-            // Note: processServerId here refers to the ID in process_server_profiles table
-            // (which is the tenantUserRoleId usually?
-            // Or the ID column of that table? The repository is
-            // JpaRepository<ProcessServerProfile, String>.
-            // So it checks the ID of the profile.
             throw new RuntimeException("Process Server not found");
         }
 
@@ -49,6 +44,7 @@ public class ContactBookService {
                     entry.setOwnerUserId(ownerUserId);
                     entry.setProcessServerId(processServerId);
                     entry.setEntryType(type);
+                    entry.setActivationStatus(ContactBookEntry.ActivationStatus.ACTIVATED); // Default to activated
                     entry.setNickname(nickname);
                     return contactBookRepository.save(entry);
                 });

@@ -14,6 +14,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true)
     const [showFilters, setShowFilters] = useState(false)
     const [showLogoutModal, setShowLogoutModal] = useState(false)
+    const [orderCounts, setOrderCounts] = useState<any>(null)
 
     // Initialize state from sessionStorage or defaults
     const [statusFilter, setStatusFilter] = useState(() => {
@@ -91,10 +92,54 @@ export default function Dashboard() {
         loadOrders(customerId, token)
     }, [router])
 
+    const [showWelcomeModal, setShowWelcomeModal] = useState(false)
+    const [assignedOrders, setAssignedOrders] = useState<any[]>([])
+
+    useEffect(() => {
+        const checkNewUserOrders = async () => {
+            const token = sessionStorage.getItem('token')
+            const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+
+            // Check if we just registered/activated (could use a query param or just check orders)
+            // For now, let's just check if there are orders assigned to me that are "OPEN" or "ASSIGNED" 
+            // and I have 0 completed orders (indicating I'm new).
+            // OR simpler: Check for a "welcome" flag in sessionStorage set during login/register
+
+            const isNewUser = sessionStorage.getItem('isNewUser') === 'true'
+
+            if (isNewUser && token && user.userId) {
+                try {
+                    // Fetch orders assigned to me
+                    // If I am a process server
+                    if (user.roles?.some((r: any) => r.role === 'PROCESS_SERVER')) {
+                        const myOrders = await api.getProcessServerOrders(user.roles[0].id, token)
+                        if (myOrders && myOrders.length > 0) {
+                            setAssignedOrders(myOrders)
+                            setShowWelcomeModal(true)
+                            sessionStorage.removeItem('isNewUser') // Show only once
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to check for assigned orders", e)
+                }
+            }
+        }
+
+        checkNewUserOrders()
+    }, [])
+
     const loadOrders = async (customerId: string, token: string) => {
         try {
             const data = await api.getCustomerOrders(customerId, token)
             setOrders(data)
+
+            // Requirement 8: Fetch order counts
+            try {
+                const counts = await api.getOrderCounts(customerId, token)
+                setOrderCounts(counts)
+            } catch (error) {
+                console.error('Failed to load order counts:', error)
+            }
         } catch (error) {
             console.error('Failed to load orders:', error)
         } finally {
@@ -126,7 +171,7 @@ export default function Dashboard() {
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-                <motion.div 
+                <motion.div
                     className="relative"
                     animate={{ rotate: 360 }}
                     transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
@@ -141,8 +186,8 @@ export default function Dashboard() {
     const getDateRangeFilter = () => {
         const now = new Date()
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-        
-        switch(dateRange) {
+
+        switch (dateRange) {
             case 'last-week':
                 const lastWeek = new Date(startOfDay)
                 lastWeek.setDate(lastWeek.getDate() - 7)
@@ -200,7 +245,7 @@ export default function Dashboard() {
         <div className="min-h-screen p-3 sm:p-6 bg-gradient-to-br from-blue-50 via-white to-purple-50">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
@@ -244,48 +289,52 @@ export default function Dashboard() {
                     </div>
                 </motion.div>
 
-                {/* Stats */}
-                <motion.div 
+                {/* Requirement 8: Order Status Counts */}
+                <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.1 }}
-                    className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8"
+                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8"
                 >
-                    <motion.div 
-                        whileHover={{ scale: 1.02, y: -2 }}
-                        className="bg-white/90 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 shadow-lg hover:shadow-xl transition-all"
-                    >
-                        <h3 className="text-gray-500 text-xs sm:text-sm mb-2 font-medium uppercase tracking-wide">Total Orders</h3>
-                        <p className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                            {orders.length}
-                        </p>
-                    </motion.div>
-                    <motion.div 
-                        whileHover={{ scale: 1.02, y: -2 }}
-                        className="bg-white/90 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 shadow-lg hover:shadow-xl transition-all"
-                    >
-                        <h3 className="text-gray-500 text-xs sm:text-sm mb-2 font-medium uppercase tracking-wide">Active</h3>
-                        <p className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
-                            {orders.filter(o =>
-                                o.status !== 'COMPLETED' &&
-                                o.status !== 'FAILED' &&
-                                o.status !== 'CANCELLED'
-                            ).length}
-                        </p>
-                    </motion.div>
-                    <motion.div 
-                        whileHover={{ scale: 1.02, y: -2 }}
-                        className="bg-white/90 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 shadow-lg hover:shadow-xl transition-all"
-                    >
-                        <h3 className="text-gray-500 text-xs sm:text-sm mb-2 font-medium uppercase tracking-wide">Completed</h3>
-                        <p className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent">
-                            {orders.filter(o => o.status === 'COMPLETED').length}
-                        </p>
-                    </motion.div>
+                    {orderCounts && [
+                        { status: 'TOTAL', label: 'Total Orders', color: 'from-blue-600 to-purple-600', icon: '📊' },
+                        { status: 'OPEN', label: 'Open', color: 'from-yellow-500 to-orange-500', icon: '📋' },
+                        { status: 'BIDDING', label: 'Bidding', color: 'from-purple-500 to-pink-500', icon: '🏷️' },
+                        { status: 'ASSIGNED', label: 'Assigned', color: 'from-blue-500 to-cyan-500', icon: '👤' },
+                        { status: 'IN_PROGRESS', label: 'In Progress', color: 'from-orange-500 to-red-500', icon: '🚀' },
+                        { status: 'COMPLETED', label: 'Completed', color: 'from-green-500 to-emerald-500', icon: '✅' },
+                        { status: 'CANCELLED', label: 'Cancelled', color: 'from-gray-500 to-gray-600', icon: '❌' },
+                        { status: 'FAILED', label: 'Failed', color: 'from-red-600 to-red-700', icon: '⚠️' },
+                    ].map(({ status, label, color, icon }) => (
+                        <motion.button
+                            key={status}
+                            whileHover={{ scale: 1.05, y: -4 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => status !== 'TOTAL' && setStatusFilter(status)}
+                            className={`bg-white/90 backdrop-blur-xl rounded-xl p-3 sm:p-4 border border-gray-200 shadow-md hover:shadow-lg transition-all text-left ${status !== 'TOTAL' ? 'cursor-pointer hover:border-gray-300' : 'cursor-default'
+                                } ${statusFilter === status ? 'ring-2 ring-blue-500 border-blue-300' : ''
+                                }`}
+                        >
+                            <div className="flex items-center justify-between mb-1">
+                                <h3 className="text-gray-600 text-[10px] sm:text-xs font-medium uppercase tracking-wide">
+                                    {label}
+                                </h3>
+                                <span className="text-lg sm:text-xl">{icon}</span>
+                            </div>
+                            <p className={`text-xl sm:text-3xl font-bold bg-gradient-to-r ${color} bg-clip-text text-transparent`}>
+                                {orderCounts[status] || 0}
+                            </p>
+                            {status !== 'TOTAL' && (
+                                <p className="text-[9px] sm:text-[10px] text-gray-400 mt-1">
+                                    Click to filter
+                                </p>
+                            )}
+                        </motion.button>
+                    ))}
                 </motion.div>
 
                 {/* Filters Toggle Button */}
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.2 }}
@@ -297,19 +346,19 @@ export default function Dashboard() {
                         onClick={() => setShowFilters(!showFilters)}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/90 backdrop-blur-xl border border-gray-200 hover:border-gray-300 text-sm font-medium w-full sm:w-auto justify-center sm:justify-start shadow-sm hover:shadow-md transition-all"
                     >
-                        <motion.svg 
+                        <motion.svg
                             animate={{ rotate: showFilters ? 180 : 0 }}
                             transition={{ duration: 0.3 }}
                             className="w-4 h-4"
-                            fill="none" 
-                            stroke="currentColor" 
+                            fill="none"
+                            stroke="currentColor"
                             viewBox="0 0 24 24"
                         >
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </motion.svg>
                         <span>{showFilters ? 'Hide Filters' : 'Show Filters'}</span>
                         {(statusFilter !== 'ALL' || dateRange !== 'all') && (
-                            <motion.span 
+                            <motion.span
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
                                 className="ml-2 px-2 py-0.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs rounded-full font-semibold"
@@ -323,7 +372,7 @@ export default function Dashboard() {
                 {/* Filters */}
                 <AnimatePresence>
                     {showFilters && (
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0, height: 0, marginBottom: 0 }}
                             animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
                             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
@@ -425,7 +474,7 @@ export default function Dashboard() {
                 </AnimatePresence>
 
                 {/* Orders List */}
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.3 }}
@@ -441,7 +490,7 @@ export default function Dashboard() {
                     </div>
 
                     {filteredOrders.length === 0 ? (
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             className="text-center py-12 sm:py-16"
@@ -480,7 +529,7 @@ export default function Dashboard() {
                                     >
                                         {/* Gradient overlay on hover */}
                                         <div className="absolute inset-0 bg-gradient-to-r from-blue-50/50 to-purple-50/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                                        
+
                                         <div className="relative z-10 flex justify-between items-start gap-2">
                                             <div className="flex-1 min-w-0">
                                                 <h3 className="font-semibold text-base sm:text-lg text-gray-800 truncate">
@@ -495,14 +544,13 @@ export default function Dashboard() {
                                                     <span className="flex-shrink-0">→ {order.totalDropoffs} dropoff(s)</span>
                                                 </p>
                                             </div>
-                                            <motion.span 
+                                            <motion.span
                                                 whileHover={{ scale: 1.05 }}
-                                                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${
-                                                    order.status === 'COMPLETED' ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700' :
+                                                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${order.status === 'COMPLETED' ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700' :
                                                     order.status === 'IN_PROGRESS' ? 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700' :
-                                                    order.status === 'BIDDING' ? 'bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700' :
-                                                    'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700'
-                                                }`}
+                                                        order.status === 'BIDDING' ? 'bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700' :
+                                                            'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700'
+                                                    }`}
                                             >
                                                 {order.status === 'PARTIALLY_ASSIGNED' ? 'ASSIGNED' : order.status}
                                             </motion.span>
@@ -536,6 +584,50 @@ export default function Dashboard() {
                 confirmText="Yes, Logout"
                 cancelText="Cancel"
             />
+            {/* Welcome Modal for New Users */}
+            <AnimatePresence>
+                {showWelcomeModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
+                        >
+                            <div className="p-6 text-center">
+                                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <span className="text-3xl">🎉</span>
+                                </div>
+                                <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome Aboard!</h2>
+                                <p className="text-gray-600 mb-6">
+                                    Your account is now active. We found <strong>{assignedOrders.length} orders</strong> already assigned to you!
+                                </p>
+
+                                <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left max-h-60 overflow-y-auto">
+                                    {assignedOrders.map((order, i) => (
+                                        <div key={order.id} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
+                                            <div>
+                                                <p className="font-semibold text-gray-800">{order.orderNumber}</p>
+                                                <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
+                                            </div>
+                                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
+                                                Assigned
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button
+                                    onClick={() => setShowWelcomeModal(false)}
+                                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors"
+                                >
+                                    View My Orders
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }
