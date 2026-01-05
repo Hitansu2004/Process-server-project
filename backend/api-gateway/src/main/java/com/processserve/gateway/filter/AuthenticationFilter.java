@@ -29,14 +29,28 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
     public GatewayFilter apply(Config config) {
         return (exchange, chain) -> {
             ServerHttpRequest request = exchange.getRequest();
-
-            // Skip authentication for auth endpoints
             String path = request.getURI().getPath();
-            if (path.contains("/api/auth/register") ||
-                    path.contains("/api/auth/login") ||
-                    path.contains("/actuator/")) {
+            log.info("AuthenticationFilter processing request: {} {}", request.getMethod(), path);
+
+            // Allow OPTIONS requests for CORS preflight
+            if (request.getMethod().name().equals("OPTIONS")) {
+                log.info("Allowing OPTIONS request for {}", path);
                 return chain.filter(exchange);
             }
+
+            // Skip authentication for auth endpoints and public tenant info
+            if (path.contains("/api/auth/register") ||
+                    path.contains("/api/auth/login") ||
+                    path.contains("/api/auth/send-otp") ||
+                    path.contains("/api/auth/verify-otp") ||
+                    path.contains("/actuator/") ||
+                    path.contains("/api/geography") ||
+                    (path.contains("/api/tenants") && request.getMethod().name().equals("GET"))) {
+                log.info("Allowing public endpoint: {}", path);
+                return chain.filter(exchange);
+            }
+
+            log.info("Authentication required for: {}", path);
 
             // Check if Authorization header exists
             if (!request.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)) {

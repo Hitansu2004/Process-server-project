@@ -105,7 +105,10 @@ export default function OrderDetails() {
         // Calculate from dropoffs as source of truth
         if (order.dropoffs && order.dropoffs.length > 0) {
             const total = order.dropoffs.reduce((sum: number, dropoff: any) => {
-                return sum + (dropoff.finalAgreedPrice || 0)
+                const basePrice = parseFloat(dropoff.finalAgreedPrice) || 0;
+                const rushFee = parseFloat(dropoff.rushServiceFee) || 0;
+                const remoteFee = parseFloat(dropoff.remoteLocationFee) || 0;
+                return sum + basePrice + rushFee + remoteFee;
             }, 0)
             return total > 0 ? total : null
         }
@@ -261,11 +264,13 @@ export default function OrderDetails() {
                         <div className="card">
                             <h2 className="text-2xl font-bold mb-4">Order Information</h2>
                             <div className="space-y-3">
-                                <div>
-                                    <p className="text-sm text-gray-400">Pickup Address</p>
-                                    <p className="text-lg">{order.pickupAddress}</p>
-                                    <p className="text-sm text-gray-400">ZIP: {order.pickupZipCode}</p>
-                                </div>
+                                {order.pickupAddress && (
+                                    <div>
+                                        <p className="text-sm text-gray-400">Pickup Address</p>
+                                        <p className="text-lg">{order.pickupAddress}</p>
+                                        <p className="text-sm text-gray-400">ZIP: {order.pickupZipCode}</p>
+                                    </div>
+                                )}
                                 <div>
                                     <p className="text-sm text-gray-400">Deadline</p>
                                     <p className="text-lg">{formatDate(order.deadline)}</p>
@@ -283,6 +288,58 @@ export default function OrderDetails() {
                             </div>
                         </div>
 
+                        {/* Document Information */}
+                        <div className="card">
+                            <h2 className="text-2xl font-bold mb-4">Document Information</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-sm text-gray-400">Document Type</p>
+                                    <p className="text-lg font-medium">
+                                        {order.documentType === 'OTHER' ? order.otherDocumentType : order.documentType?.replace(/_/g, ' ')}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-400">Case Number</p>
+                                    <p className="text-lg font-medium">{order.caseNumber || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-400">Jurisdiction</p>
+                                    <p className="text-lg font-medium">{order.jurisdiction || 'N/A'}</p>
+                                </div>
+                                {order.documentUrl && (
+                                    <div className="md:col-span-2 pt-2">
+                                        <p className="text-sm text-gray-400 mb-2">Uploaded Document</p>
+                                        <button
+                                            onClick={() => {
+                                                const token = sessionStorage.getItem('token');
+                                                fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${order.id}/document`, {
+                                                    headers: { 'Authorization': `Bearer ${token}` }
+                                                })
+                                                    .then(response => response.blob())
+                                                    .then(blob => {
+                                                        const url = window.URL.createObjectURL(blob);
+                                                        const a = document.createElement('a');
+                                                        a.href = url;
+                                                        a.download = order.documentUrl; // Use actual filename with original extension
+                                                        document.body.appendChild(a);
+                                                        a.click();
+                                                        window.URL.revokeObjectURL(url);
+                                                        document.body.removeChild(a);
+                                                    })
+                                                    .catch(err => alert('Failed to download document'));
+                                            }}
+                                            className="flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-colors"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            Download Document
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         {/* Dropoffs */}
                         <div className="card">
                             <h2 className="text-2xl font-bold mb-4">Dropoff Locations</h2>
@@ -294,6 +351,20 @@ export default function OrderDetails() {
                                                 <h3 className="font-semibold">Dropoff {index + 1}: {dropoff.recipientName}</h3>
                                                 <p className="text-sm text-gray-400 mt-1">{dropoff.dropoffAddress}</p>
                                                 <p className="text-sm text-gray-400">ZIP: {dropoff.dropoffZipCode}</p>
+
+                                                {/* Badges for Rush and Remote */}
+                                                <div className="flex gap-2 mt-2">
+                                                    {dropoff.rushService && (
+                                                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                                                            ⚡ Rush Service
+                                                        </span>
+                                                    )}
+                                                    {dropoff.remoteLocation && (
+                                                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                                                            🏝️ Remote Location
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(dropoff.status)}`}>
                                                 {dropoff.status}
@@ -301,7 +372,13 @@ export default function OrderDetails() {
                                         </div>
                                         {dropoff.finalAgreedPrice && (
                                             <p className="text-sm mt-2">
-                                                Price: <span className="font-semibold text-primary">${dropoff.finalAgreedPrice}</span>
+                                                Price: <span className="font-semibold text-primary">
+                                                    ${(
+                                                        parseFloat(dropoff.finalAgreedPrice) +
+                                                        (dropoff.rushServiceFee || 0) +
+                                                        (dropoff.remoteLocationFee || 0)
+                                                    ).toFixed(2)}
+                                                </span>
                                             </p>
                                         )}
 

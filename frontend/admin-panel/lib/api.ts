@@ -103,4 +103,32 @@ export const api = {
         if (!res.ok) throw new Error('Failed to fetch bids')
         return res.json()
     },
+
+    async getStates(token?: string) {
+        const headers: any = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
+
+        console.log('Fetching states with token:', token ? 'Present' : 'Missing')
+        const res = await fetch(`${API_URL}/api/geography/states`, { headers })
+        if (!res.ok) throw new Error('Failed to fetch states')
+        return res.json()
+    },
+
+    async getCitiesByState(stateId: number, token?: string) {
+        const headers: any = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
+
+        const res = await fetch(`${API_URL}/api/geography/states/${stateId}/cities`, { headers })
+        if (!res.ok) throw new Error('Failed to fetch cities')
+        return res.json()
+    },
+
+    async getCityById(cityId: number, token?: string) {
+        const headers: any = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
+
+        const res = await fetch(`${API_URL}/api/geography/cities/${cityId}`, { headers })
+        if (!res.ok) throw new Error('Failed to fetch city details')
+        return res.json()
+    },
 }

@@ -1,20 +1,135 @@
+# Compiled Java Classes & Build Artifacts
 **/target/
-**/node_modules/
-**/.DS_Store
-**/.env
-**/.env.local
-**/.env.production
-**/dist/
+*.class
+*.jar
+*.war
+*.ear
+*.iml
+
+# Maven
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Gradle
+.gradle/
 **/build/
-**/.next/
-**/out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE Files
 **/.idea/
 **/.vscode/
-*.log
-*.iml
 .classpath
 .project
 .settings/
-mysql_data/
-PRODUCTION_CREDENTIALS.md
+*.swp
+*.swo
+*~
 
+# Node.js & Next.js
+**/node_modules/
+**/.next/
+**/out/
+**/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment Variables (CRITICAL - DO NOT COMMIT)
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+**/.env.production
+.env
+
+# Database
+mysql_data/
+*.db
+*.sqlite
+
+# OS Files
+**/.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Sensitive Files
+PRODUCTION_CREDENTIALS.md
+*.pem
+*.key
+*.crt
+
+# Uploaded Files (DO NOT COMMIT USER UPLOADS)
+uploads/
+upload/
+**/uploads/
+
+# Large Binary Files
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Large Images (for development/testing only)
+*.jpeg
+*.jpg
+*.png
+!frontend/**/public/**/*.png
+!frontend/**/public/**/*.jpg
+!frontend/**/public/**/*.jpeg
+
+# Temporary Files
+*.tmp
+*.temp
+.cache
+.vagrant/
+
+# Test Files
+test.txt
+token.txt
+downloaded.txt
+dummy.pdf
+*.sql.bak
+
+# Test Coverage
+coverage/
+.nyc_output/
+
+# Documentation Build
+docs/_build/
+
+# JetBrains
+*.iws
+out/
+
+# Deployment Folder (For server deployment only, not for GitHub)
+deployment/
+
+# Configuration Files (Server-specific)
+nginx.conf
+nginx_ssl.conf
+setup_server.sh
+start_backend.sh
+start_frontend.sh
+
+# macOS
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# Windows
+ehthumbs.db
+$RECYCLE.BIN/

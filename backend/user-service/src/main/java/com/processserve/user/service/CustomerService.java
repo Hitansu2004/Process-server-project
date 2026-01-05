@@ -58,10 +58,19 @@ public class CustomerService {
 
         return customerRoles.stream()
                 .map(role -> {
-                    // Find customer profile for this role
-                    return customerRepository.findByTenantUserRoleId(role.getId())
-                            .map(profile -> enrichCustomerProfileWithRole(profile, role))
-                            .orElse(null);
+                    try {
+                        if (role.getGlobalUser() == null) {
+                            log.warn("TenantUserRole {} has no associated GlobalUser", role.getId());
+                            return null;
+                        }
+                        // Find customer profile for this role
+                        return customerRepository.findByTenantUserRoleId(role.getId())
+                                .map(profile -> enrichCustomerProfileWithRole(profile, role))
+                                .orElse(null);
+                    } catch (Exception e) {
+                        log.error("Error enriching customer for role {}: {}", role.getId(), e.getMessage());
+                        return null;
+                    }
                 })
                 .filter(dto -> dto != null)
                 .collect(Collectors.toList());

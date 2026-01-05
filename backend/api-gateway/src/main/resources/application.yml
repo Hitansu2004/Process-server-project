@@ -3,67 +3,48 @@ spring:
     name: api-gateway
   cloud:
     gateway:
-      routes:
-        # Auth Service Routes
-        - id: auth-service
-          uri: lb://AUTH-SERVICE
-          predicates:
-            - Path=/api/auth/**,/api/invites/**
-          filters:
-            - RewritePath=/api/(?<segment>.*), /api/${segment}
-        
-        # Tenant Service Routes
-        - id: tenant-service
-          uri: lb://TENANT-SERVICE
-          predicates:
-            - Path=/tenant-service/**,/api/tenants/**
-          filters:
-            - RewritePath=/tenant-service/(?<segment>.*), /${segment}
-        
-        # Order Service Routes
-        - id: order-service
-          uri: lb://ORDER-SERVICE
-          predicates:
-            - Path=/api/orders/**,/api/bids/**,/api/geography/**
-          filters:
-            - RewritePath=/api/(?<segment>.*), /api/${segment}
-        
-        # User Service Routes
-        - id: user-service
-          uri: lb://USER-SERVICE
-          predicates:
-            - Path=/api/users/**,/api/customers/**,/api/delivery-persons/**,/api/contact-book/**,/api/process-servers/**
-          filters:
-            - RewritePath=/api/(?<segment>.*), /api/${segment}
-        
-        # Notification Service Routes
-        - id: notification-service
-          uri: lb://NOTIFICATION-SERVICE
-          predicates:
-            - Path=/api/notifications/**
-          filters:
-            - RewritePath=/api/notifications/(?<segment>.*), /api/notifications/${segment}
+#      routes:
+#        # Auth Service Routes
+#        - id: auth-service
+#          uri: lb://AUTH-SERVICE
+#          predicates:
+#            - Path=/api/auth/**,/api/invites/**
+#          filters:
+#            - RewritePath=/api/(?<segment>.*), /api/${segment}
+#        
+#        # Tenant Service Routes
+#        - id: tenant-service
+#          uri: lb://TENANT-SERVICE
+#          predicates:
+#            - Path=/tenant-service/**,/api/tenants/**
+#          filters:
+#            - RewritePath=/tenant-service/(?<segment>.*), /${segment}
+#        
+#        # Order Service Routes
+#        - id: order-service
+#          uri: lb://ORDER-SERVICE
+#          predicates:
+#            - Path=/api/orders/**,/api/bids/**,/api/geography/**
+#          filters:
+#            - RewritePath=/api/(?<segment>.*), /api/${segment}
+#        
+#        # User Service Routes
+#        - id: user-service
+#          uri: lb://USER-SERVICE
+#          predicates:
+#            - Path=/api/users/**,/api/customers/**,/api/delivery-persons/**,/api/contact-book/**,/api/process-servers/**
+#          filters:
+#            - RewritePath=/api/(?<segment>.*), /api/${segment}
+#        
+#        # Notification Service Routes
+#        - id: notification-service
+#          uri: lb://NOTIFICATION-SERVICE
+#          predicates:
+#            - Path=/api/notifications/**
+#          filters:
+#            - RewritePath=/api/notifications/(?<segment>.*), /api/notifications/${segment}
       
-      globalcors:
-        corsConfigurations:
-          '[/**]':
-            allowedOrigins:
-              - "${CORS_ORIGIN_1:http://localhost:3000}"
-              - "${CORS_ORIGIN_2:http://localhost:3001}"
-              - "${CORS_ORIGIN_3:http://localhost:3002}"
-              - "${CORS_ORIGIN_4:http://localhost:3003}"
-              - "${CORS_ORIGIN_5:http://localhost:3004}"
-              - "${CORS_ORIGIN_6:http://localhost:3005}"
-              - "${CORS_ORIGIN_VPS:http://app.ezcollab.com}"
-            allowedMethods:
-              - GET
-              - POST
-              - PUT
-              - DELETE
-              - OPTIONS
-              - PATCH
-            allowedHeaders: "*"
-            allowCredentials: true
+      # globalcors removed to let Nginx handle CORS
 
 # Server Configuration - Uses environment variables with defaults
 server:

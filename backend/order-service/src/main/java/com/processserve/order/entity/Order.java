@@ -51,6 +51,9 @@ public class Order {
     @Column(name = "jurisdiction", length = 255)
     private String jurisdiction;
 
+    @Column(name = "document_url", length = 512)
+    private String documentUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private OrderStatus status;

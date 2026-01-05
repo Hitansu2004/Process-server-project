@@ -13,6 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.UUID;
 
@@ -730,8 +737,31 @@ public class OrderService {
     }
 
     private void populateCustomerName(Order order) {
+        System.out.println("DEBUG: Populating customer name for order: " + order.getOrderNumber() + ", customerId: "
+                + order.getCustomerId());
         try {
+            // Try fetching by TenantUserRoleId first (most common case)
+            try {
+                System.out.println("DEBUG: Calling getCustomerByTenantUserRoleId with " + order.getCustomerId());
+                java.util.Map<String, Object> customer = userClient
+                        .getCustomerByTenantUserRoleId(order.getCustomerId());
+                System.out.println("DEBUG: Fetched customer by role ID: " + customer);
+                if (customer != null) {
+                    String firstName = (String) customer.get("firstName");
+                    String lastName = (String) customer.get("lastName");
+                    order.setCustomerName(firstName + " " + lastName);
+                    return;
+                }
+            } catch (Exception e) {
+                System.out.println("DEBUG: Failed to fetch by role ID: " + e.getMessage());
+                e.printStackTrace();
+                // Ignore and try getUser
+            }
+
+            // Fallback to getUser (if ID is global user ID)
+            System.out.println("DEBUG: Calling getUser with " + order.getCustomerId());
             java.util.Map<String, Object> user = userClient.getUser(order.getCustomerId());
+            System.out.println("DEBUG: Fetched user by ID: " + user);
             if (user != null) {
                 String firstName = (String) user.get("firstName");
                 String lastName = (String) user.get("lastName");
@@ -740,7 +770,8 @@ public class OrderService {
                 order.setCustomerName("Unknown Customer");
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch customer name for order {}", order.getId());
+            System.out.println("DEBUG: Failed to fetch customer name for order " + order.getId());
+            e.printStackTrace();
             order.setCustomerName("Unknown Customer");
         }
     }
@@ -881,5 +912,74 @@ public class OrderService {
 
         log.warn("Order cleanup for invitation {} requested. Implementation pending cross-service ID resolution.",
                 invitationId);
+    }
+
+    /**
+     * Upload a document for an order
+     */
+    @Transactional
+    public String uploadDocument(String orderId, MultipartFile file) {
+        log.info("Uploading document for order: {}", orderId);
+
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+        try {
+            // Create uploads directory if not exists
+            // Hardcoding path to ensure it works on server
+            Path uploadDir = Paths.get("/home/ubuntu/uploads/documents");
+            log.info("Saving document to: {}", uploadDir);
+            if (!Files.exists(uploadDir)) {
+                Files.createDirectories(uploadDir);
+            }
+
+            // Generate unique filename
+            String originalFilename = file.getOriginalFilename();
+            String extension = "";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            }
+            String filename = orderId + "_" + UUID.randomUUID().toString() + extension;
+            Path filePath = uploadDir.resolve(filename);
+
+            // Save file
+            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+            // Update order with file URL/Path
+            String fileUrl = filename; // Storing just filename, will serve via endpoint
+            order.setDocumentUrl(fileUrl);
+            orderRepository.save(order);
+
+            log.info("Document uploaded successfully: {}", filename);
+            return fileUrl;
+        } catch (Exception e) {
+            log.error("Failed to upload document", e);
+            throw new RuntimeException("Failed to upload document: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get document resource for an order
+     */
+    public Resource getDocument(String orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+        if (order.getDocumentUrl() == null) {
+            throw new RuntimeException("No document found for this order");
+        }
+
+        try {
+            Path filePath = Paths.get("/home/ubuntu/uploads/documents").resolve(order.getDocumentUrl());
+            Resource resource = new UrlResource(filePath.toUri());
+
+            if (resource.exists() || resource.isReadable()) {
+                return resource;
+            } else {
+                throw new RuntimeException("Could not read file: " + order.getDocumentUrl());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Could not read file: " + order.getDocumentUrl(), e);
+        }
     }
 }

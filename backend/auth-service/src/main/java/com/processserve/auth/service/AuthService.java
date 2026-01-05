@@ -120,6 +120,25 @@ public class AuthService {
 
         log.info("Customer registered successfully: {}", tenantUserRole.getGlobalUser().getId());
 
+        // Activate invitation if exists
+        try {
+            String url = "http://USER-SERVICE/api/invitations/activate";
+
+            Map<String, String> activateRequest = new HashMap<>();
+            activateRequest.put("email", request.getEmail());
+            activateRequest.put("tenantId", request.getTenantId());
+            // processServerId is null for customers
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, String>> entity = new HttpEntity<>(activateRequest, headers);
+
+            restTemplate.postForObject(url, entity, Map.class);
+            log.info("Invitation activated for customer email: {}", request.getEmail());
+        } catch (Exception e) {
+            log.warn("Failed to activate invitation for customer: {}", e.getMessage());
+        }
+
         return new RegistrationResponse(true, "Customer registered successfully. Please login.",
                 tenantUserRole.getGlobalUser().getId());
     }
@@ -159,12 +178,18 @@ public class AuthService {
             if (processServerProfileId != null) {
                 try {
                     // Call user-service to activate invitation
-                    // URL: http://USER-SERVICE/api/invitations/activate
-                    String url = "http://USER-SERVICE/api/invitations/activate?email=" + request.getEmail()
-                            + "&tenantId=" + request.getTenantId()
-                            + "&processServerId=" + processServerProfileId;
+                    String url = "http://USER-SERVICE/api/invitations/activate";
 
-                    restTemplate.postForObject(url, null, Void.class);
+                    Map<String, String> activateRequest = new HashMap<>();
+                    activateRequest.put("email", request.getEmail());
+                    activateRequest.put("tenantId", request.getTenantId());
+                    activateRequest.put("processServerId", processServerProfileId);
+
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setContentType(MediaType.APPLICATION_JSON);
+                    HttpEntity<Map<String, String>> entity = new HttpEntity<>(activateRequest, headers);
+
+                    restTemplate.postForObject(url, entity, Map.class);
                     log.info("Invitation activated for email: {}", request.getEmail());
                 } catch (Exception e) {
                     log.warn("Failed to activate invitation via API: {}", e.getMessage());

@@ -1,5 +1,6 @@
 package com.processserve.tenant.controller;
 
+import com.processserve.tenant.dto.TenantDto;
 import com.processserve.tenant.entity.Tenant;
 import com.processserve.tenant.service.TenantService;
 import lombok.RequiredArgsConstructor;
@@ -33,8 +34,22 @@ public class TenantController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Tenant>> getAllTenants() {
-        return ResponseEntity.ok(tenantService.getAllTenants());
+    public ResponseEntity<List<TenantDto>> getAllTenants() {
+        List<Tenant> tenants = tenantService.getAllTenants();
+        List<TenantDto> tenantDtos = tenants.stream()
+                .map(this::mapToDto)
+                .toList();
+        return ResponseEntity.ok(tenantDtos);
+    }
+
+    private TenantDto mapToDto(Tenant tenant) {
+        return new TenantDto(
+                tenant.getId(),
+                tenant.getName(),
+                tenant.getDomainUrl(),
+                tenant.getIsActive(),
+                tenant.getCreatedAt(),
+                tenant.getSubscriptionTier());
     }
 
     @GetMapping("/{id}")

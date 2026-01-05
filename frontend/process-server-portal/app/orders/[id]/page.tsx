@@ -187,6 +187,60 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                     <div className="lg:col-span-2 space-y-6">
                         {/* Pickup Information Removed as per request */}
 
+                        {/* Order Information */}
+                        <div className="card">
+                            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                <span className="text-primary">📄</span> Document Information
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-sm text-gray-400">Document Type</p>
+                                    <p className="font-medium">
+                                        {order.documentType === 'OTHER' ? order.otherDocumentType : order.documentType?.replace(/_/g, ' ')}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-400">Case Number</p>
+                                    <p className="font-medium">{order.caseNumber || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-400">Jurisdiction</p>
+                                    <p className="font-medium">{order.jurisdiction || 'N/A'}</p>
+                                </div>
+                                {order.documentUrl && (
+                                    <div className="md:col-span-2 pt-2">
+                                        <p className="text-sm text-gray-400 mb-2">Uploaded Document</p>
+                                        <button
+                                            onClick={() => {
+                                                const token = localStorage.getItem('token');
+                                                fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${order.id}/document`, {
+                                                    headers: { 'Authorization': `Bearer ${token}` }
+                                                })
+                                                    .then(response => response.blob())
+                                                    .then(blob => {
+                                                        const url = window.URL.createObjectURL(blob);
+                                                        const a = document.createElement('a');
+                                                        a.href = url;
+                                                        a.download = order.documentUrl; // Use actual filename with original extension
+                                                        document.body.appendChild(a);
+                                                        a.click();
+                                                        window.URL.revokeObjectURL(url);
+                                                        document.body.removeChild(a);
+                                                    })
+                                                    .catch(err => alert('Failed to download document'));
+                                            }}
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-lg transition-colors font-semibold"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                            </svg>
+                                            Download Document
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         {/* Dropoff Information with Delivery Actions */}
                         <div className="card">
                             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -220,8 +274,23 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                                 <p className="text-gray-400">ZIP Code</p>
                                                 <p className="font-medium text-primary">{dropoff.dropoffZipCode}</p>
                                             </div>
+
+                                            {/* Badges for Rush and Remote */}
+                                            <div className="flex gap-2 mt-2">
+                                                {dropoff.rushService && (
+                                                    <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                                                        ⚡ Rush Service
+                                                    </span>
+                                                )}
+                                                {dropoff.remoteLocation && (
+                                                    <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                                                        🏝️ Remote Location
+                                                    </span>
+                                                )}
+                                            </div>
+
                                             {dropoff.attemptCount > 0 && (
-                                                <div>
+                                                <div className="mt-2">
                                                     <p className="text-gray-400">Attempts</p>
                                                     <p className="font-medium">{dropoff.attemptCount} / {dropoff.maxAttempts}</p>
                                                 </div>
@@ -293,18 +362,35 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                     <div>
                                         <p className="text-gray-400 text-sm mb-1">Payment Breakdown</p>
                                         <div className="space-y-1">
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-gray-300">Bid Amount:</span>
-                                                <span className="font-medium">${(order.customerPaymentAmount || order.finalAgreedPrice || (order.dropoffs?.reduce((sum: number, d: any) => sum + (d.finalAgreedPrice || 0), 0)) || 0).toFixed(2)}</span>
-                                            </div>
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-red-400">Platform Fee (15%):</span>
-                                                <span className="font-medium text-red-400">-${((order.customerPaymentAmount || order.finalAgreedPrice || (order.dropoffs?.reduce((sum: number, d: any) => sum + (d.finalAgreedPrice || 0), 0)) || 0) * 0.15).toFixed(2)}</span>
-                                            </div>
-                                            <div className="flex justify-between text-sm border-t border-white/10 pt-1 mt-1">
-                                                <span className="text-green-400 font-bold">Your Earnings:</span>
-                                                <span className="font-bold text-green-400">${(order.processServerPayout || ((order.finalAgreedPrice || (order.dropoffs?.reduce((sum: number, d: any) => sum + (d.finalAgreedPrice || 0), 0)) || 0) * 0.85)).toFixed(2)}</span>
-                                            </div>
+                                            {(() => {
+                                                // Calculate the actual customer payment (base + rush + remote fees)
+                                                const customerPayment = order.dropoffs?.reduce((sum: number, d: any) => {
+                                                    const basePrice = parseFloat(d.finalAgreedPrice) || 0;
+                                                    const rushFee = parseFloat(d.rushServiceFee) || 0;
+                                                    const remoteFee = parseFloat(d.remoteLocationFee) || 0;
+                                                    return sum + basePrice + rushFee + remoteFee;
+                                                }, 0) || 0;
+
+                                                const platformFee = customerPayment * 0.15;
+                                                const processServerEarnings = customerPayment - platformFee;
+
+                                                return (
+                                                    <>
+                                                        <div className="flex justify-between text-sm">
+                                                            <span className="text-gray-300">Customer Paid:</span>
+                                                            <span className="font-medium">${customerPayment.toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-sm">
+                                                            <span className="text-red-400">Platform Fee (15%):</span>
+                                                            <span className="font-medium text-red-400">-${platformFee.toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-sm border-t border-white/10 pt-1 mt-1">
+                                                            <span className="text-green-400 font-bold">Your Earnings:</span>
+                                                            <span className="font-bold text-green-400">${processServerEarnings.toFixed(2)}</span>
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 </div>

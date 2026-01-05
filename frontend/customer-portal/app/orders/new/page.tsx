@@ -354,6 +354,7 @@ function ProcessServerModal({
 export default function NewOrder() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState(0)
     const [contactList, setContactList] = useState<ContactEntry[]>([])
     const [defaultProcessServerId, setDefaultProcessServerId] = useState<string | null>(null)
     const [customerProfileId, setCustomerProfileId] = useState<string | null>(null)
@@ -370,6 +371,7 @@ export default function NewOrder() {
         caseNumber: '',
         jurisdiction: '',
     })
+    const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [dropoffs, setDropoffs] = useState<Dropoff[]>([{
         recipientName: '',
         dropoffAddress: '',
@@ -685,6 +687,17 @@ export default function NewOrder() {
 
             const newOrder = await api.createOrder(orderData, token!)
 
+            if (selectedFile) {
+                try {
+                    await api.uploadOrderDocument(newOrder.id, selectedFile, token!, (progress) => {
+                        setUploadProgress(progress)
+                    })
+                } catch (uploadError) {
+                    console.error('Failed to upload document:', uploadError)
+                    alert('Order created but document upload failed. Please try uploading again from the order details page.')
+                }
+            }
+
             // Clear saved data on success
             localStorage.removeItem('newOrder_formData')
             localStorage.removeItem('newOrder_dropoffs')
@@ -788,6 +801,58 @@ export default function NewOrder() {
                                 />
                             </div>
                         </div>
+
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium mb-2">Upload Document (PDF, Word, Images)</label>
+                            <div className="flex items-center justify-center w-full">
+                                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 border-gray-300">
+                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                        <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
+                                            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2" />
+                                        </svg>
+                                        <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                                        <p className="text-xs text-gray-500">PDF, DOC, DOCX, JPG, PNG</p>
+                                    </div>
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                        onChange={(e) => {
+                                            if (e.target.files && e.target.files[0]) {
+                                                const file = e.target.files[0]
+                                                if (file.size > 5 * 1024 * 1024) {
+                                                    alert('File size exceeds 5MB limit. Please choose a smaller file.')
+                                                    e.target.value = '' // Reset input
+                                                    return
+                                                }
+                                                setSelectedFile(file)
+                                            }
+                                        }}
+                                    />
+                                </label>
+                            </div>
+                            {selectedFile && (
+                                <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
+                                    <Check className="w-4 h-4" />
+                                    <span>Selected: {selectedFile.name}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedFile(null)}
+                                        className="text-red-500 hover:text-red-700 ml-2"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        {uploadProgress > 0 && uploadProgress < 100 && (
+                            <div className="mt-4">
+                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
+                                </div>
+                                <p className="text-xs text-center mt-1 text-gray-500">{uploadProgress}% Uploading...</p>
+                            </div>
+                        )}
 
                         <div className="mt-4">
                             <label className="block text-sm font-medium mb-2">Special Instructions (Optional)</label>

@@ -13,6 +13,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
 
 import java.util.HashMap;
 import java.util.List;
@@ -291,5 +295,36 @@ public class OrderController {
         response.put("status", "UP");
         response.put("service", "order-service");
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping(value = "/{id}/document", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> uploadDocument(@PathVariable String id, @RequestParam("file") MultipartFile file) {
+        try {
+            String fileUrl = orderService.uploadDocument(id, file);
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Document uploaded successfully");
+            response.put("documentUrl", fileUrl);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to upload document: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    @GetMapping("/{id}/document")
+    public ResponseEntity<Resource> downloadDocument(@PathVariable String id) {
+        try {
+            Resource resource = orderService.getDocument(id);
+            String contentType = "application/octet-stream";
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
+                    .body(resource);
+        } catch (Exception e) {
+            log.error("Failed to download document: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
     }
 }

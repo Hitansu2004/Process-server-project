@@ -57,7 +57,15 @@ public class InvitationService {
         contactEntry.setEntryType(ContactBookEntry.EntryType.MANUAL);
         contactEntry.setActivationStatus(ContactBookEntry.ActivationStatus.NOT_ACTIVATED);
         contactEntry.setInvitationId(invitation.getId());
-        contactEntry.setNickname(firstName + " " + lastName);
+        String nickname;
+        if ((firstName == null || firstName.trim().isEmpty()) && (lastName == null || lastName.trim().isEmpty())) {
+            // Fallback to email prefix if names are missing
+            nickname = invitedEmail.split("@")[0];
+        } else {
+            nickname = (firstName != null ? firstName : "") + " " + (lastName != null ? lastName : "");
+            nickname = nickname.trim();
+        }
+        contactEntry.setNickname(nickname);
 
         contactBookRepository.save(contactEntry);
 

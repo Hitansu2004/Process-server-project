@@ -23,8 +23,8 @@ export default function RegisterPage() {
     })
 
     const tenantId = typeof window !== 'undefined'
-        ? sessionStorage.getItem('selectedTenant') || searchParams.get('tenant') || 'tenant-1'
-        : 'tenant-1'
+        ? sessionStorage.getItem('selectedTenant') || searchParams.get('tenant') || 'tenant-main-001'
+        : 'tenant-main-001'
 
     useEffect(() => {
         const emailParam = searchParams.get('email')

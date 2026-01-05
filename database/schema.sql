@@ -265,6 +265,10 @@ CREATE TABLE `notifications` (
   `message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `is_read` tinyint(1) DEFAULT '0',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `tenant_id` varchar(255) NOT NULL DEFAULT 'tenant-main-001',
+  `type` varchar(50) NOT NULL DEFAULT 'INFO',
+  `title` varchar(255) NOT NULL DEFAULT 'Notification',
+  `related_order_id` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -435,6 +439,7 @@ CREATE TABLE `orders` (
   `jurisdiction` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `order_type` enum('PROCESS_SERVICE','CERTIFIED_MAIL') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `other_document_type` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `document_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `UK_nthkiu7pgmnqnu86i2jyoe2v7` (`order_number`),
   KEY `idx_orders_is_editable` (`is_editable`),

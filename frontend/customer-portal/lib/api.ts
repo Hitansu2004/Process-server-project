@@ -34,6 +34,36 @@ export const api = {
         return response.json()
     },
 
+    async uploadOrderDocument(orderId: string, file: File, token: string, onProgress?: (progress: number) => void) {
+        return new Promise((resolve, reject) => {
+            const formData = new FormData()
+            formData.append('file', file)
+
+            const xhr = new XMLHttpRequest()
+            xhr.open('POST', `${API_URL}/api/orders/${orderId}/document`)
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable && onProgress) {
+                    const progress = Math.round((event.loaded / event.total) * 100)
+                    onProgress(progress)
+                }
+            }
+
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve(JSON.parse(xhr.responseText))
+                } else {
+                    reject(new Error(xhr.statusText || 'Failed to upload document'))
+                }
+            }
+
+            xhr.onerror = () => reject(new Error('Network error'))
+
+            xhr.send(formData)
+        })
+    },
+
     async getProcessServerOrders(processServerId: string, token: string) {
         const res = await fetch(`${API_URL}/api/orders/process-server/${processServerId}`, {
             headers: {
@@ -172,13 +202,18 @@ export const api = {
     },
 
     async inviteProcessServer(email: string, inviterName: string, invitedByUserId: string, tenantId: string, token: string) {
-        const response = await fetch(`${API_URL}/api/invites/process-server`, {
+        const response = await fetch(`${API_URL}/api/invitations`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
             },
-            body: JSON.stringify({ email, inviterName, invitedByUserId, tenantId }),
+            body: JSON.stringify({
+                invitedEmail: email,
+                invitedByUserId,
+                tenantId,
+                role: 'PROCESS_SERVER'
+            }),
         })
         if (!response.ok) {
             const error = await response.text()

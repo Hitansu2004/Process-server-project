@@ -594,7 +594,9 @@ export default function Contacts() {
                                                                 <div className="flex-1 min-w-0">
                                                                     <div className="flex items-center gap-2 mb-1.5">
                                                                         <h3 className="font-semibold text-gray-800 text-base truncate">
-                                                                            {contact.nickname || contact.processServerId}
+                                                                            {(contact.nickname && contact.nickname !== 'null null')
+                                                                                ? contact.nickname
+                                                                                : contact.processServerId.split('@')[0]}
                                                                         </h3>
                                                                         <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-800 text-xs font-medium">
                                                                             Pending
