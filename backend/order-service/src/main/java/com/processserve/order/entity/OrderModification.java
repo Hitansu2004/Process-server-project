@@ -45,9 +45,9 @@ public class OrderModification {
     public enum ModificationType {
         UPDATE_DETAILS,
         CANCEL,
-        ADD_DROPOFF,
-        REMOVE_DROPOFF,
-        MODIFY_DROPOFF,
+        ADD_RECIPIENT,
+        REMOVE_RECIPIENT,
+        MODIFY_RECIPIENT,
         UPDATE_DEADLINE,
         UPDATE_INSTRUCTIONS
     }

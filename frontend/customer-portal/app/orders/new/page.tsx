@@ -31,18 +31,20 @@ interface ContactEntry {
     processServerDetails?: ProcessServerDetails | null
 }
 
-interface Dropoff {
+interface Recipient {
     recipientName: string
-    dropoffAddress: string
-    dropoffZipCode: string
-    dropoffType: string
+    recipientAddress: string
+    recipientCity: string
+    recipientZipCode: string
+    recipientType: string
     assignedProcessServerId: string
     finalAgreedPrice: string
-    dropoffStateId: number | null
-    dropoffCityId: number | null
+    recipientStateId: number | null
+    recipientCityId: number | null
     rushService: boolean
     remoteLocation: boolean
-    serviceType: 'PROCESS_SERVICE' | 'CERTIFIED_MAIL'
+    processService: boolean
+    certifiedMail: boolean
 }
 
 // Modal Component using React Portal
@@ -372,23 +374,27 @@ export default function NewOrder() {
         jurisdiction: '',
     })
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
-    const [dropoffs, setDropoffs] = useState<Dropoff[]>([{
+    const [filePageCount, setFilePageCount] = useState<number | null>(null)
+    const [isDragging, setIsDragging] = useState(false)
+    const [recipients, setRecipients] = useState<Recipient[]>([{
         recipientName: '',
-        dropoffAddress: '',
-        dropoffZipCode: '',
-        dropoffType: 'AUTOMATED',
+        recipientAddress: '',
+        recipientCity: '',
+        recipientZipCode: '',
+        recipientType: 'AUTOMATED',
         assignedProcessServerId: '',
         finalAgreedPrice: '',
-        dropoffStateId: null,
-        dropoffCityId: null,
+        recipientStateId: null,
+        recipientCityId: null,
         rushService: false,
         remoteLocation: false,
-        serviceType: 'PROCESS_SERVICE',
+        processService: true,
+        certifiedMail: false,
     }])
-    const dropoffRefs = useRef<(HTMLDivElement | null)[]>([])
+    const recipientRefs = useRef<(HTMLDivElement | null)[]>([])
 
     const [states, setStates] = useState<any[]>([])
-    const [citiesByDropoff, setCitiesByDropoff] = useState<Record<number, any[]>>({})
+    const [citiesByRecipient, setCitiesByRecipient] = useState<Record<number, any[]>>({})
 
     // Filter and sort function
     const filterAndSortContacts = (contacts: ContactEntry[]) => {
@@ -562,66 +568,177 @@ export default function NewOrder() {
         fetchData()
     }, [])
 
-    const addDropoff = () => {
-        const newDropoff = {
+    const addRecipient = () => {
+        const newRecipient = {
             recipientName: '',
-            dropoffAddress: '',
-            dropoffZipCode: '',
-            dropoffType: 'AUTOMATED',
+            recipientAddress: '',
+            recipientCity: '',
+            recipientZipCode: '',
+            recipientType: 'AUTOMATED',
             assignedProcessServerId: '',
             finalAgreedPrice: '',
-            dropoffStateId: null as number | null,
-            dropoffCityId: null as number | null,
+            recipientStateId: null as number | null,
+            recipientCityId: null as number | null,
             rushService: false,
             remoteLocation: false,
-            serviceType: 'PROCESS_SERVICE' as 'PROCESS_SERVICE' | 'CERTIFIED_MAIL',
+            processService: true,
+            certifiedMail: false,
         }
-        setDropoffs([...dropoffs, newDropoff])
+        setRecipients([...recipients, newRecipient])
 
         setTimeout(() => {
-            const newIndex = dropoffs.length
-            dropoffRefs.current[newIndex]?.scrollIntoView({
+            const newIndex = recipients.length
+            recipientRefs.current[newIndex]?.scrollIntoView({
                 behavior: 'smooth',
                 block: 'center'
             })
         }, 100)
     }
 
-    const removeDropoff = (index: number) => {
-        setDropoffs(dropoffs.filter((_, i) => i !== index))
+    const removeRecipient = (index: number) => {
+        setRecipients(recipients.filter((_, i) => i !== index))
     }
 
-    const updateDropoff = (index: number, field: string, value: any) => {
-        const updated = [...dropoffs]
+    const updateRecipient = (index: number, field: string, value: any) => {
+        const updated = [...recipients]
         updated[index] = { ...updated[index], [field]: value }
-        setDropoffs(updated)
+        setRecipients(updated)
     }
 
     const handleStateChange = async (index: number, stateId: number) => {
-        const updated = [...dropoffs]
-        updated[index].dropoffStateId = stateId
-        updated[index].dropoffCityId = null
-        updated[index].dropoffZipCode = ''
-        setDropoffs(updated)
+        const updated = [...recipients]
+        updated[index].recipientStateId = stateId
+        updated[index].recipientCityId = null
+        updated[index].recipientZipCode = ''
+        setRecipients(updated)
 
         try {
             const cities = await api.getCitiesByState(stateId)
-            setCitiesByDropoff({ ...citiesByDropoff, [index]: cities })
+            setCitiesByRecipient({ ...citiesByRecipient, [index]: cities })
         } catch (error) {
             console.error('Failed to load cities:', error)
         }
     }
 
     const handleCityChange = async (index: number, cityId: number) => {
-        const updated = [...dropoffs]
-        updated[index].dropoffCityId = cityId
+        const updated = [...recipients]
+        updated[index].recipientCityId = cityId
+        // ZIP code is now manually entered, not auto-populated
+        setRecipients(updated)
+    }
+
+    // Count PDF pages using pdf.js
+    const countPDFPages = async (file: File): Promise<number | null> => {
+        if (!file.name.toLowerCase().endsWith('.pdf')) {
+            return null
+        }
 
         try {
-            const city = await api.getCityById(cityId)
-            updated[index].dropoffZipCode = city.zipCode
-            setDropoffs(updated)
+            const arrayBuffer = await file.arrayBuffer()
+            const uint8Array = new Uint8Array(arrayBuffer)
+
+            // Simple PDF page count by looking for /Type /Page entries
+            const text = new TextDecoder('latin1').decode(uint8Array)
+            const pageMatches = text.match(/\/Type\s*\/Page[^s]/g)
+
+            if (pageMatches) {
+                return pageMatches.length
+            }
+
+            return null
         } catch (error) {
-            console.error('Failed to get city details:', error)
+            console.error('Error counting PDF pages:', error)
+            return null
+        }
+    }
+
+    // Handle file selection
+    const handleFileSelect = async (file: File) => {
+        setSelectedFile(file)
+
+        // Count pages for PDF files
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+            const pageCount = await countPDFPages(file)
+            setFilePageCount(pageCount)
+        } else {
+            setFilePageCount(null)
+        }
+    }
+
+    // Drag and drop file handlers
+    const handleDragEnter = (e: React.DragEvent<HTMLLabelElement>) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(true)
+    }
+
+    const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+    }
+
+    const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+        e.preventDefault()
+        e.stopPropagation()
+    }
+
+    const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+
+        const files = e.dataTransfer?.files
+        if (files && files.length > 0) {
+            const file = files[0]
+
+            // Validate file type
+            const validTypes = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png']
+            const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+            if (!validTypes.includes(fileExtension)) {
+                alert('Invalid file type. Please upload PDF, DOC, DOCX, JPG, or PNG files only.')
+                return
+            }
+
+            // Validate file size
+            if (file.size > 5 * 1024 * 1024) {
+                alert('File size exceeds 5MB limit. Please choose a smaller file.')
+                return
+            }
+
+            handleFileSelect(file)
+        }
+    }
+
+    // Auto-save draft when navigating away
+    const handleBackToDashboard = async () => {
+        // Check if form has any data
+        const hasFormData =
+            formData.caseNumber.trim() !== '' ||
+            formData.jurisdiction.trim() !== '' ||
+            formData.documentType !== '' ||
+            formData.deadline !== '' ||
+            formData.specialInstructions.trim() !== '' ||
+            selectedFile !== null ||
+            recipients.some(d =>
+                d.recipientName.trim() !== '' ||
+                d.recipientAddress.trim() !== '' ||
+                d.recipientCity.trim() !== '' ||
+                d.recipientZipCode.trim() !== ''
+            )
+
+        if (hasFormData) {
+            const confirmed = confirm('You have unsaved changes. Would you like to save this as a draft before leaving?')
+            if (confirmed) {
+                await handleSubmit(null, true) // Save as draft
+            } else {
+                // Clear localStorage and navigate
+                localStorage.removeItem('newOrder_formData')
+                localStorage.removeItem('newOrder_recipients')
+                router.push('/dashboard')
+            }
+        } else {
+            router.push('/dashboard')
         }
     }
 
@@ -630,7 +747,7 @@ export default function NewOrder() {
     // Persistence Logic
     useEffect(() => {
         const savedFormData = localStorage.getItem('newOrder_formData')
-        const savedDropoffs = localStorage.getItem('newOrder_dropoffs')
+        const savedRecipients = localStorage.getItem('newOrder_recipients')
 
         if (savedFormData) {
             try {
@@ -640,11 +757,11 @@ export default function NewOrder() {
             }
         }
 
-        if (savedDropoffs) {
+        if (savedRecipients) {
             try {
-                setDropoffs(JSON.parse(savedDropoffs))
+                setRecipients(JSON.parse(savedRecipients))
             } catch (e) {
-                console.error("Failed to parse saved dropoffs", e)
+                console.error("Failed to parse saved recipients", e)
             }
         }
     }, [])
@@ -654,40 +771,51 @@ export default function NewOrder() {
     }, [formData])
 
     useEffect(() => {
-        localStorage.setItem('newOrder_dropoffs', JSON.stringify(dropoffs))
-    }, [dropoffs])
+        localStorage.setItem('newOrder_recipients', JSON.stringify(recipients))
+    }, [recipients])
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
+    const handleSubmit = async (e: React.FormEvent | null, forceDraft: boolean = false) => {
+        if (e) e.preventDefault()
+        await saveOrder(forceDraft) // false = not a draft, true = force draft
+    }
+
+    const handleSaveAsDraft = async () => {
+        await saveOrder(true) // true = save as draft
+    }
+
+    const saveOrder = async (isDraft: boolean) => {
         setLoading(true)
 
         try {
             const token = sessionStorage.getItem('token')
             const user = JSON.parse(sessionStorage.getItem('user') || '{}')
             const customerId = user.roles?.[0]?.id || user.userId
-            const formattedDeadline = formData.deadline.includes(':00:')
-                ? formData.deadline
-                : `${formData.deadline}:00`
+
+            // For drafts, use current date/time if deadline not provided
+            const deadline = formData.deadline
+                ? (formData.deadline.includes(':00:') ? formData.deadline : `${formData.deadline}:00`)
+                : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T12:00:00'
 
             const orderData = {
                 tenantId: user.roles[0]?.tenantId,
                 customerId: customerId,
                 ...formData,
-                deadline: formattedDeadline,
-                documentType: formData.documentType,
+                deadline: deadline,
+                documentType: formData.documentType || (isDraft ? 'OTHER' : formData.documentType),
                 otherDocumentType: formData.documentType === 'OTHER' ? formData.otherDocumentType : null,
-                caseNumber: formData.caseNumber,
-                jurisdiction: formData.jurisdiction,
-                dropoffs: dropoffs.map(d => ({
-                    ...d,
-                    assignedProcessServerId: d.dropoffType === 'AUTOMATED' ? null : d.assignedProcessServerId,
-                    finalAgreedPrice: d.dropoffType === 'GUIDED' && d.finalAgreedPrice ? parseFloat(d.finalAgreedPrice) : null,
+                caseNumber: formData.caseNumber || '',
+                jurisdiction: formData.jurisdiction || '',
+                status: isDraft ? 'DRAFT' : undefined, // Set status to DRAFT if saving as draft
+                recipients: recipients.map(r => ({
+                    ...r,
+                    assignedProcessServerId: r.recipientType === 'AUTOMATED' ? null : r.assignedProcessServerId,
+                    finalAgreedPrice: r.recipientType === 'GUIDED' && r.finalAgreedPrice ? parseFloat(r.finalAgreedPrice) : null,
                 })),
             }
 
             const newOrder = await api.createOrder(orderData, token!)
 
-            if (selectedFile) {
+            if (selectedFile && !isDraft) {
                 try {
                     await api.uploadOrderDocument(newOrder.id, selectedFile, token!, (progress) => {
                         setUploadProgress(progress)
@@ -700,12 +828,16 @@ export default function NewOrder() {
 
             // Clear saved data on success
             localStorage.removeItem('newOrder_formData')
-            localStorage.removeItem('newOrder_dropoffs')
+            localStorage.removeItem('newOrder_recipients')
+
+            if (isDraft) {
+                alert('Order saved as draft successfully!')
+            }
 
             router.push(`/orders/${newOrder.id}`)
         } catch (error) {
             console.error('Order creation error:', error)
-            alert('Failed to create order')
+            alert(`Failed to ${isDraft ? 'save draft' : 'create order'}`)
         } finally {
             setLoading(false)
         }
@@ -716,7 +848,8 @@ export default function NewOrder() {
             <div className="max-w-4xl mx-auto">
                 <div className="flex items-center gap-4 mb-8">
                     <button
-                        onClick={() => router.back()}
+                        type="button"
+                        onClick={handleBackToDashboard}
                         className="glass px-4 py-2 rounded-lg hover:bg-white/10"
                     >
                         ← Back
@@ -793,7 +926,7 @@ export default function NewOrder() {
                             <div>
                                 <label className="block text-sm font-medium mb-2">Deadline</label>
                                 <input
-                                    type="datetime-local"
+                                    type="date"
                                     value={formData.deadline}
                                     onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
                                     className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
@@ -805,13 +938,24 @@ export default function NewOrder() {
                         <div className="mt-4">
                             <label className="block text-sm font-medium mb-2">Upload Document (PDF, Word, Images)</label>
                             <div className="flex items-center justify-center w-full">
-                                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 border-gray-300">
+                                <label
+                                    className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-all duration-200 ${isDragging
+                                        ? 'bg-blue-50 border-blue-500 scale-105'
+                                        : 'hover:bg-gray-50 border-gray-300'
+                                        }`}
+                                    onDragEnter={handleDragEnter}
+                                    onDragLeave={handleDragLeave}
+                                    onDragOver={handleDragOver}
+                                    onDrop={handleDrop}
+                                >
                                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                        <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
+                                        <svg className={`w-8 h-8 mb-4 transition-colors ${isDragging ? 'text-blue-500' : 'text-gray-500'}`} aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
                                             <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2" />
                                         </svg>
-                                        <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                        <p className="text-xs text-gray-500">PDF, DOC, DOCX, JPG, PNG</p>
+                                        <p className={`mb-2 text-sm transition-colors ${isDragging ? 'text-blue-600' : 'text-gray-500'}`}>
+                                            <span className="font-semibold">{isDragging ? 'Drop file here' : 'Click to upload'}</span> {!isDragging && 'or drag and drop'}
+                                        </p>
+                                        <p className={`text-xs transition-colors ${isDragging ? 'text-blue-500' : 'text-gray-500'}`}>PDF, DOC, DOCX, JPG, PNG</p>
                                     </div>
                                     <input
                                         type="file"
@@ -825,23 +969,79 @@ export default function NewOrder() {
                                                     e.target.value = '' // Reset input
                                                     return
                                                 }
-                                                setSelectedFile(file)
+                                                handleFileSelect(file)
                                             }
                                         }}
                                     />
                                 </label>
                             </div>
                             {selectedFile && (
-                                <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
-                                    <Check className="w-4 h-4" />
-                                    <span>Selected: {selectedFile.name}</span>
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedFile(null)}
-                                        className="text-red-500 hover:text-red-700 ml-2"
-                                    >
-                                        Remove
-                                    </button>
+                                <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-center gap-3 flex-1">
+                                            <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-green-900 truncate">
+                                                    {selectedFile.name}
+                                                </p>
+                                                <div className="flex items-center gap-3 mt-1">
+                                                    <span className="text-xs text-green-700">
+                                                        {(selectedFile.size / 1024).toFixed(1)} KB
+                                                    </span>
+                                                    {filePageCount !== null && (
+                                                        <span className="text-xs text-green-700 font-medium bg-green-100 px-2 py-0.5 rounded">
+                                                            📄 {filePageCount} {filePageCount === 1 ? 'page' : 'pages'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            {selectedFile.type === 'application/pdf' && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const url = URL.createObjectURL(selectedFile)
+                                                            window.open(url, '_blank')
+                                                        }}
+                                                        className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors"
+                                                        title="View PDF"
+                                                    >
+                                                        👁 View
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const url = URL.createObjectURL(selectedFile)
+                                                            const a = document.createElement('a')
+                                                            a.href = url
+                                                            a.download = selectedFile.name
+                                                            document.body.appendChild(a)
+                                                            a.click()
+                                                            document.body.removeChild(a)
+                                                            URL.revokeObjectURL(url)
+                                                        }}
+                                                        className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors"
+                                                        title="Download PDF"
+                                                    >
+                                                        ⬇ Download
+                                                    </button>
+                                                </>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedFile(null)
+                                                    setFilePageCount(null)
+                                                }}
+                                                className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
+                                                title="Remove file"
+                                            >
+                                                ✕ Remove
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -865,32 +1065,32 @@ export default function NewOrder() {
                         </div>
                     </div>
 
-                    {/* Dropoffs */}
+                    {/* Recipients */}
                     <div>
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-semibold">Delivery Destinations</h2>
                             <button
                                 type="button"
-                                onClick={addDropoff}
+                                onClick={addRecipient}
                                 className="px-4 py-2 glass rounded-lg hover:bg-primary/20 transition"
                             >
-                                + Add Dropoff
+                                + Add Recipient
                             </button>
                         </div>
 
                         <div className="space-y-4">
-                            {dropoffs.map((dropoff, index) => (
+                            {recipients.map((recipient, index) => (
                                 <div
                                     key={index}
-                                    ref={(el) => { dropoffRefs.current[index] = el }}
+                                    ref={(el) => { recipientRefs.current[index] = el }}
                                     className="glass rounded-lg p-4"
                                 >
                                     <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-medium">Dropoff #{index + 1}</h3>
-                                        {dropoffs.length > 1 && (
+                                        <h3 className="font-medium">Recipient #{index + 1}</h3>
+                                        {recipients.length > 1 && (
                                             <button
                                                 type="button"
-                                                onClick={() => removeDropoff(index)}
+                                                onClick={() => removeRecipient(index)}
                                                 className="text-red-500 hover:text-red-400 text-sm"
                                             >
                                                 Remove
@@ -903,8 +1103,8 @@ export default function NewOrder() {
                                             <label className="block text-sm font-medium mb-2">Recipient Name</label>
                                             <input
                                                 type="text"
-                                                value={dropoff.recipientName}
-                                                onChange={(e) => updateDropoff(index, 'recipientName', e.target.value)}
+                                                value={recipient.recipientName}
+                                                onChange={(e) => updateRecipient(index, 'recipientName', e.target.value)}
                                                 className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
                                                 placeholder="John Doe"
                                                 required
@@ -914,8 +1114,8 @@ export default function NewOrder() {
                                             <label className="block text-sm font-medium mb-2">Address</label>
                                             <input
                                                 type="text"
-                                                value={dropoff.dropoffAddress}
-                                                onChange={(e) => updateDropoff(index, 'dropoffAddress', e.target.value)}
+                                                value={recipient.recipientAddress}
+                                                onChange={(e) => updateRecipient(index, 'recipientAddress', e.target.value)}
                                                 className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
                                                 placeholder="456 Park Ave"
                                                 required
@@ -925,7 +1125,7 @@ export default function NewOrder() {
                                         <div>
                                             <label className="block text-sm font-medium mb-2">State *</label>
                                             <select
-                                                value={dropoff.dropoffStateId || ''}
+                                                value={recipient.recipientStateId || ''}
                                                 onChange={(e) => handleStateChange(index, Number(e.target.value))}
                                                 className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
                                                 required
@@ -941,30 +1141,25 @@ export default function NewOrder() {
 
                                         <div>
                                             <label className="block text-sm font-medium mb-2">City *</label>
-                                            <select
-                                                value={dropoff.dropoffCityId || ''}
-                                                onChange={(e) => handleCityChange(index, Number(e.target.value))}
-                                                disabled={!dropoff.dropoffStateId}
-                                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                            <input
+                                                type="text"
+                                                value={recipient.recipientCity || ''}
+                                                onChange={(e) => updateRecipient(index, 'recipientCity', e.target.value)}
+                                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                                placeholder="Enter city name"
                                                 required
-                                            >
-                                                <option value="">Select City</option>
-                                                {(citiesByDropoff[index] || []).map(city => (
-                                                    <option key={city.id} value={city.id}>
-                                                        {city.name}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                            />
                                         </div>
 
                                         <div>
                                             <label className="block text-sm font-medium mb-2">ZIP Code</label>
                                             <input
                                                 type="text"
-                                                value={dropoff.dropoffZipCode}
-                                                readOnly
-                                                className="w-full px-4 py-3 rounded-lg glass bg-gray-800/50 cursor-not-allowed"
-                                                placeholder="Auto-fills when city selected"
+                                                value={recipient.recipientZipCode}
+                                                onChange={(e) => updateRecipient(index, 'recipientZipCode', e.target.value)}
+                                                className="w-full px-4 py-3 rounded-lg glass"
+                                                placeholder="Enter ZIP code"
+                                                required
                                             />
                                         </div>
                                     </div>
@@ -974,8 +1169,8 @@ export default function NewOrder() {
                                         <div>
                                             <label className="block text-sm font-medium mb-2">Assignment Type</label>
                                             <select
-                                                value={dropoff.dropoffType}
-                                                onChange={(e) => updateDropoff(index, 'dropoffType', e.target.value)}
+                                                value={recipient.recipientType}
+                                                onChange={(e) => updateRecipient(index, 'recipientType', e.target.value)}
                                                 className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
                                             >
                                                 <option value="AUTOMATED">Open Bid (Automated)</option>
@@ -983,7 +1178,7 @@ export default function NewOrder() {
                                             </select>
                                         </div>
 
-                                        {dropoff.dropoffType === 'GUIDED' && (
+                                        {recipient.recipientType === 'GUIDED' && (
                                             <div className="space-y-4">
                                                 <div>
                                                     <label className="block text-sm font-medium mb-3 text-gray-700">
@@ -1002,7 +1197,7 @@ export default function NewOrder() {
                                                             className="w-full px-5 py-4 rounded-xl bg-white hover:bg-gray-50 border-2 border-gray-200 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-left flex items-center justify-between group transition-all shadow-sm hover:shadow-md"
                                                         >
                                                             <div className="flex items-center gap-3 flex-1">
-                                                                {dropoff.assignedProcessServerId ? (
+                                                                {recipient.assignedProcessServerId ? (
                                                                     <>
                                                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center flex-shrink-0 shadow-md">
                                                                             <Check className="w-5 h-5 text-white" />
@@ -1010,7 +1205,7 @@ export default function NewOrder() {
                                                                         <div className="flex-1">
                                                                             <div className="text-gray-900 font-semibold">
                                                                                 {(() => {
-                                                                                    const contact = contactList.find(c => c.processServerId === dropoff.assignedProcessServerId)
+                                                                                    const contact = contactList.find(c => c.processServerId === recipient.assignedProcessServerId)
                                                                                     const details = contact?.processServerDetails
                                                                                     return contact?.nickname || details?.name || 'Unknown Server'
                                                                                 })()}
@@ -1019,14 +1214,14 @@ export default function NewOrder() {
                                                                                 <span className="flex items-center gap-1">
                                                                                     <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
                                                                                     {(() => {
-                                                                                        const contact = contactList.find(c => c.processServerId === dropoff.assignedProcessServerId)
+                                                                                        const contact = contactList.find(c => c.processServerId === recipient.assignedProcessServerId)
                                                                                         return Number(contact?.processServerDetails?.currentRating || 0).toFixed(1)
                                                                                     })()}
                                                                                 </span>
                                                                                 <span>•</span>
                                                                                 <span>
                                                                                     {(() => {
-                                                                                        const contact = contactList.find(c => c.processServerId === dropoff.assignedProcessServerId)
+                                                                                        const contact = contactList.find(c => c.processServerId === recipient.assignedProcessServerId)
                                                                                         return contact?.processServerDetails?.totalOrdersAssigned || 0
                                                                                     })()} orders
                                                                                 </span>
@@ -1064,8 +1259,8 @@ export default function NewOrder() {
                                                         <input
                                                             type="number"
                                                             step="0.01"
-                                                            value={dropoff.finalAgreedPrice || ''}
-                                                            onChange={(e) => updateDropoff(index, 'finalAgreedPrice', e.target.value)}
+                                                            value={recipient.finalAgreedPrice || ''}
+                                                            onChange={(e) => updateRecipient(index, 'finalAgreedPrice', e.target.value)}
                                                             className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none font-medium"
                                                             placeholder="0.00"
                                                         />
@@ -1076,14 +1271,14 @@ export default function NewOrder() {
 
                                         {/* Order Type Selection */}
                                         <div className="mt-4 pt-4 border-t border-gray-200/50">
-                                            <label className="block text-sm font-medium mb-2">Order Type</label>
+                                            <label className="block text-sm font-medium mb-2">Order Type <span className="text-gray-400 text-xs">(Select one or both)</span></label>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <label className={`flex items-center gap-3 p-3 rounded-lg glass cursor-pointer transition-colors ${dropoff.serviceType === 'PROCESS_SERVICE' ? 'bg-blue-50 border-blue-200' : 'hover:bg-white/40'}`}>
+                                                <label className={`flex items-center gap-3 p-3 rounded-lg glass cursor-pointer transition-colors border-2 ${recipient.processService ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-white/40'}`}>
                                                     <input
                                                         type="checkbox"
-                                                        checked={dropoff.serviceType === 'PROCESS_SERVICE'}
-                                                        onChange={() => updateDropoff(index, 'serviceType', 'PROCESS_SERVICE')}
-                                                        className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                                                        checked={recipient.processService}
+                                                        onChange={(e) => updateRecipient(index, 'processService', e.target.checked)}
+                                                        className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"
                                                     />
                                                     <div>
                                                         <span className="font-medium text-gray-900">Process Service</span>
@@ -1091,12 +1286,12 @@ export default function NewOrder() {
                                                     </div>
                                                 </label>
 
-                                                <label className={`flex items-center gap-3 p-3 rounded-lg glass cursor-pointer transition-colors ${dropoff.serviceType === 'CERTIFIED_MAIL' ? 'bg-blue-50 border-blue-200' : 'hover:bg-white/40'}`}>
+                                                <label className={`flex items-center gap-3 p-3 rounded-lg glass cursor-pointer transition-colors border-2 ${recipient.certifiedMail ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-white/40'}`}>
                                                     <input
                                                         type="checkbox"
-                                                        checked={dropoff.serviceType === 'CERTIFIED_MAIL'}
-                                                        onChange={() => updateDropoff(index, 'serviceType', 'CERTIFIED_MAIL')}
-                                                        className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                                                        checked={recipient.certifiedMail}
+                                                        onChange={(e) => updateRecipient(index, 'certifiedMail', e.target.checked)}
+                                                        className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"
                                                     />
                                                     <div>
                                                         <span className="font-medium text-gray-900">Certified Mail</span>
@@ -1111,8 +1306,8 @@ export default function NewOrder() {
                                             <label className="flex items-center gap-3 p-3 rounded-lg glass hover:bg-white/40 cursor-pointer transition-colors">
                                                 <input
                                                     type="checkbox"
-                                                    checked={dropoff.rushService}
-                                                    onChange={(e) => updateDropoff(index, 'rushService', e.target.checked)}
+                                                    checked={recipient.rushService}
+                                                    onChange={(e) => updateRecipient(index, 'rushService', e.target.checked)}
                                                     className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
                                                 />
                                                 <div>
@@ -1124,8 +1319,8 @@ export default function NewOrder() {
                                             <label className="flex items-center gap-3 p-3 rounded-lg glass hover:bg-white/40 cursor-pointer transition-colors">
                                                 <input
                                                     type="checkbox"
-                                                    checked={dropoff.remoteLocation}
-                                                    onChange={(e) => updateDropoff(index, 'remoteLocation', e.target.checked)}
+                                                    checked={recipient.remoteLocation}
+                                                    onChange={(e) => updateRecipient(index, 'remoteLocation', e.target.checked)}
                                                     className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
                                                 />
                                                 <div>
@@ -1150,25 +1345,28 @@ export default function NewOrder() {
                         </h3>
 
                         <div className="space-y-3">
-                            {dropoffs.map((dropoff, i) => {
-                                // For Automated orders, base price is 0 (determined by bid later)
-                                // For Guided orders, use the entered price or 0
-                                const basePrice = dropoff.dropoffType === 'AUTOMATED'
+                            {recipients.map((recipient, i) => {
+                                // For Automated orders, base is $0 (pending bid), but show estimated fees
+                                // For Guided orders, base = offer amount, then add fees on top
+                                const basePrice = recipient.recipientType === 'AUTOMATED'
                                     ? 0
-                                    : (dropoff.finalAgreedPrice ? parseFloat(dropoff.finalAgreedPrice) : 0)
+                                    : (recipient.finalAgreedPrice ? parseFloat(recipient.finalAgreedPrice) : 0)
 
-                                const rushFee = dropoff.rushService ? 50.00 : 0
-                                const remoteFee = dropoff.remoteLocation ? 30.00 : 0
+                                // Show fees for both GUIDED and AUTOMATED
+                                // For AUTOMATED, these are estimated fees that will be added when bid is accepted
+                                const rushFee = recipient.rushService ? 50.00 : 0
+                                const remoteFee = recipient.remoteLocation ? 30.00 : 0
                                 const subtotal = basePrice + rushFee + remoteFee
 
                                 return (
                                     <div key={i} className="flex justify-between text-sm py-2 border-b border-gray-100 last:border-0">
                                         <div>
-                                            <span className="font-medium text-gray-700">Dropoff #{i + 1}</span>
+                                            <span className="font-medium text-gray-700">Recipient #{i + 1}</span>
                                             <div className="text-xs text-gray-500 mt-1">
                                                 Base: ${basePrice.toFixed(2)}
-                                                {dropoff.rushService && <span className="text-blue-600 ml-2">• Rush (+$50)</span>}
-                                                {dropoff.remoteLocation && <span className="text-purple-600 ml-2">• Remote (+$30)</span>}
+                                                {recipient.recipientType === 'AUTOMATED' && basePrice === 0 && <span className="text-gray-400 ml-2 italic">• Price pending bid</span>}
+                                                {rushFee > 0 && <span className="text-blue-600 ml-2">• Rush (+$50)</span>}
+                                                {remoteFee > 0 && <span className="text-purple-600 ml-2">• Remote (+$30)</span>}
                                             </div>
                                         </div>
                                         <span className="font-medium">${subtotal.toFixed(2)}</span>
@@ -1179,11 +1377,14 @@ export default function NewOrder() {
                             <div className="pt-4 mt-2 border-t border-gray-200 flex justify-between items-center">
                                 <span className="text-lg font-bold text-gray-900">Total Estimated Cost</span>
                                 <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                                    ${dropoffs.reduce((acc, d) => {
-                                        const base = d.dropoffType === 'AUTOMATED'
+                                    ${recipients.reduce((acc, d) => {
+                                        const base = d.recipientType === 'AUTOMATED'
                                             ? 0
                                             : (d.finalAgreedPrice ? parseFloat(d.finalAgreedPrice) : 0)
-                                        return acc + base + (d.rushService ? 50.00 : 0) + (d.remoteLocation ? 30.00 : 0)
+                                        // Show fees for both GUIDED and AUTOMATED
+                                        const rushFee = d.rushService ? 50.00 : 0
+                                        const remoteFee = d.remoteLocation ? 30.00 : 0
+                                        return acc + base + rushFee + remoteFee
                                     }, 0).toFixed(2)}
                                 </span>
                             </div>
@@ -1192,29 +1393,39 @@ export default function NewOrder() {
 
 
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="btn-primary w-full disabled:opacity-50"
-                    >
-                        {loading ? 'Creating Order...' : 'Create Order'}
-                    </button>
+                    <div className="flex gap-4">
+                        <button
+                            type="button"
+                            onClick={handleSaveAsDraft}
+                            disabled={loading}
+                            className="btn-secondary w-full disabled:opacity-50"
+                        >
+                            {loading ? 'Saving...' : 'Save as Draft'}
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="btn-primary w-full disabled:opacity-50"
+                        >
+                            {loading ? 'Creating Order...' : 'Create Order'}
+                        </button>
+                    </div>
                 </form>
 
                 {/* Floating Action Button */}
                 <button
                     type="button"
-                    onClick={addDropoff}
+                    onClick={addRecipient}
                     className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-3xl hover:scale-110 transition-all duration-300 flex items-center justify-center z-50 group"
-                    aria-label="Add Dropoff"
+                    aria-label="Add Recipient"
                 >
                     <Plus className="w-7 h-7 group-hover:rotate-90 transition-transform duration-300" />
                     <span className="absolute -top-12 right-0 bg-gray-900 text-white text-sm px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-lg">
-                        Add Dropoff
+                        Add Recipient
                     </span>
-                    {dropoffs.length > 1 && (
+                    {recipients.length > 1 && (
                         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-6 h-6 rounded-full flex items-center justify-center font-bold">
-                            {dropoffs.length}
+                            {recipients.length}
                         </span>
                     )}
                 </button>
@@ -1222,14 +1433,14 @@ export default function NewOrder() {
 
             {/* Modal Portal */}
             {
-                dropoffs.map((dropoff, index) => (
+                recipients.map((recipient, index) => (
                     <ProcessServerModal
                         key={`modal-${index}`}
                         isOpen={modalOpen === index}
                         onClose={() => setModalOpen(null)}
                         contacts={filteredContacts}
-                        selectedId={dropoff.assignedProcessServerId}
-                        onSelect={(id) => updateDropoff(index, 'assignedProcessServerId', id)}
+                        selectedId={recipient.assignedProcessServerId}
+                        onSelect={(id) => updateRecipient(index, 'assignedProcessServerId', id)}
                         defaultServerId={defaultProcessServerId}
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}

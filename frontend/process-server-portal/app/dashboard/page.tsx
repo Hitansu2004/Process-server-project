@@ -30,16 +30,16 @@ export default function Dashboard() {
     const filteredAssignedOrders = assignedOrders.filter(order => {
         if (assignedFilter === 'ALL') return true
 
-        // Check dropoff types
-        // If any dropoff is GUIDED, it's considered a Direct Assignment (at least partially)
-        // If all dropoffs are AUTOMATED, it's a Bidding Won order
+        // Check recipient types
+        // If any recipient is GUIDED, it's considered a Direct Assignment (at least partially)
+        // If all recipients are AUTOMATED, it's a Bidding Won order
 
-        const hasGuided = order.dropoffs?.some((d: any) => d.dropoffType === 'GUIDED')
+        const hasGuided = order.recipients?.some((d: any) => d.recipientType === 'GUIDED')
 
         if (assignedFilter === 'DIRECT') {
             return hasGuided
         } else if (assignedFilter === 'BIDDING') {
-            return !hasGuided // If no guided dropoffs, it must be bidding (or empty/legacy)
+            return !hasGuided // If no guided recipients, it must be bidding (or empty/legacy)
         }
         return true
     })
@@ -206,7 +206,7 @@ export default function Dashboard() {
                             className="fixed top-4 right-4 z-50"
                         >
                             <div className={`px-6 py-4 rounded-xl shadow-2xl backdrop-blur-xl border ${toast.type === 'success' ? 'bg-green-500/90 border-green-400 text-white' :
-                                    'bg-red-500/90 border-red-400 text-white'
+                                'bg-red-500/90 border-red-400 text-white'
                                 }`}>
                                 <div className="flex items-center gap-3">
                                     {toast.type === 'success' ? (
@@ -248,8 +248,8 @@ export default function Dashboard() {
                                         onClick={handleToggleGlobal}
                                         disabled={toggleLoading}
                                         className={`relative flex items-center gap-3 px-5 py-2.5 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all overflow-hidden ${isGlobal
-                                                ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
-                                                : 'bg-white/90 backdrop-blur-xl text-gray-700 border-2 border-gray-300 hover:border-green-500'
+                                            ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
+                                            : 'bg-white/90 backdrop-blur-xl text-gray-700 border-2 border-gray-300 hover:border-green-500'
                                             } disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
                                         {/* Animated background shimmer when active */}
@@ -407,7 +407,17 @@ export default function Dashboard() {
                         <p className="text-3xl font-bold text-green-400">
                             ${assignedOrders
                                 .filter(order => order.status !== 'FAILED' && order.status !== 'CANCELLED')
-                                .reduce((sum, order) => sum + (order.processServerPayout || (order.finalAgreedPrice * 0.85) || 0), 0)
+                                .reduce((sum, order) => {
+                                    // Calculate earnings from only recipients assigned to this process server
+                                    const myRecipients = order.recipients?.filter((d: any) =>
+                                        d.assignedProcessServerId === profile?.id
+                                    ) || [];
+                                    const customerPaid = myRecipients.reduce((total: number, d: any) =>
+                                        total + (parseFloat(d.finalAgreedPrice) || 0), 0
+                                    );
+                                    const earnings = customerPaid * 0.85; // 15% platform fee
+                                    return sum + earnings;
+                                }, 0)
                                 .toFixed(2)}
                         </p>
                     </motion.div>
@@ -519,7 +529,7 @@ export default function Dashboard() {
                                             <div className="flex items-center gap-2">
                                                 <h3 className="font-semibold text-lg">{order.orderNumber}</h3>
                                                 {/* Show badge for order type */}
-                                                {order.dropoffs?.some((d: any) => d.dropoffType === 'GUIDED') ? (
+                                                {order.recipients?.some((d: any) => d.recipientType === 'GUIDED') ? (
                                                     <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
                                                         DIRECT
                                                     </span>
@@ -531,7 +541,17 @@ export default function Dashboard() {
                                             </div>
                                             <p className="text-sm text-gray-600 font-medium">{order.customerName}</p>
                                             <p className="text-sm text-gray-500 mt-1">{order.pickupAddress}</p>
-                                            <p className="text-sm text-green-600 font-medium mt-2">Your Earnings: ${order.processServerPayout || order.finalAgreedPrice}</p>
+                                            <p className="text-sm text-green-600 font-medium mt-2">
+                                                Your Earnings: ${(() => {
+                                                    const myRecipients = order.recipients?.filter((d: any) =>
+                                                        d.assignedProcessServerId === profile?.id
+                                                    ) || [];
+                                                    const customerPaid = myRecipients.reduce((total: number, d: any) =>
+                                                        total + (parseFloat(d.finalAgreedPrice) || 0), 0
+                                                    );
+                                                    return (customerPaid * 0.85).toFixed(2); // 15% platform fee
+                                                })()}
+                                            </p>
                                         </div>
                                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
                                             order.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :

@@ -8,7 +8,7 @@ import java.util.List;
 
 @Repository
 public interface ProcessServerAttemptRepository extends JpaRepository<ProcessServerAttempt, String> {
-    List<ProcessServerAttempt> findByDropoffId(String dropoffId);
+    List<ProcessServerAttempt> findByRecipientId(String recipientId);
 
     List<ProcessServerAttempt> findByProcessServerId(String processServerId);
 }

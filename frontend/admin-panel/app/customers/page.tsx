@@ -310,17 +310,17 @@ export default function CustomersManagement() {
                                                     </p>
                                                 </div>
                                                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' :
-                                                        order.status === 'IN_PROGRESS' || order.status === 'ASSIGNED' ? 'bg-blue-500/20 text-blue-400' :
-                                                            order.status === 'BIDDING' ? 'bg-purple-500/20 text-purple-400' :
-                                                                'bg-yellow-500/20 text-yellow-400'
+                                                    order.status === 'IN_PROGRESS' || order.status === 'ASSIGNED' ? 'bg-blue-500/20 text-blue-400' :
+                                                        order.status === 'BIDDING' ? 'bg-purple-500/20 text-purple-400' :
+                                                            'bg-yellow-500/20 text-yellow-400'
                                                     }`}>
                                                     {order.status}
                                                 </span>
                                             </div>
                                             <div className="grid grid-cols-2 gap-2 text-sm mt-3">
                                                 <div>
-                                                    <p className="text-gray-400">Dropoffs</p>
-                                                    <p className="font-medium">{order.dropoffs?.length || 0}</p>
+                                                    <p className="text-gray-400">Recipients</p>
+                                                    <p className="font-medium">{order.recipients?.length || 0}</p>
                                                 </div>
                                                 {order.finalAgreedPrice && (
                                                     <div>

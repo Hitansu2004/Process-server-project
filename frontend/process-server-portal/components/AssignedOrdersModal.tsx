@@ -11,7 +11,7 @@ interface AssignedOrder {
     processServerPayout?: number
     finalAgreedPrice?: number
     status: string
-    dropoffs?: any[]
+    recipients?: any[]
 }
 
 interface AssignedOrdersModalProps {
@@ -95,7 +95,7 @@ export default function AssignedOrdersModal({ isOpen, onClose, orders }: Assigne
                                                     <DollarSign className="w-4 h-4" />
                                                     {order.processServerPayout ||
                                                         order.finalAgreedPrice ||
-                                                        (order.dropoffs?.reduce((sum: number, d: any) => sum + (d.finalAgreedPrice || 0), 0)) ||
+                                                        (order.recipients?.reduce((sum: number, d: any) => sum + (d.finalAgreedPrice || 0), 0)) ||
                                                         0}
                                                 </div>
                                                 <button

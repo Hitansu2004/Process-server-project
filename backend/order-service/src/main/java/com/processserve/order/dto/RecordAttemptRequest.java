@@ -13,8 +13,8 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class RecordAttemptRequest {
 
-    @NotBlank(message = "Dropoff ID is required")
-    private String dropoffId;
+    @NotBlank(message = "Recipient ID is required")
+    private String recipientId;
 
     @NotBlank(message = "Process Server ID is required")
     private String processServerId;

@@ -184,8 +184,8 @@ export default function OrdersManagement() {
                                                 <p className="text-xs text-primary">ZIP: {order.pickupZipCode}</p>
                                             </div>
                                             <div>
-                                                <p className="text-gray-400">Dropoffs</p>
-                                                <p className="font-medium">{order.totalDropoffs} location(s)</p>
+                                                <p className="text-gray-400">Recipients</p>
+                                                <p className="font-medium">{order.totalRecipients} location(s)</p>
                                             </div>
                                             <div>
                                                 <p className="text-gray-400">Deadline</p>

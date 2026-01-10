@@ -46,9 +46,9 @@ public class PricingService {
     }
 
     /**
-     * Calculate total dropoff price with all adjustments
+     * Calculate total recipient price with all adjustments
      */
-    public PricingBreakdown calculateDropoffPricing(String zipCode, boolean rushService, boolean remoteLocation) {
+    public PricingBreakdown calculateRecipientPricing(String zipCode, boolean rushService, boolean remoteLocation) {
         BigDecimal basePrice = calculateBasePrice(zipCode);
         BigDecimal rushFee = BigDecimal.ZERO;
         BigDecimal remoteFee = BigDecimal.ZERO;
@@ -69,10 +69,10 @@ public class PricingService {
     /**
      * Calculate full payment breakdown including commissions
      */
-    public PaymentBreakdown calculatePaymentBreakdown(BigDecimal dropoffTotal) {
+    public PaymentBreakdown calculatePaymentBreakdown(BigDecimal recipientTotal) {
         // Commission rate (15%)
         BigDecimal commissionRate = new BigDecimal("0.15");
-        BigDecimal commission = dropoffTotal.multiply(commissionRate).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal commission = recipientTotal.multiply(commissionRate).setScale(2, RoundingMode.HALF_UP);
 
         // Super admin fee is 5% of commission
         BigDecimal superAdminFeeRate = new BigDecimal("0.05");
@@ -81,11 +81,11 @@ public class PricingService {
         // Tenant profit = commission - super admin fee
         BigDecimal tenantProfit = commission.subtract(superAdminFee);
 
-        // Customer pays: dropoff total + commission
-        BigDecimal customerPayment = dropoffTotal.add(commission);
+        // Customer pays: recipient total + commission
+        BigDecimal customerPayment = recipientTotal.add(commission);
 
         return new PaymentBreakdown(
-                dropoffTotal,
+                recipientTotal,
                 commission,
                 superAdminFee,
                 tenantProfit,
@@ -109,16 +109,16 @@ public class PricingService {
     }
 
     public static class PaymentBreakdown {
-        public final BigDecimal dropoffTotal;
+        public final BigDecimal recipientTotal;
         public final BigDecimal commission;
         public final BigDecimal superAdminFee;
         public final BigDecimal tenantProfit;
         public final BigDecimal customerPayment;
 
-        public PaymentBreakdown(BigDecimal dropoffTotal, BigDecimal commission,
+        public PaymentBreakdown(BigDecimal recipientTotal, BigDecimal commission,
                 BigDecimal superAdminFee, BigDecimal tenantProfit,
                 BigDecimal customerPayment) {
-            this.dropoffTotal = dropoffTotal;
+            this.recipientTotal = recipientTotal;
             this.commission = commission;
             this.superAdminFee = superAdminFee;
             this.tenantProfit = tenantProfit;

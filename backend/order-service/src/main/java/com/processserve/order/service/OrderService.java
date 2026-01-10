@@ -29,11 +29,13 @@ import java.util.UUID;
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    private final OrderDropoffRepository dropoffRepository;
+    private final OrderRecipientRepository recipientRepository;
     private final ProcessServerAttemptRepository attemptRepository;
     private final BidRepository bidRepository;
     private final OrderModificationRepository modificationRepository;
     private final ChatParticipantService chatParticipantService;
+    private final OrderHistoryService historyService;
+    private final DocumentPageCounter documentPageCounter;
 
     @Transactional
     public Order createOrder(CreateOrderRequest request) {
@@ -44,8 +46,18 @@ public class OrderService {
         order.setId(UUID.randomUUID().toString());
         order.setTenantId(request.getTenantId());
         order.setCustomerId(request.getCustomerId());
-        // Generate customer-specific order number (e.g., C3771-ORD1)
-        String shortId = request.getCustomerId().substring(request.getCustomerId().length() - 4);
+
+        // Generate customer-specific order number (e.g., C-001-ORD008)
+        // Extract customer profile short ID (e.g., "cp-001" -> "001", "tur-cust-001" ->
+        // "001")
+        String customerId = request.getCustomerId();
+        String shortId = "001"; // Default
+
+        // Try to extract numeric suffix from customer ID
+        if (customerId.contains("-")) {
+            String[] parts = customerId.split("-");
+            shortId = parts[parts.length - 1]; // Get last part (e.g., "001")
+        }
 
         long nextOrderNum = 1;
         java.util.Optional<Order> lastOrder = orderRepository
@@ -54,7 +66,7 @@ public class OrderService {
         if (lastOrder.isPresent()) {
             String lastOrderNumber = lastOrder.get().getOrderNumber();
             try {
-                // Expected format: Cxxxx-ORDn
+                // Expected format: C-###-ORD###
                 if (lastOrderNumber != null && lastOrderNumber.contains("-ORD")) {
                     String numPart = lastOrderNumber.substring(lastOrderNumber.lastIndexOf("-ORD") + 4);
                     nextOrderNum = Long.parseLong(numPart) + 1;
@@ -68,13 +80,25 @@ public class OrderService {
             }
         }
 
-        order.setOrderNumber("C" + shortId + "-ORD" + nextOrderNum);
-        order.setStatus(Order.OrderStatus.OPEN);
+        order.setOrderNumber("C-" + shortId + "-ORD" + nextOrderNum); // No padding - produces ORD6, ORD7, etc.
+
+        // Set status - use from request if provided (for drafts), otherwise default to
+        // OPEN
+        if (request.getStatus() != null && !request.getStatus().isEmpty()) {
+            try {
+                order.setStatus(Order.OrderStatus.valueOf(request.getStatus()));
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid status provided: {}, defaulting to OPEN", request.getStatus());
+                order.setStatus(Order.OrderStatus.OPEN);
+            }
+        } else {
+            order.setStatus(Order.OrderStatus.OPEN);
+        }
+
         order.setSpecialInstructions(request.getSpecialInstructions());
         order.setDeadline(request.getDeadline());
-        order.setHasMultipleDropoffs(request.getDropoffs().size() > 1);
-        order.setHasMultipleDropoffs(request.getDropoffs().size() > 1);
-        order.setTotalDropoffs(request.getDropoffs().size());
+        order.setHasMultipleRecipients(request.getRecipients().size() > 1);
+        order.setTotalRecipients(request.getRecipients().size());
 
         // Set Document Type
         if (request.getDocumentType() != null) {
@@ -105,73 +129,100 @@ public class OrderService {
 
         order = orderRepository.save(order);
 
-        // Create dropoffs
+        // Create recipients
         int sequence = 1;
         boolean anyAssigned = false;
         boolean anyBidding = false;
 
-        for (CreateOrderRequest.DropoffRequest dropoffReq : request.getDropoffs()) {
-            OrderDropoff dropoff = new OrderDropoff();
-            dropoff.setId(UUID.randomUUID().toString());
-            dropoff.setOrder(order);
-            dropoff.setSequenceNumber(sequence++);
-            dropoff.setRecipientName(dropoffReq.getRecipientName());
-            dropoff.setDropoffAddress(dropoffReq.getDropoffAddress());
-            dropoff.setDropoffZipCode(dropoffReq.getDropoffZipCode());
-            dropoff.setAttemptCount(0);
-            dropoff.setMaxAttempts(5);
-
-            // Handle Pricing Logic
-            BigDecimal basePrice = new BigDecimal("75.00");
-            BigDecimal rushFee = dropoffReq.getRushService() != null && dropoffReq.getRushService()
-                    ? new BigDecimal("50.00")
-                    : BigDecimal.ZERO;
-            BigDecimal remoteFee = dropoffReq.getRemoteLocation() != null && dropoffReq.getRemoteLocation()
-                    ? new BigDecimal("30.00")
-                    : BigDecimal.ZERO;
-
-            dropoff.setBasePrice(basePrice);
-            dropoff.setRushService(dropoffReq.getRushService());
-            dropoff.setRushServiceFee(rushFee);
-            dropoff.setRemoteLocation(dropoffReq.getRemoteLocation());
-            dropoff.setRemoteLocationFee(remoteFee);
+        for (CreateOrderRequest.RecipientRequest recipientReq : request.getRecipients()) {
+            OrderRecipient recipient = new OrderRecipient();
+            recipient.setId(UUID.randomUUID().toString());
+            recipient.setOrder(order);
+            recipient.setSequenceNumber(sequence++);
+            recipient.setRecipientName(recipientReq.getRecipientName());
+            recipient.setRecipientAddress(recipientReq.getRecipientAddress());
+            recipient.setRecipientZipCode(recipientReq.getRecipientZipCode());
+            recipient.setCity(recipientReq.getCity());
+            recipient.setState(recipientReq.getState());
+            recipient.setStateId(recipientReq.getStateId());
+            recipient.setNotes(recipientReq.getNotes());
+            recipient.setSpecialInstructions(recipientReq.getSpecialInstructions());
+            recipient.setProcessServerName(recipientReq.getProcessServerName());
+            recipient.setQuotedPrice(recipientReq.getQuotedPrice());
+            recipient.setPriceStatus(recipientReq.getPriceStatus());
+            recipient.setProcessService(recipientReq.getProcessService());
+            recipient.setCertifiedMail(recipientReq.getCertifiedMail());
+            recipient.setAttemptCount(0);
+            recipient.setMaxAttempts(5);
 
             // Set Service Type
-            if (dropoffReq.getServiceType() != null) {
+            if (recipientReq.getServiceType() != null) {
                 try {
-                    dropoff.setServiceType(OrderDropoff.ServiceType.valueOf(dropoffReq.getServiceType()));
+                    recipient.setServiceType(OrderRecipient.ServiceType.valueOf(recipientReq.getServiceType()));
                 } catch (IllegalArgumentException e) {
                     // Default to PROCESS_SERVICE if invalid
-                    dropoff.setServiceType(OrderDropoff.ServiceType.PROCESS_SERVICE);
+                    recipient.setServiceType(OrderRecipient.ServiceType.PROCESS_SERVICE);
                 }
             } else {
-                dropoff.setServiceType(OrderDropoff.ServiceType.PROCESS_SERVICE);
+                recipient.setServiceType(OrderRecipient.ServiceType.PROCESS_SERVICE);
             }
 
-            // Calculate suggested price (Payout)
-            BigDecimal calculatedPrice = basePrice.add(rushFee).add(remoteFee);
+            // Handle Pricing Logic based on Recipient Type
+            // AUTOMATED: Base price is 0, fees only apply after bid is accepted
+            // GUIDED: Base price is 75, plus rush and remote fees
+            BigDecimal basePrice;
+            BigDecimal rushFee;
+            BigDecimal remoteFee;
 
-            // Handle Dropoff Type
-            if ("GUIDED".equalsIgnoreCase(dropoffReq.getDropoffType())) {
-                dropoff.setDropoffType(OrderDropoff.DropoffType.GUIDED);
-                dropoff.setAssignedProcessServerId(dropoffReq.getAssignedProcessServerId());
-                // Use provided price or calculated price
-                dropoff.setFinalAgreedPrice(
-                        dropoffReq.getFinalAgreedPrice() != null ? dropoffReq.getFinalAgreedPrice() : calculatedPrice);
-                dropoff.setStatus(OrderDropoff.DropoffStatus.ASSIGNED);
+            BigDecimal finalAgreedPrice; // Declare finalAgreedPrice variable
+
+            // Handle Recipient Type
+            if ("GUIDED".equalsIgnoreCase(recipientReq.getRecipientType())) {
+                // GUIDED: finalAgreedPrice from frontend is the base service cost (process
+                // service + certified mail)
+                // Rush and remote fees are ALREADY INCLUDED in the finalAgreedPrice from
+                // frontend
+                rushFee = recipientReq.getRushService() != null && recipientReq.getRushService()
+                        ? new BigDecimal("50.00")
+                        : BigDecimal.ZERO;
+                remoteFee = recipientReq.getRemoteLocation() != null && recipientReq.getRemoteLocation()
+                        ? new BigDecimal("30.00")
+                        : BigDecimal.ZERO;
+
+                // finalAgreedPrice from frontend already includes base + rush + remote
+                if (recipientReq.getFinalAgreedPrice() != null) {
+                    finalAgreedPrice = recipientReq.getFinalAgreedPrice(); // Total price from frontend
+                    // Calculate base price by subtracting fees
+                    basePrice = finalAgreedPrice.subtract(rushFee).subtract(remoteFee);
+                } else {
+                    // If no price specified, default to fees only (base = 0)
+                    basePrice = BigDecimal.ZERO;
+                    finalAgreedPrice = rushFee.add(remoteFee);
+                }
+
+                recipient.setRecipientType(OrderRecipient.RecipientType.GUIDED);
+                recipient.setAssignedProcessServerId(recipientReq.getAssignedProcessServerId());
+                recipient.setBasePrice(basePrice); // Store the base service cost (process + certified mail)
+                recipient.setRushService(recipientReq.getRushService());
+                recipient.setRushServiceFee(rushFee);
+                recipient.setRemoteLocation(recipientReq.getRemoteLocation());
+                recipient.setRemoteLocationFee(remoteFee);
+                recipient.setFinalAgreedPrice(finalAgreedPrice);
+                recipient.setStatus(OrderRecipient.RecipientStatus.ASSIGNED);
                 anyAssigned = true;
 
-                // Update Order totals for guided dropoffs
-                order.setProcessServerPayout(order.getProcessServerPayout().add(dropoff.getFinalAgreedPrice()));
+                // Update Order totals for guided recipients
+                order.setProcessServerPayout(order.getProcessServerPayout().add(recipient.getFinalAgreedPrice()));
 
-                if (dropoffReq.getCustomerPrice() != null) {
+                if (recipientReq.getCustomerPrice() != null) {
                     // Concierge Service logic...
-                    order.setCustomerPaymentAmount(order.getCustomerPaymentAmount().add(dropoffReq.getCustomerPrice()));
-                    BigDecimal profit = dropoffReq.getCustomerPrice().subtract(dropoff.getFinalAgreedPrice());
+                    order.setCustomerPaymentAmount(
+                            order.getCustomerPaymentAmount().add(recipientReq.getCustomerPrice()));
+                    BigDecimal profit = recipientReq.getCustomerPrice().subtract(recipient.getFinalAgreedPrice());
                     order.setTenantProfit(order.getTenantProfit().add(profit));
                 } else {
                     // Regular Guided: Calculate commissions
-                    BigDecimal payout = dropoff.getFinalAgreedPrice();
+                    BigDecimal payout = recipient.getFinalAgreedPrice();
                     BigDecimal commission = payout.multiply(new BigDecimal("0.15"));
                     BigDecimal totalCustomerPay = payout.add(commission);
                     BigDecimal superAdminFee = commission.multiply(new BigDecimal("0.05"));
@@ -184,24 +235,38 @@ public class OrderService {
                 }
 
             } else {
-                dropoff.setDropoffType(OrderDropoff.DropoffType.AUTOMATED);
-                // For automated, price is determined by bidding later, so set to null/0
-                // initially
-                dropoff.setFinalAgreedPrice(BigDecimal.ZERO);
-                dropoff.setStatus(OrderDropoff.DropoffStatus.OPEN);
+                // AUTOMATED (Open Bid): Base service price is determined by bids
+                // But rush and remote fees are calculated upfront and shown to customer
+                rushFee = recipientReq.getRushService() != null && recipientReq.getRushService()
+                        ? new BigDecimal("50.00")
+                        : BigDecimal.ZERO;
+                remoteFee = recipientReq.getRemoteLocation() != null && recipientReq.getRemoteLocation()
+                        ? new BigDecimal("30.00")
+                        : BigDecimal.ZERO;
+
+                basePrice = BigDecimal.ZERO; // Will be set when bid is accepted
+
+                recipient.setBasePrice(basePrice);
+                recipient.setRushService(recipientReq.getRushService());
+                recipient.setRushServiceFee(rushFee); // Calculate fees upfront
+                recipient.setRemoteLocation(recipientReq.getRemoteLocation());
+                recipient.setRemoteLocationFee(remoteFee); // Calculate fees upfront
+                recipient.setRecipientType(OrderRecipient.RecipientType.AUTOMATED);
+                recipient.setFinalAgreedPrice(rushFee.add(remoteFee)); // Show fees to customer upfront
+                recipient.setStatus(OrderRecipient.RecipientStatus.OPEN);
                 anyBidding = true;
             }
 
-            dropoffRepository.save(dropoff);
+            recipientRepository.save(recipient);
         }
 
-        // Update Order Status based on dropoffs
+        // Update Order Status based on recipients
         if (anyAssigned && !anyBidding) {
-            // All dropoffs are GUIDED and assigned
+            // All recipients are GUIDED and assigned
             order.setStatus(Order.OrderStatus.ASSIGNED);
             order.setAssignedAt(LocalDateTime.now());
         } else if (anyAssigned && anyBidding) {
-            // Mix of GUIDED and AUTOMATED dropoffs
+            // Mix of GUIDED and AUTOMATED recipients
             order.setStatus(Order.OrderStatus.PARTIALLY_ASSIGNED);
         }
         // else: keep status as OPEN - will change to BIDDING when first bid is placed
@@ -240,10 +305,10 @@ public class OrderService {
 
     @Transactional
     public void recordAttempt(RecordAttemptRequest request) {
-        log.info("Recording delivery attempt for dropoff: {}", request.getDropoffId());
+        log.info("Recording delivery attempt for recipient: {}", request.getRecipientId());
 
-        OrderDropoff dropoff = dropoffRepository.findById(request.getDropoffId())
-                .orElseThrow(() -> new RuntimeException("Dropoff not found"));
+        OrderRecipient recipient = recipientRepository.findById(request.getRecipientId())
+                .orElseThrow(() -> new RuntimeException("Recipient not found"));
 
         // Validate GPS coordinates exist
         if (request.getGpsLatitude() == null || request.getGpsLongitude() == null) {
@@ -251,13 +316,13 @@ public class OrderService {
         }
 
         // Increment attempt count
-        int currentAttempts = dropoff.getAttemptCount() + 1;
-        dropoff.setAttemptCount(currentAttempts);
+        int currentAttempts = recipient.getAttemptCount() + 1;
+        recipient.setAttemptCount(currentAttempts);
 
         // Create and save attempt record
         ProcessServerAttempt attempt = new ProcessServerAttempt();
         attempt.setId(UUID.randomUUID().toString());
-        attempt.setDropoff(dropoff);
+        attempt.setRecipient(recipient);
         attempt.setProcessServerId(request.getProcessServerId());
         attempt.setAttemptNumber(currentAttempts);
         attempt.setWasSuccessful(request.getWasSuccessful());
@@ -271,15 +336,15 @@ public class OrderService {
 
         // Apply 5-attempt business logic
         if (request.getWasSuccessful()) {
-            // SUCCESS - Mark dropoff as delivered
-            dropoff.setStatus(OrderDropoff.DropoffStatus.DELIVERED);
-            dropoff.setDeliveredAt(LocalDateTime.now());
-            dropoffRepository.save(dropoff);
+            // SUCCESS - Mark recipient as delivered
+            recipient.setStatus(OrderRecipient.RecipientStatus.DELIVERED);
+            recipient.setDeliveredAt(LocalDateTime.now());
+            recipientRepository.save(recipient);
 
-            // Check if ALL dropoffs for this order are delivered
-            Order order = dropoff.getOrder();
-            boolean allDelivered = order.getDropoffs().stream()
-                    .allMatch(d -> d.getStatus() == OrderDropoff.DropoffStatus.DELIVERED);
+            // Check if ALL recipients for this order are delivered
+            Order order = recipient.getOrder();
+            boolean allDelivered = order.getRecipients().stream()
+                    .allMatch(d -> d.getStatus() == OrderRecipient.RecipientStatus.DELIVERED);
 
             if (allDelivered) {
                 order.setStatus(Order.OrderStatus.COMPLETED);
@@ -307,10 +372,10 @@ public class OrderService {
                 }
             }
 
-        } else if (currentAttempts >= dropoff.getMaxAttempts()) {
+        } else if (currentAttempts >= recipient.getMaxAttempts()) {
             // MAX ATTEMPTS REACHED - FAILED BUT STILL PAY
-            dropoff.setStatus(OrderDropoff.DropoffStatus.FAILED);
-            dropoffRepository.save(dropoff);
+            recipient.setStatus(OrderRecipient.RecipientStatus.FAILED);
+            recipientRepository.save(recipient);
 
             // Update stats for failure
             try {
@@ -322,13 +387,13 @@ public class OrderService {
                 log.error("Failed to update stats for failure", e);
             }
 
-            Order order = dropoff.getOrder();
-            boolean allDone = order.getDropoffs().stream()
-                    .allMatch(d -> d.getStatus() == OrderDropoff.DropoffStatus.DELIVERED ||
-                            d.getStatus() == OrderDropoff.DropoffStatus.FAILED);
+            Order order = recipient.getOrder();
+            boolean allDone = order.getRecipients().stream()
+                    .allMatch(d -> d.getStatus() == OrderRecipient.RecipientStatus.DELIVERED ||
+                            d.getStatus() == OrderRecipient.RecipientStatus.FAILED);
 
             if (allDone) {
-                // Even if some dropoffs failed due to max attempts, we mark the order as
+                // Even if some Recipients failed due to max attempts, we mark the order as
                 // COMPLETED
                 // This ensures the process server gets paid for their valid attempts.
                 order.setStatus(Order.OrderStatus.COMPLETED);
@@ -340,23 +405,23 @@ public class OrderService {
                 orderRepository.save(order);
             }
 
-            log.warn("Dropoff {} failed after {} attempts", dropoff.getId(), currentAttempts);
+            log.warn("Recipient {} failed after {} attempts", recipient.getId(), currentAttempts);
             checkAndUpdateRedZone(request.getProcessServerId());
 
         } else {
             // More attempts remaining
-            dropoff.setStatus(OrderDropoff.DropoffStatus.IN_PROGRESS);
-            dropoffRepository.save(dropoff);
+            recipient.setStatus(OrderRecipient.RecipientStatus.IN_PROGRESS);
+            recipientRepository.save(recipient);
 
             // Update Order status to IN_PROGRESS if not already
-            Order order = dropoff.getOrder();
+            Order order = recipient.getOrder();
             if (order.getStatus() != Order.OrderStatus.IN_PROGRESS) {
                 order.setStatus(Order.OrderStatus.IN_PROGRESS);
                 orderRepository.save(order);
             }
 
-            log.info("Attempt {} of {} recorded for dropoff {}",
-                    currentAttempts, dropoff.getMaxAttempts(), dropoff.getId());
+            log.info("Attempt {} of {} recorded for recipient {}",
+                    currentAttempts, recipient.getMaxAttempts(), recipient.getId());
         }
     }
 
@@ -376,16 +441,57 @@ public class OrderService {
     }
 
     public List<Order> getOrdersByProcessServerId(String processServerId) {
-        List<Order> orders = orderRepository.findDistinctByDropoffsAssignedProcessServerId(processServerId);
-        populateCustomerNames(orders);
-        return orders;
+        List<Order> orders = orderRepository.findDistinctByRecipientsAssignedProcessServerId(processServerId);
+
+        // Filter orders to only include those where the process server is properly
+        // assigned
+        // For GUIDED (direct) assignments: No bid check needed
+        // For AUTOMATED (bidding) assignments: Must have ACCEPTED bid
+        List<Order> filteredOrders = orders.stream()
+                .filter(order -> {
+                    return order.getRecipients().stream()
+                            .anyMatch(recipient -> {
+                                // Check if this recipient is assigned to this process server
+                                if (!processServerId.equals(recipient.getAssignedProcessServerId())) {
+                                    return false;
+                                }
+
+                                // If it's a GUIDED (direct) assignment, include it without bid check
+                                if (recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED) {
+                                    return true;
+                                }
+
+                                // For AUTOMATED (bidding) assignments, check for ACCEPTED bid
+                                List<Bid> bids = bidRepository.findByOrderRecipientId(recipient.getId());
+                                return bids.stream()
+                                        .anyMatch(bid -> bid.getProcessServerId().equals(processServerId)
+                                                && bid.getStatus() == Bid.BidStatus.ACCEPTED);
+                            });
+                })
+                .toList();
+
+        populateCustomerNames(filteredOrders);
+        return filteredOrders;
     }
 
     public List<Order> getAvailableOrders() {
         List<Order.OrderStatus> statuses = List.of(Order.OrderStatus.OPEN, Order.OrderStatus.BIDDING);
 
         List<Order> orders = orderRepository.findAll().stream()
-                .filter(order -> statuses.contains(order.getStatus()))
+                .filter(order -> {
+                    // Include orders with OPEN or BIDDING status
+                    if (statuses.contains(order.getStatus())) {
+                        return true;
+                    }
+                    // Also include PARTIALLY_ASSIGNED orders that have recipients with OPEN or
+                    // BIDDING status
+                    if (order.getStatus() == Order.OrderStatus.PARTIALLY_ASSIGNED) {
+                        return order.getRecipients().stream()
+                                .anyMatch(recipient -> recipient.getStatus() == OrderRecipient.RecipientStatus.OPEN ||
+                                        recipient.getStatus() == OrderRecipient.RecipientStatus.BIDDING);
+                    }
+                    return false;
+                })
                 .toList();
         populateCustomerNames(orders);
         return orders;
@@ -411,8 +517,8 @@ public class OrderService {
                 .map(order -> {
                     boolean isCompleted = order.getStatus() == Order.OrderStatus.COMPLETED;
                     boolean isCustomerMatch = order.getCustomerId().equals(customerId);
-                    // Check if process server was assigned to any dropoff
-                    boolean isProcessServerMatch = order.getDropoffs().stream()
+                    // Check if process server was assigned to any recipient
+                    boolean isProcessServerMatch = order.getRecipients().stream()
                             .anyMatch(d -> processServerId.equals(d.getAssignedProcessServerId()));
 
                     return isCompleted && isCustomerMatch && isProcessServerMatch;
@@ -446,7 +552,7 @@ public class OrderService {
      * Update an existing order - Requirement 8
      * - Validates order exists and is editable
      * - Logs modification to audit trail
-     * - Updates order fields and dropoffs
+     * - Updates order fields and recipients
      * - Recalculates pricing if needed
      */
     @Transactional
@@ -472,52 +578,91 @@ public class OrderService {
         oldValues.append("\"documentType\":\"").append(order.getDocumentType()).append("\",");
         oldValues.append("\"caseNumber\":\"").append(order.getCaseNumber()).append("\",");
         oldValues.append("\"jurisdiction\":\"").append(order.getJurisdiction()).append("\",");
-        oldValues.append("\"dropoffCount\":").append(order.getDropoffs() != null ? order.getDropoffs().size() : 0);
+        oldValues.append("\"recipientCount\":")
+                .append(order.getRecipients() != null ? order.getRecipients().size() : 0);
         oldValues.append("}");
 
-        // 4. Update order fields
-        if (request.getSpecialInstructions() != null) {
+        // 4. Update order fields and track changes
+        java.util.Map<String, String[]> changes = new java.util.HashMap<>();
+
+        if (request.getSpecialInstructions() != null
+                && !request.getSpecialInstructions().equals(order.getSpecialInstructions())) {
+            changes.put("specialInstructions",
+                    new String[] { order.getSpecialInstructions(), request.getSpecialInstructions() });
             order.setSpecialInstructions(request.getSpecialInstructions());
         }
-        if (request.getDeadline() != null) {
+        if (request.getDeadline() != null && !request.getDeadline().equals(order.getDeadline())) {
+            changes.put("deadline", new String[] { order.getDeadline().toString(), request.getDeadline().toString() });
             order.setDeadline(request.getDeadline());
         }
-        if (request.getOrderType() != null) {
+        if (request.getOrderType() != null && !request.getOrderType().equals(order.getOrderType().name())) {
+            changes.put("orderType", new String[] { order.getOrderType().name(), request.getOrderType() });
             order.setOrderType(Order.OrderType.valueOf(request.getOrderType()));
         }
         if (request.getDocumentType() != null) {
-            order.setDocumentType(Order.DocumentType.valueOf(request.getDocumentType()));
+            String newTypeStr = request.getDocumentType().toUpperCase();
+            String currentTypeStr = order.getDocumentType() != null ? order.getDocumentType().name() : null;
+
+            if (!newTypeStr.equals(currentTypeStr)) {
+                changes.put("documentType", new String[] { currentTypeStr, newTypeStr });
+                try {
+                    order.setDocumentType(Order.DocumentType.valueOf(newTypeStr));
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid document type: {}", newTypeStr);
+                    // Optionally throw or ignore
+                }
+            }
         }
-        if (request.getCaseNumber() != null) {
+        if (request.getOtherDocumentType() != null
+                && !request.getOtherDocumentType().equals(order.getOtherDocumentType())) {
+            changes.put("otherDocumentType",
+                    new String[] { order.getOtherDocumentType(), request.getOtherDocumentType() });
+            order.setOtherDocumentType(request.getOtherDocumentType());
+        }
+        if (request.getCaseNumber() != null && !request.getCaseNumber().equals(order.getCaseNumber())) {
+            changes.put("caseNumber", new String[] { order.getCaseNumber(), request.getCaseNumber() });
             order.setCaseNumber(request.getCaseNumber());
         }
-        if (request.getJurisdiction() != null) {
+        if (request.getJurisdiction() != null && !request.getJurisdiction().equals(order.getJurisdiction())) {
+            changes.put("jurisdiction", new String[] { order.getJurisdiction(), request.getJurisdiction() });
             order.setJurisdiction(request.getJurisdiction());
         }
 
-        // 5. Handle dropoff modifications
-        if (request.getDropoffUpdates() != null && !request.getDropoffUpdates().isEmpty()) {
+        // Log changes to history
+        if (!changes.isEmpty()) {
+            historyService.trackOrderEdit(order, changes, userId, "CUSTOMER"); // Assuming customer for now, or derive
+                                                                               // role
+        }
+
+        // 5. Handle recipient modifications
+        if (request.getRecipientUpdates() != null && !request.getRecipientUpdates().isEmpty()) {
             // Process removals first
-            for (UpdateOrderRequest.DropoffUpdate update : request.getDropoffUpdates()) {
-                if (update.isToBeRemoved() && update.getDropoffId() != null) {
-                    removeDropoffFromOrder(orderId, update.getDropoffId());
+            for (UpdateOrderRequest.RecipientUpdate update : request.getRecipientUpdates()) {
+                if (update.isToBeRemoved() && update.getRecipientId() != null) {
+                    removeRecipientFromOrder(orderId, update.getRecipientId());
                 }
             }
 
             // Then process updates and additions
-            for (UpdateOrderRequest.DropoffUpdate update : request.getDropoffUpdates()) {
+            for (UpdateOrderRequest.RecipientUpdate update : request.getRecipientUpdates()) {
                 if (!update.isToBeRemoved()) {
                     if (update.isNew()) {
-                        // Add new dropoff
-                        addDropoffToOrder(order, update);
-                    } else if (update.getDropoffId() != null) {
-                        // Update existing dropoff
-                        updateDropoff(update.getDropoffId(), update);
+                        // Add new recipient
+                        addRecipientToOrder(order, update);
+                    } else if (update.getRecipientId() != null) {
+                        // Update existing recipient
+                        // Find in current order list to ensure we update the attached entity
+                        order.getRecipients().stream()
+                                .filter(r -> r.getId().equals(update.getRecipientId()))
+                                .findFirst()
+                                .ifPresent(recipient -> {
+                                    updateRecipientEntity(recipient, update, userId);
+                                });
                     }
                 }
             }
 
-            // Refresh order to get updated dropoffs
+            // Refresh order to get updated recipients
             order = orderRepository.findById(orderId).orElseThrow();
         }
 
@@ -530,7 +675,8 @@ public class OrderService {
         newValues.append("\"documentType\":\"").append(order.getDocumentType()).append("\",");
         newValues.append("\"caseNumber\":\"").append(order.getCaseNumber()).append("\",");
         newValues.append("\"jurisdiction\":\"").append(order.getJurisdiction()).append("\",");
-        newValues.append("\"dropoffCount\":").append(order.getDropoffs() != null ? order.getDropoffs().size() : 0);
+        newValues.append("\"recipientCount\":")
+                .append(order.getRecipients() != null ? order.getRecipients().size() : 0);
         newValues.append("}");
 
         // 7. Log modification to audit trail
@@ -548,8 +694,8 @@ public class OrderService {
         order.incrementModificationCount();
 
         // 9. Recalculate totals
-        order.setTotalDropoffs(order.getDropoffs().size());
-        order.setHasMultipleDropoffs(order.getDropoffs().size() > 1);
+        order.setTotalRecipients(order.getRecipients().size());
+        order.setHasMultipleRecipients(order.getRecipients().size() > 1);
 
         // 10. Save and return
         Order savedOrder = orderRepository.save(order);
@@ -607,127 +753,233 @@ public class OrderService {
     }
 
     /**
-     * Add a new dropoff to an existing order - Requirement 8
+     * Add a new recipient to an existing order - Requirement 8
      */
     @Transactional
-    public void addDropoffToOrder(Order order, UpdateOrderRequest.DropoffUpdate dropoffData) {
-        log.info("Adding new dropoff to order: {}", order.getId());
+    public void addRecipientToOrder(Order order, UpdateOrderRequest.RecipientUpdate recipientData) {
+        log.info("Adding new recipient to order: {}", order.getId());
 
-        OrderDropoff dropoff = new OrderDropoff();
-        dropoff.setId(UUID.randomUUID().toString());
-        dropoff.setOrder(order);
-        dropoff.setRecipientName(dropoffData.getRecipientName());
-        dropoff.setDropoffAddress(dropoffData.getDropoffAddress());
-        dropoff.setDropoffZipCode(dropoffData.getDropoffZipCode());
+        OrderRecipient recipient = new OrderRecipient();
+        recipient.setId(UUID.randomUUID().toString());
+        recipient.setOrder(order);
+        recipient.setRecipientName(recipientData.getRecipientName());
+        recipient.setRecipientAddress(recipientData.getRecipientAddress());
+        recipient.setRecipientZipCode(recipientData.getRecipientZipCode());
 
-        if ("GUIDED".equals(dropoffData.getDropoffType())) {
-            dropoff.setDropoffType(OrderDropoff.DropoffType.GUIDED);
-            dropoff.setAssignedProcessServerId(dropoffData.getAssignedProcessServerId());
-            if (dropoffData.getFinalAgreedPrice() != null) {
-                dropoff.setFinalAgreedPrice(BigDecimal.valueOf(dropoffData.getFinalAgreedPrice()));
+        if ("GUIDED".equals(recipientData.getRecipientType())) {
+            recipient.setRecipientType(OrderRecipient.RecipientType.GUIDED);
+            recipient.setAssignedProcessServerId(recipientData.getAssignedProcessServerId());
+            if (recipientData.getFinalAgreedPrice() != null) {
+                recipient.setFinalAgreedPrice(BigDecimal.valueOf(recipientData.getFinalAgreedPrice()));
             }
         } else {
-            dropoff.setDropoffType(OrderDropoff.DropoffType.AUTOMATED);
+            recipient.setRecipientType(OrderRecipient.RecipientType.AUTOMATED);
         }
 
         // Set pricing options
-        boolean isRush = dropoffData.getRushService() != null ? dropoffData.getRushService() : false;
-        boolean isRemote = dropoffData.getRemoteLocation() != null ? dropoffData.getRemoteLocation() : false;
+        boolean isRush = recipientData.getRushService() != null ? recipientData.getRushService() : false;
+        boolean isRemote = recipientData.getRemoteLocation() != null ? recipientData.getRemoteLocation() : false;
 
-        BigDecimal basePrice = new BigDecimal("75.00");
-        BigDecimal rushFee = isRush ? new BigDecimal("50.00") : BigDecimal.ZERO;
-        BigDecimal remoteFee = isRemote ? new BigDecimal("30.00") : BigDecimal.ZERO;
-        BigDecimal calculatedPrice = basePrice.add(rushFee).add(remoteFee);
+        recipient.setRushService(isRush);
+        recipient.setRemoteLocation(isRemote);
 
-        dropoff.setRushService(isRush);
-        dropoff.setRemoteLocation(isRemote);
-        dropoff.setBasePrice(basePrice);
-        dropoff.setRushServiceFee(rushFee);
-        dropoff.setRemoteLocationFee(remoteFee);
+        BigDecimal basePrice;
+        BigDecimal rushFee;
+        BigDecimal remoteFee;
+        BigDecimal calculatedPrice;
 
-        // Update final price if not manually set
-        if (dropoffData.getFinalAgreedPrice() == null) {
-            dropoff.setFinalAgreedPrice(calculatedPrice);
+        // Differentiate pricing based on recipient type
+        if ("GUIDED".equalsIgnoreCase(recipientData.getRecipientType())) {
+            // GUIDED: Customer specifies total price, we calculate base from it
+            rushFee = isRush ? new BigDecimal("50.00") : BigDecimal.ZERO;
+            remoteFee = isRemote ? new BigDecimal("30.00") : BigDecimal.ZERO;
+
+            if (recipientData.getFinalAgreedPrice() != null) {
+                // Customer specified the final price
+                calculatedPrice = BigDecimal.valueOf(recipientData.getFinalAgreedPrice());
+                basePrice = calculatedPrice.subtract(rushFee).subtract(remoteFee);
+            } else {
+                // No price specified, default to fees only
+                basePrice = BigDecimal.ZERO;
+                calculatedPrice = rushFee.add(remoteFee);
+            }
+
+            recipient.setBasePrice(basePrice);
+            recipient.setRushServiceFee(rushFee);
+            recipient.setRemoteLocationFee(remoteFee);
+            recipient.setFinalAgreedPrice(calculatedPrice);
+        } else {
+            // AUTOMATED: All prices start at 0 until bid accepted
+            basePrice = BigDecimal.ZERO;
+            rushFee = BigDecimal.ZERO;
+            remoteFee = BigDecimal.ZERO;
+            calculatedPrice = BigDecimal.ZERO;
+
+            recipient.setBasePrice(basePrice);
+            recipient.setRushServiceFee(rushFee);
+            recipient.setRemoteLocationFee(remoteFee);
+            recipient.setFinalAgreedPrice(calculatedPrice);
         }
 
-        dropoff.setStatus(OrderDropoff.DropoffStatus.PENDING);
-        order.getDropoffs().add(dropoff);
+        recipient.setStatus(OrderRecipient.RecipientStatus.PENDING);
+        order.getRecipients().add(recipient);
 
-        dropoffRepository.save(dropoff);
+        recipientRepository.save(recipient);
     }
 
     /**
-     * Remove a dropoff from an order - Requirement 8
+     * Remove a recipient from an order - Requirement 8
      */
     @Transactional
-    public void removeDropoffFromOrder(String orderId, String dropoffId) {
-        log.info("Removing dropoff: {} from order: {}", dropoffId, orderId);
+    public void removeRecipientFromOrder(String orderId, String recipientId) {
+        log.info("Removing recipient: {} from order: {}", recipientId, orderId);
 
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
 
-        // Prevent removing the last dropoff
-        if (order.getDropoffs().size() <= 1) {
-            throw new RuntimeException("Cannot remove the last dropoff from an order");
+        // Prevent removing the last recipient
+        if (order.getRecipients().size() <= 1) {
+            throw new RuntimeException("Cannot remove the last recipient from an order");
         }
 
-        OrderDropoff dropoff = dropoffRepository.findById(dropoffId)
-                .orElseThrow(() -> new RuntimeException("Dropoff not found: " + dropoffId));
+        OrderRecipient recipient = recipientRepository.findById(recipientId)
+                .orElseThrow(() -> new RuntimeException("Recipient not found: " + recipientId));
 
-        if (!dropoff.getOrder().getId().equals(orderId)) {
-            throw new RuntimeException("Dropoff does not belong to this order");
+        if (!recipient.getOrder().getId().equals(orderId)) {
+            throw new RuntimeException("Recipient does not belong to this order");
         }
 
-        order.getDropoffs().remove(dropoff);
-        dropoffRepository.delete(dropoff);
+        order.getRecipients().remove(recipient);
+        recipientRepository.delete(recipient);
     }
 
     /**
-     * Update an individual dropoff - Requirement 8
+     * Update an individual recipient - Requirement 8
+     */
+    /**
+     * Update an individual recipient - Requirement 8
      */
     @Transactional
-    public void updateDropoff(String dropoffId, UpdateOrderRequest.DropoffUpdate update) {
-        log.info("Updating dropoff: {}", dropoffId);
+    public void updateRecipient(String recipientId, UpdateOrderRequest.RecipientUpdate update) {
+        // Default to "system" if called internally without userId, or pass it through
+        // if possible
+        // For backward compatibility or internal calls
+        updateRecipient(recipientId, update, "system", "CUSTOMER");
+    }
 
-        OrderDropoff dropoff = dropoffRepository.findById(dropoffId)
-                .orElseThrow(() -> new RuntimeException("Dropoff not found: " + dropoffId));
+    @Transactional
+    public void updateRecipient(String recipientId, UpdateOrderRequest.RecipientUpdate update, String userId,
+            String role) {
+        log.info("Updating recipient: {}", recipientId);
 
+        OrderRecipient recipient = recipientRepository.findById(recipientId)
+                .orElseThrow(() -> new RuntimeException("Recipient not found: " + recipientId));
+
+        updateRecipientEntity(recipient, update, userId);
+
+        recipientRepository.save(recipient);
+
+        // Track history (moved from updateRecipientIndependent to here to cover all
+        // updates)
+        // But wait, updateOrder tracks its own history.
+        // If we call this from updateOrder, we might double log?
+        // updateOrder logs "Order Modified", but maybe not granular recipient details.
+        // Let's keep it simple: The helper updates the entity. Saving and logging is
+        // caller's responsibility?
+        // No, updateRecipient (public) should save.
+    }
+
+    /**
+     * Helper to update recipient entity fields
+     */
+    private void updateRecipientEntity(OrderRecipient recipient, UpdateOrderRequest.RecipientUpdate update,
+            String userId) {
         if (update.getRecipientName() != null) {
-            dropoff.setRecipientName(update.getRecipientName());
+            recipient.setRecipientName(update.getRecipientName());
         }
-        if (update.getDropoffAddress() != null) {
-            dropoff.setDropoffAddress(update.getDropoffAddress());
+        if (update.getRecipientAddress() != null) {
+            recipient.setRecipientAddress(update.getRecipientAddress());
         }
-        if (update.getDropoffZipCode() != null) {
-            dropoff.setDropoffZipCode(update.getDropoffZipCode());
+        if (update.getRecipientZipCode() != null) {
+            recipient.setRecipientZipCode(update.getRecipientZipCode());
         }
         if (update.getAssignedProcessServerId() != null) {
-            dropoff.setAssignedProcessServerId(update.getAssignedProcessServerId());
+            recipient.setAssignedProcessServerId(update.getAssignedProcessServerId());
         }
         if (update.getFinalAgreedPrice() != null) {
-            dropoff.setFinalAgreedPrice(BigDecimal.valueOf(update.getFinalAgreedPrice()));
+            recipient.setFinalAgreedPrice(BigDecimal.valueOf(update.getFinalAgreedPrice()));
         }
         if (update.getRushService() != null) {
-            dropoff.setRushService(update.getRushService());
-            dropoff.setRushServiceFee(update.getRushService() ? new BigDecimal("50.00") : BigDecimal.ZERO);
+            recipient.setRushService(update.getRushService());
+            recipient.setRushServiceFee(update.getRushService() ? new BigDecimal("50.00") : BigDecimal.ZERO);
         }
         if (update.getRemoteLocation() != null) {
-            dropoff.setRemoteLocation(update.getRemoteLocation());
-            dropoff.setRemoteLocationFee(update.getRemoteLocation() ? new BigDecimal("30.00") : BigDecimal.ZERO);
+            recipient.setRemoteLocation(update.getRemoteLocation());
+            recipient.setRemoteLocationFee(update.getRemoteLocation() ? new BigDecimal("30.00") : BigDecimal.ZERO);
         }
 
-        // Recalculate price if fees changed
-        BigDecimal base = dropoff.getBasePrice() != null ? dropoff.getBasePrice() : new BigDecimal("75.00");
-        BigDecimal rush = dropoff.getRushServiceFee() != null ? dropoff.getRushServiceFee() : BigDecimal.ZERO;
-        BigDecimal remote = dropoff.getRemoteLocationFee() != null ? dropoff.getRemoteLocationFee() : BigDecimal.ZERO;
+        // Handle Service Type from booleans first
+        if (update.getProcessService() != null || update.getCertifiedMail() != null) {
+            if (update.getProcessService() != null) {
+                recipient.setProcessService(update.getProcessService());
+            }
+            if (update.getCertifiedMail() != null) {
+                recipient.setCertifiedMail(update.getCertifiedMail());
+            }
 
-        // Only update final price if it was auto-calculated (simplified logic: update
-        // if no explicit price update)
-        if (update.getFinalAgreedPrice() == null) {
-            dropoff.setFinalAgreedPrice(base.add(rush).add(remote));
+            // Set serviceType based on what's selected
+            // If both are true, prefer PROCESS_SERVICE as primary
+            // If only one is true, use that one
+            if (recipient.getProcessService() && recipient.getCertifiedMail()) {
+                recipient.setServiceType(OrderRecipient.ServiceType.PROCESS_SERVICE);
+            } else if (recipient.getProcessService()) {
+                recipient.setServiceType(OrderRecipient.ServiceType.PROCESS_SERVICE);
+            } else if (recipient.getCertifiedMail()) {
+                recipient.setServiceType(OrderRecipient.ServiceType.CERTIFIED_MAIL);
+            }
         }
 
-        dropoffRepository.save(dropoff);
+        // Handle Service Type from enum (fallback if booleans not provided)
+        if (update.getServiceType() != null) {
+            try {
+                OrderRecipient.ServiceType newType = OrderRecipient.ServiceType.valueOf(update.getServiceType());
+                recipient.setServiceType(newType);
+                // Sync booleans only if not already set
+                if (update.getProcessService() == null) {
+                    recipient.setProcessService(newType == OrderRecipient.ServiceType.PROCESS_SERVICE);
+                }
+                if (update.getCertifiedMail() == null) {
+                    recipient.setCertifiedMail(newType == OrderRecipient.ServiceType.CERTIFIED_MAIL);
+                }
+            } catch (Exception e) {
+                log.warn("Invalid service type: {}", update.getServiceType());
+            }
+        }
+
+        // Recalculate price if fees changed AND recipient is GUIDED type
+        if (recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED) {
+            if (update.getFinalAgreedPrice() != null) {
+                // Customer updated the final price - recalculate base
+                recipient.setFinalAgreedPrice(BigDecimal.valueOf(update.getFinalAgreedPrice()));
+                BigDecimal rush = recipient.getRushServiceFee() != null ? recipient.getRushServiceFee()
+                        : BigDecimal.ZERO;
+                BigDecimal remote = recipient.getRemoteLocationFee() != null ? recipient.getRemoteLocationFee()
+                        : BigDecimal.ZERO;
+                BigDecimal newBase = recipient.getFinalAgreedPrice().subtract(rush).subtract(remote);
+                recipient.setBasePrice(newBase);
+            } else if (update.getRushService() != null || update.getRemoteLocation() != null) {
+                // Fees changed but price not updated - recalculate final from base + new fees
+                BigDecimal base = recipient.getBasePrice() != null ? recipient.getBasePrice() : BigDecimal.ZERO;
+                BigDecimal rush = recipient.getRushServiceFee() != null ? recipient.getRushServiceFee()
+                        : BigDecimal.ZERO;
+                BigDecimal remote = recipient.getRemoteLocationFee() != null ? recipient.getRemoteLocationFee()
+                        : BigDecimal.ZERO;
+                recipient.setFinalAgreedPrice(base.add(rush).add(remote));
+            }
+        }
+
+        recipient.setLastEditedAt(LocalDateTime.now());
+        recipient.setLastEditedBy(userId);
     }
 
     private void populateCustomerNames(List<Order> orders) {
@@ -789,8 +1041,8 @@ public class OrderService {
 
         log.info("Calculating payment for completed order {}", order.getOrderNumber());
 
-        // Get all dropoffs for this order
-        List<OrderDropoff> dropoffs = order.getDropoffs();
+        // Get all recipients for this order
+        List<OrderRecipient> recipients = order.getRecipients();
 
         BigDecimal totalAgreedPrice = BigDecimal.ZERO;
         BigDecimal totalPayout = BigDecimal.ZERO;
@@ -799,21 +1051,21 @@ public class OrderService {
         BigDecimal totalTenantProfit = BigDecimal.ZERO;
         BigDecimal totalCustomerPayment = BigDecimal.ZERO;
 
-        for (OrderDropoff dropoff : dropoffs) {
-            BigDecimal dropoffPrice = dropoff.getFinalAgreedPrice();
+        for (OrderRecipient recipient : recipients) {
+            BigDecimal recipientPrice = recipient.getFinalAgreedPrice();
 
-            // If dropoff doesn't have a price, use a default based on distance or $150
-            if (dropoffPrice == null || dropoffPrice.compareTo(BigDecimal.ZERO) == 0) {
-                dropoffPrice = new BigDecimal("150.00");
-                dropoff.setFinalAgreedPrice(dropoffPrice);
-                dropoffRepository.save(dropoff);
-                log.info("Set default price $150 for dropoff {} in order {}",
-                        dropoff.getId(), order.getOrderNumber());
+            // If recipient doesn't have a price, use a default based on distance or $150
+            if (recipientPrice == null || recipientPrice.compareTo(BigDecimal.ZERO) == 0) {
+                recipientPrice = new BigDecimal("150.00");
+                recipient.setFinalAgreedPrice(recipientPrice);
+                recipientRepository.save(recipient);
+                log.info("Set default price $150 for recipient {} in order {}",
+                        recipient.getId(), order.getOrderNumber());
             }
 
             // Calculate commission breakdown (15% commission rate)
             BigDecimal commissionRate = new BigDecimal("0.15");
-            BigDecimal commission = dropoffPrice.multiply(commissionRate).setScale(2, java.math.RoundingMode.HALF_UP);
+            BigDecimal commission = recipientPrice.multiply(commissionRate).setScale(2, java.math.RoundingMode.HALF_UP);
 
             // Super admin fee is 5% of commission
             BigDecimal superAdminFee = commission.multiply(new BigDecimal("0.05")).setScale(2,
@@ -822,12 +1074,12 @@ public class OrderService {
             // Tenant profit is commission minus super admin fee
             BigDecimal tenantProfit = commission.subtract(superAdminFee);
 
-            // Customer pays: dropoff price + commission
-            BigDecimal customerPayment = dropoffPrice.add(commission);
+            // Customer pays: recipient price + commission
+            BigDecimal customerPayment = recipientPrice.add(commission);
 
             // Accumulate totals
-            totalAgreedPrice = totalAgreedPrice.add(dropoffPrice);
-            totalPayout = totalPayout.add(dropoffPrice);
+            totalAgreedPrice = totalAgreedPrice.add(recipientPrice);
+            totalPayout = totalPayout.add(recipientPrice);
             totalCommission = totalCommission.add(commission);
             totalSuperAdminFee = totalSuperAdminFee.add(superAdminFee);
             totalTenantProfit = totalTenantProfit.add(tenantProfit);
@@ -852,8 +1104,8 @@ public class OrderService {
     @Transactional
     public void cleanupOrdersForInvitation(String invitationId) {
         log.info("Cleaning up orders for expired invitation: {}", invitationId);
-        // Find dropoffs assigned to this invitation (via temp ID or email)
-        // Since we don't store invitationId directly on dropoff, we rely on the fact
+        // Find Recipients assigned to this invitation (via temp ID or email)
+        // Since we don't store invitationId directly on Recipient, we rely on the fact
         // that
         // the assignedProcessServerId was the email or temp ID from the invitation.
         // However, the requirement says "orders assigned to them".
@@ -884,7 +1136,7 @@ public class OrderService {
         // metadata.
         // Realistically, we should update the API to take the "assignedId" to clean up.
 
-        // For this task, I will implement a method that deletes dropoffs/orders where
+        // For this task, I will implement a method that deletes recipients/orders where
         // assignedProcessServerId matches a pattern or we just accept that we need the
         // ID.
 
@@ -945,6 +1197,18 @@ public class OrderService {
             // Save file
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
+            // Count pages if supported format
+            try {
+                int pageCount = documentPageCounter.countPages(filePath.toFile());
+                if (pageCount > 0) {
+                    order.setPageCount(pageCount);
+                    log.info("Document page count: {} for order: {}", pageCount, orderId);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to count pages for document, continuing without page count", e);
+                // Don't fail the upload if page counting fails
+            }
+
             // Update order with file URL/Path
             String fileUrl = filename; // Storing just filename, will serve via endpoint
             order.setDocumentUrl(fileUrl);
@@ -955,6 +1219,46 @@ public class OrderService {
         } catch (Exception e) {
             log.error("Failed to upload document", e);
             throw new RuntimeException("Failed to upload document: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get page count for an order's document
+     */
+    public Integer getPageCount(String orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+        return order.getPageCount();
+    }
+
+    /**
+     * Count pages from a temporary file upload without creating an order
+     * Used during order creation wizard to show page count immediately
+     */
+    public int countPagesFromUpload(MultipartFile file) {
+        log.info("Counting pages from temporary upload: {}", file.getOriginalFilename());
+
+        try {
+            // Create a temporary file to process
+            Path tempDir = Paths.get(System.getProperty("java.io.tmpdir"));
+            Path tempFile = Files.createTempFile(tempDir, "pagecount-", "-" + file.getOriginalFilename());
+
+            // Write uploaded file to temp location
+            file.transferTo(tempFile.toFile());
+
+            // Count pages using our DocumentPageCounter service
+            int pageCount = documentPageCounter.countPages(tempFile.toFile());
+
+            // Clean up temp file
+            Files.deleteIfExists(tempFile);
+
+            log.info("Counted {} pages in temporary upload: {}", pageCount, file.getOriginalFilename());
+            return pageCount;
+
+        } catch (Exception e) {
+            log.error("Failed to count pages from upload", e);
+            throw new RuntimeException("Failed to count pages: " + e.getMessage());
         }
     }
 
@@ -980,6 +1284,133 @@ public class OrderService {
             }
         } catch (Exception e) {
             throw new RuntimeException("Could not read file: " + order.getDocumentUrl(), e);
+        }
+    }
+
+    /**
+     * Update an individual recipient independently with history tracking -
+     * Requirement 8 (Enhanced)
+     */
+    @Transactional
+    public void updateRecipientIndependent(String recipientId, UpdateOrderRequest.RecipientUpdate update, String userId,
+            String role) {
+        log.info("Updating recipient independently: {} by {}", recipientId, userId);
+
+        OrderRecipient recipient = recipientRepository.findById(recipientId)
+                .orElseThrow(() -> new RuntimeException("Recipient not found: " + recipientId));
+
+        // Validation
+        if (recipient.getStatus() == OrderRecipient.RecipientStatus.IN_PROGRESS ||
+                recipient.getStatus() == OrderRecipient.RecipientStatus.DELIVERED ||
+                recipient.getStatus() == OrderRecipient.RecipientStatus.FAILED) {
+            throw new RuntimeException("Cannot edit recipient in status: " + recipient.getStatus());
+        }
+
+        java.util.Map<String, String[]> changes = new java.util.HashMap<>();
+
+        // Capture old values for history
+        boolean oldRush = recipient.getRushService();
+        boolean oldRemote = recipient.getRemoteLocation();
+        String oldName = recipient.getRecipientName();
+        // ... capture other fields if needed for history ...
+
+        // Use the helper to update fields
+        updateRecipientEntity(recipient, update, userId);
+
+        // Calculate changes for history (simplified for now)
+        if (update.getRecipientName() != null && !update.getRecipientName().equals(oldName)) {
+            changes.put("recipientName", new String[] { oldName, update.getRecipientName() });
+        }
+        if (update.getRushService() != null && !update.getRushService().equals(oldRush)) {
+            changes.put("rushService",
+                    new String[] { String.valueOf(oldRush), String.valueOf(update.getRushService()) });
+        }
+        if (update.getRemoteLocation() != null && !update.getRemoteLocation().equals(oldRemote)) {
+            changes.put("remoteLocation",
+                    new String[] { String.valueOf(oldRemote), String.valueOf(update.getRemoteLocation()) });
+        }
+
+        if (!changes.isEmpty()) {
+            recipientRepository.save(recipient);
+            // Track history
+            historyService.trackRecipientEdit(recipient, changes, userId, role);
+        }
+    }
+
+    @Transactional
+    public String uploadRecipientDocument(String recipientId, MultipartFile file, String userId, String role) {
+        OrderRecipient recipient = recipientRepository.findById(recipientId)
+                .orElseThrow(() -> new RuntimeException("Recipient not found: " + recipientId));
+
+        try {
+            // Create uploads directory if not exists
+            Path uploadPath = Paths.get("uploads"); // In prod this is /home/ubuntu/uploads/documents usually
+            if (!Files.exists(uploadPath)) {
+                Files.createDirectories(uploadPath);
+            }
+
+            // Generate unique filename
+            String originalFilename = file.getOriginalFilename();
+            String extension = "";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            }
+            String filename = UUID.randomUUID().toString() + extension;
+            Path filePath = uploadPath.resolve(filename);
+
+            // Save file
+            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+            // In existing implementation, filename is stored directly as URL
+            String fileUrl = filename;
+
+            recipient.setDocumentUrl(fileUrl);
+            recipient.setUsesOrderDocument(false);
+            recipient.setLastEditedAt(LocalDateTime.now());
+            recipient.setLastEditedBy(userId);
+
+            recipientRepository.save(recipient);
+
+            historyService.trackDocumentUpload(recipient.getOrder().getId(), recipientId, originalFilename, userId,
+                    role);
+
+            return fileUrl;
+
+        } catch (Exception e) {
+            log.error("Failed to upload document", e);
+            throw new RuntimeException("Failed to upload document: " + e.getMessage());
+        }
+    }
+
+    public Resource getRecipientDocument(String recipientId) {
+        OrderRecipient recipient = recipientRepository.findById(recipientId)
+                .orElseThrow(() -> new RuntimeException("Recipient not found"));
+
+        String filename = recipient.getDocumentUrl();
+        if (filename == null && Boolean.TRUE.equals(recipient.getUsesOrderDocument())) {
+            filename = recipient.getOrder().getDocumentUrl();
+        }
+
+        if (filename == null) {
+            throw new RuntimeException("No document found");
+        }
+
+        try {
+            Path filePath = Paths.get("/home/ubuntu/uploads/documents").resolve(filename);
+            // Fallback for local dev
+            if (!Files.exists(filePath)) {
+                filePath = Paths.get("uploads").resolve(filename);
+            }
+
+            Resource resource = new UrlResource(filePath.toUri());
+
+            if (resource.exists() || resource.isReadable()) {
+                return resource;
+            } else {
+                throw new RuntimeException("Could not read file: " + filename);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Could not read file: " + filename, e);
         }
     }
 }

@@ -23,12 +23,12 @@ public class Bid {
     private String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_dropoff_id", nullable = false)
-    @JsonBackReference("dropoff-bids")
-    private OrderDropoff dropoff;
+    @JoinColumn(name = "order_recipient_id", nullable = false)
+    @JsonBackReference("recipient-bids")
+    private OrderRecipient recipient;
 
-    @Column(name = "order_dropoff_id", insertable = false, updatable = false)
-    private String orderDropoffId;
+    @Column(name = "order_recipient_id", insertable = false, updatable = false)
+    private String orderRecipientId;
 
     @Column(name = "process_server_id", length = 36, nullable = false)
     private String processServerId;

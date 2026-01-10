@@ -7,6 +7,7 @@ import com.processserve.order.dto.CancelOrderRequest;
 import com.processserve.order.dto.OrderEditabilityResponse;
 import com.processserve.order.entity.Order;
 import com.processserve.order.service.OrderService;
+import com.processserve.order.service.OrderHistoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,7 @@ import java.util.Map;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderHistoryService historyService;
 
     @PostMapping
     public ResponseEntity<?> createOrder(@Valid @RequestBody CreateOrderRequest request) {
@@ -313,6 +315,40 @@ public class OrderController {
         }
     }
 
+    @GetMapping("/{id}/page-count")
+    public ResponseEntity<?> getPageCount(@PathVariable String id) {
+        try {
+            Integer pageCount = orderService.getPageCount(id);
+            Map<String, Object> response = new HashMap<>();
+            response.put("orderId", id);
+            response.put("pageCount", pageCount);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to get page count: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    @PostMapping(value = "/count-pages", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> countDocumentPages(@RequestParam("file") MultipartFile file) {
+        try {
+            log.info("Counting pages for temporary upload: {}", file.getOriginalFilename());
+            int pageCount = orderService.countPagesFromUpload(file);
+            Map<String, Object> response = new HashMap<>();
+            response.put("filename", file.getOriginalFilename());
+            response.put("pageCount", pageCount);
+            response.put("fileSize", file.getSize());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to count pages: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Failed to count pages: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
     @GetMapping("/{id}/document")
     public ResponseEntity<Resource> downloadDocument(@PathVariable String id) {
         try {
@@ -326,5 +362,67 @@ public class OrderController {
             log.error("Failed to download document: {}", e.getMessage());
             return ResponseEntity.notFound().build();
         }
+
+    }
+
+    // ============================================
+    // REQUIREMENT 8: Independent Recipient Editing & History Endpoints
+    // ============================================
+
+    @PutMapping("/recipients/{recipientId}")
+    public ResponseEntity<?> updateRecipient(
+            @PathVariable String recipientId,
+            @Valid @RequestBody UpdateOrderRequest.RecipientUpdate request,
+            @RequestHeader(value = "userId", required = false, defaultValue = "system") String userId,
+            @RequestHeader(value = "userRole", required = false, defaultValue = "CUSTOMER") String role) {
+        try {
+            orderService.updateRecipientIndependent(recipientId, request, userId, role);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            log.error("Failed to update recipient {}: {}", recipientId, e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    @PostMapping(value = "/recipients/{recipientId}/document", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> uploadRecipientDocument(
+            @PathVariable String recipientId,
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader(value = "userId", required = false, defaultValue = "system") String userId,
+            @RequestHeader(value = "userRole", required = false, defaultValue = "CUSTOMER") String role) {
+        try {
+            String fileUrl = orderService.uploadRecipientDocument(recipientId, file, userId, role);
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Document uploaded successfully");
+            response.put("documentUrl", fileUrl);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to upload recipient document: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    @GetMapping("/recipients/{recipientId}/document")
+    public ResponseEntity<Resource> downloadRecipientDocument(@PathVariable String recipientId) {
+        try {
+            Resource resource = orderService.getRecipientDocument(recipientId);
+            String contentType = "application/octet-stream";
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
+                    .body(resource);
+        } catch (Exception e) {
+            log.error("Failed to download recipient document: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping("/{id}/history")
+    public ResponseEntity<?> getOrderHistory(@PathVariable String id) {
+        return ResponseEntity.ok(historyService.getOrderHistory(id));
     }
 }

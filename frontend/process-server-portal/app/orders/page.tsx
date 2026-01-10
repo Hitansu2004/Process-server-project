@@ -261,11 +261,10 @@ export default function AvailableOrders() {
                                                 initial={{ scale: 0 }}
                                                 animate={{ scale: 1 }}
                                                 transition={{ delay: index * 0.05 + 0.2, type: 'spring' }}
-                                                className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                                    order.status === 'OPEN'
+                                                className={`px-3 py-1 rounded-full text-xs font-bold ${order.status === 'OPEN'
                                                         ? 'bg-green-400 text-green-900'
                                                         : 'bg-yellow-400 text-yellow-900'
-                                                }`}
+                                                    }`}
                                             >
                                                 {order.status}
                                             </motion.span>
@@ -304,7 +303,7 @@ export default function AvailableOrders() {
                                             </div>
                                         </motion.div>
 
-                                        {/* Dropoff */}
+                                        {/* Recipient */}
                                         <motion.div
                                             initial={{ opacity: 0, x: -10 }}
                                             animate={{ opacity: 1, x: 0 }}
@@ -316,11 +315,11 @@ export default function AvailableOrders() {
                                             </div>
                                             <div className="flex-1">
                                                 <p className="text-xs text-gray-500 font-semibold mb-1">
-                                                    {order.totalDropoffs} Dropoff{order.totalDropoffs > 1 ? 's' : ''}
+                                                    {order.recipients?.length || 0} Recipient{(order.recipients?.length || 0) > 1 ? 's' : ''}
                                                 </p>
-                                                {order.dropoffs && order.dropoffs[0] && (
+                                                {order.recipients && order.recipients[0] && (
                                                     <p className="text-sm font-medium text-gray-800 line-clamp-2">
-                                                        {order.dropoffs[0].dropoffAddress}
+                                                        {order.recipients[0].recipientAddress}
                                                     </p>
                                                 )}
                                             </div>

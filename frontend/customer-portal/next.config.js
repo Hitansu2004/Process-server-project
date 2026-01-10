@@ -17,6 +17,16 @@ const nextConfig = {
         optimizeCss: true,
     },
 
+    async redirects() {
+        return [
+            {
+                source: '/orders',
+                destination: '/dashboard',
+                permanent: true,
+            },
+        ];
+    },
+
     async headers() {
         return [
             {

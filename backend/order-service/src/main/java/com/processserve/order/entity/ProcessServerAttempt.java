@@ -22,9 +22,9 @@ public class ProcessServerAttempt {
     private String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_dropoff_id", nullable = false)
-    @JsonBackReference("dropoff-attempts")
-    private OrderDropoff dropoff;
+    @JoinColumn(name = "order_recipient_id", nullable = false)
+    @JsonBackReference("recipient-attempts")
+    private OrderRecipient recipient;
 
     @Column(name = "process_server_id", length = 36, nullable = false)
     private String processServerId;

@@ -29,7 +29,7 @@ public class Order {
     @Column(name = "customer_id", length = 36, nullable = false)
     private String customerId;
 
-    // assigned_delivery_person_id removed - moved to OrderDropoff
+    // assigned_delivery_person_id removed - moved to OrderRecipient
 
     @Column(name = "order_number", unique = true, nullable = false, length = 50)
     private String orderNumber;
@@ -54,6 +54,9 @@ public class Order {
     @Column(name = "document_url", length = 512)
     private String documentUrl;
 
+    @Column(name = "page_count")
+    private Integer pageCount;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private OrderStatus status;
@@ -64,7 +67,7 @@ public class Order {
     @Column(name = "special_instructions", columnDefinition = "TEXT")
     private String specialInstructions;
 
-    @Column(nullable = false)
+    @Column(name = "deadline")
     private LocalDateTime deadline;
 
     @Column(name = "final_agreed_price", precision = 10, scale = 2)
@@ -92,11 +95,11 @@ public class Order {
     @Column(name = "commission_rate_applied", precision = 5, scale = 2)
     private BigDecimal commissionRateApplied;
 
-    @Column(name = "has_multiple_dropoffs")
-    private Boolean hasMultipleDropoffs = false;
+    @Column(name = "has_multiple_recipients")
+    private Boolean hasMultipleRecipients = false;
 
-    @Column(name = "total_dropoffs")
-    private Integer totalDropoffs = 1;
+    @Column(name = "total_recipients")
+    private Integer totalRecipients = 1;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -115,8 +118,8 @@ public class Order {
     private Integer modificationCount = 0;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonManagedReference("order-dropoffs")
-    private List<OrderDropoff> dropoffs = new ArrayList<>();
+    @JsonManagedReference("order-recipients")
+    private List<OrderRecipient> recipients = new ArrayList<>();
 
     @Transient
     private String customerName;
@@ -130,6 +133,19 @@ public class Order {
     }
 
     public enum DocumentType {
+        SUMMONS,
+        COMPLAINT,
+        NOTICE,
+        ORDER,
+        PETITION,
+        MOTION,
+        WARRANT,
+        WRIT,
+        GARNISHMENT,
+        PROBATE_DOCUMENTS,
+        CEASE_DESIST,
+        DEMAND_LETTER,
+        CONTRACT,
         CRIMINAL_CASE,
         CIVIL_COMPLAINT,
         RESTRAINING_ORDER,
@@ -149,7 +165,9 @@ public class Order {
     public boolean canBeEdited() {
         return this.status == OrderStatus.DRAFT ||
                 this.status == OrderStatus.OPEN ||
-                this.status == OrderStatus.BIDDING;
+                this.status == OrderStatus.BIDDING ||
+                this.status == OrderStatus.PARTIALLY_ASSIGNED ||
+                this.status == OrderStatus.ASSIGNED;
     }
 
     // Helper method to increment modification count

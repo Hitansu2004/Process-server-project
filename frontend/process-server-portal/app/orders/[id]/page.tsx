@@ -12,7 +12,8 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
     const [bidAmount, setBidAmount] = useState('')
     const [submitting, setSubmitting] = useState(false)
     const [user, setUser] = useState<any>(null)
-    const [selectedDropoff, setSelectedDropoff] = useState<any>(null)
+    const [profile, setProfile] = useState<any>(null)
+    const [selectedRecipient, setSelectedRecipient] = useState<any>(null)
     const [attemptNotes, setAttemptNotes] = useState('')
     const [recordingAttempt, setRecordingAttempt] = useState(false)
 
@@ -27,6 +28,17 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
 
         const parsedUser = JSON.parse(userData)
         setUser(parsedUser)
+
+        // Load profile to get actual process server ID
+        const processServerRole = parsedUser.roles.find((r: any) => r.role === 'PROCESS_SERVER')
+        if (processServerRole && processServerRole.id) {
+            api.getProcessServerProfile(processServerRole.id, token)
+                .then(profileData => {
+                    setProfile(profileData)
+                })
+                .catch(err => console.error('Failed to load profile:', err))
+        }
+
         loadOrderDetails(params.id, token)
     }, [params.id, router])
 
@@ -75,18 +87,18 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
             // Get process server profile ID from user object (stored during login)
             const processServerId = user.processServerProfileId || user.userId
 
-            // Find the first available dropoff (OPEN or BIDDING status)
-            const availableDropoff = order.dropoffs?.find((d: any) =>
+            // Find the first available recipient (OPEN or BIDDING status)
+            const availableRecipient = order.recipients?.find((d: any) =>
                 d.status === 'OPEN' || d.status === 'BIDDING' || d.status === 'PENDING'
             )
 
-            if (!availableDropoff) {
-                alert('No available dropoffs to bid on')
+            if (!availableRecipient) {
+                alert('No available recipients to bid on')
                 return
             }
 
             const bidData = {
-                orderDropoffId: availableDropoff.id,
+                orderRecipientId: availableRecipient.id,
                 processServerId: processServerId,
                 bidAmount: parseFloat(bidAmount),
             }
@@ -105,7 +117,7 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
     }
 
     const handleRecordAttempt = async (wasSuccessful: boolean) => {
-        if (!selectedDropoff || !user) return
+        if (!selectedRecipient || !user) return
 
         setRecordingAttempt(true)
         try {
@@ -116,7 +128,7 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
 
             // Get GPS coordinates (mock for now - in real app would use navigator.geolocation)
             const attemptData = {
-                dropoffId: selectedDropoff.id,
+                recipientId: selectedRecipient.id,
                 processServerId: processServerId,
                 wasSuccessful,
                 outcomeNotes: attemptNotes || (wasSuccessful ? 'Delivered successfully' : 'Delivery failed'),
@@ -130,7 +142,7 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
 
             // Reload order details
             loadOrderDetails(params.id, token!)
-            setSelectedDropoff(null)
+            setSelectedRecipient(null)
             setAttemptNotes('')
         } catch (error) {
             console.error('Failed to record attempt:', error)
@@ -161,7 +173,12 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
         )
     }
 
-    const isMyOrder = order.status === 'IN_PROGRESS' || order.status === 'ASSIGNED'
+    // Check if this process server has an ACCEPTED bid (not REJECTED or PENDING)
+    const myAcceptedBid = bids.find((b: any) =>
+        b.processServerId === (user?.processServerProfileId || user?.userId) &&
+        b.status === 'ACCEPTED'
+    )
+    const isMyOrder = !!myAcceptedBid
 
     return (
         <div className="min-h-screen p-6">
@@ -241,107 +258,119 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                             </div>
                         </div>
 
-                        {/* Dropoff Information with Delivery Actions */}
+                        {/* Recipient Information with Delivery Actions */}
                         <div className="card">
                             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                                <span className="text-primary">📍</span> Dropoff Locations ({order.totalDropoffs})
+                                <span className="text-primary">📍</span> Recipient Locations ({order.recipients?.length || 0})
                             </h2>
                             <div className="space-y-4">
-                                {order.dropoffs && order.dropoffs.map((dropoff: any, index: number) => (
-                                    <div key={dropoff.id} className={`glass rounded-lg p-4 ${dropoff.status === 'DELIVERED' ? 'border-2 border-green-500/50' :
-                                        dropoff.status === 'FAILED' ? 'border-2 border-red-500/50' : ''
+                                {order.recipients && order.recipients.map((recipient: any, index: number) => (
+                                    <div key={recipient.id} className={`glass rounded-lg p-4 ${recipient.status === 'DELIVERED' ? 'border-2 border-green-500/50' :
+                                        recipient.status === 'FAILED' ? 'border-2 border-red-500/50' : ''
                                         }`}>
                                         <div className="flex justify-between items-start mb-2">
-                                            <h3 className="font-semibold">Dropoff #{dropoff.sequenceNumber}</h3>
-                                            <span className={`text-xs px-2 py-1 rounded ${dropoff.status === 'DELIVERED' ? 'bg-green-500/20 text-green-400' :
-                                                dropoff.status === 'FAILED' ? 'bg-red-500/20 text-red-400' :
-                                                    dropoff.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
+                                            <h3 className="font-semibold">Recipient #{index + 1}</h3>
+                                            <span className={`text-xs px-2 py-1 rounded ${recipient.status === 'DELIVERED' ? 'bg-green-500/20 text-green-400' :
+                                                recipient.status === 'FAILED' ? 'bg-red-500/20 text-red-400' :
+                                                    recipient.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
                                                         'bg-yellow-500/20 text-yellow-400'
                                                 }`}>
-                                                {dropoff.status}
+                                                {recipient.status}
                                             </span>
                                         </div>
                                         <div className="space-y-1 text-sm">
                                             <div>
                                                 <p className="text-gray-400">Recipient</p>
-                                                <p className="font-medium">{dropoff.recipientName}</p>
+                                                <p className="font-medium">{recipient.recipientName}</p>
                                             </div>
                                             <div>
                                                 <p className="text-gray-400">Address</p>
-                                                <p className="font-medium">{dropoff.dropoffAddress}</p>
+                                                <p className="font-medium">{recipient.recipientAddress}</p>
                                             </div>
                                             <div>
                                                 <p className="text-gray-400">ZIP Code</p>
-                                                <p className="font-medium text-primary">{dropoff.dropoffZipCode}</p>
+                                                <p className="font-medium text-primary">{recipient.recipientZipCode}</p>
                                             </div>
 
                                             {/* Badges for Rush and Remote */}
                                             <div className="flex gap-2 mt-2">
-                                                {dropoff.rushService && (
+                                                {recipient.rushService && (
                                                     <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
                                                         ⚡ Rush Service
                                                     </span>
                                                 )}
-                                                {dropoff.remoteLocation && (
+                                                {recipient.remoteLocation && (
                                                     <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
                                                         🏝️ Remote Location
                                                     </span>
                                                 )}
                                             </div>
 
-                                            {dropoff.attemptCount > 0 && (
+                                            {recipient.attemptCount > 0 && (
                                                 <div className="mt-2">
                                                     <p className="text-gray-400">Attempts</p>
-                                                    <p className="font-medium">{dropoff.attemptCount} / {dropoff.maxAttempts}</p>
+                                                    <p className="font-medium">{recipient.attemptCount} / {recipient.maxAttempts}</p>
                                                 </div>
                                             )}
                                         </div>
 
                                         {/* Delivery Action Buttons for Assigned Orders */}
-                                        {isMyOrder && dropoff.status !== 'DELIVERED' && dropoff.status !== 'FAILED' && (
-                                            <div className="mt-3 pt-3 border-t border-white/10">
-                                                {selectedDropoff?.id === dropoff.id ? (
-                                                    <div className="space-y-3">
-                                                        <textarea
-                                                            value={attemptNotes}
-                                                            onChange={(e) => setAttemptNotes(e.target.value)}
-                                                            placeholder="Delivery notes (optional)"
-                                                            className="w-full px-3 py-2 rounded-lg glass text-sm"
-                                                            rows={2}
-                                                        />
-                                                        <div className="flex gap-2">
-                                                            <button
-                                                                onClick={() => handleRecordAttempt(true)}
-                                                                disabled={recordingAttempt}
-                                                                className="flex-1 bg-green-500 hover:bg-green-600 px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                                                            >
-                                                                ✓ Mark Delivered
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleRecordAttempt(false)}
-                                                                disabled={recordingAttempt}
-                                                                className="flex-1 bg-red-500 hover:bg-red-600 px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                                                            >
-                                                                ✗ Failed Attempt
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setSelectedDropoff(null)}
-                                                                className="px-3 py-2 rounded-lg glass text-sm"
-                                                            >
-                                                                Cancel
-                                                            </button>
+                                        {(() => {
+                                            // Only show delivery buttons if:
+                                            // 1. Process server has ACCEPTED bid for THIS specific recipient
+                                            // 2. Recipient is ASSIGNED (not DELIVERED or FAILED)
+                                            const recipientBid = bids.find((b: any) =>
+                                                b.orderRecipientId === recipient.id &&
+                                                b.processServerId === (user?.processServerProfileId || user?.userId) &&
+                                                b.status === 'ACCEPTED'
+                                            )
+                                            const canRecordAttempt = recipientBid && recipient.status === 'ASSIGNED'
+
+                                            return canRecordAttempt && (
+                                                <div className="mt-3 pt-3 border-t border-white/10">
+                                                    {selectedRecipient?.id === recipient.id ? (
+                                                        <div className="space-y-3">
+                                                            <textarea
+                                                                value={attemptNotes}
+                                                                onChange={(e) => setAttemptNotes(e.target.value)}
+                                                                placeholder="Delivery notes (optional)"
+                                                                className="w-full px-3 py-2 rounded-lg glass text-sm"
+                                                                rows={2}
+                                                            />
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handleRecordAttempt(true)}
+                                                                    disabled={recordingAttempt}
+                                                                    className="flex-1 bg-green-500 hover:bg-green-600 px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                                                                >
+                                                                    ✓ Mark Delivered
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleRecordAttempt(false)}
+                                                                    disabled={recordingAttempt}
+                                                                    className="flex-1 bg-red-500 hover:bg-red-600 px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                                                                >
+                                                                    ✗ Failed Attempt
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setSelectedRecipient(null)}
+                                                                    className="px-3 py-2 rounded-lg glass text-sm"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => setSelectedDropoff(dropoff)}
-                                                        className="w-full bg-primary hover:bg-primary/80 px-4 py-2 rounded-lg text-sm font-semibold"
-                                                    >
-                                                        Record Delivery Attempt
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )}
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => setSelectedRecipient(recipient)}
+                                                            className="w-full bg-primary hover:bg-primary/80 px-4 py-2 rounded-lg text-sm font-semibold"
+                                                        >
+                                                            Record Delivery Attempt
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )
+                                        })()}
                                     </div>
                                 ))}
                             </div>
@@ -363,13 +392,15 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                         <p className="text-gray-400 text-sm mb-1">Payment Breakdown</p>
                                         <div className="space-y-1">
                                             {(() => {
-                                                // Calculate the actual customer payment (base + rush + remote fees)
-                                                const customerPayment = order.dropoffs?.reduce((sum: number, d: any) => {
-                                                    const basePrice = parseFloat(d.finalAgreedPrice) || 0;
-                                                    const rushFee = parseFloat(d.rushServiceFee) || 0;
-                                                    const remoteFee = parseFloat(d.remoteLocationFee) || 0;
-                                                    return sum + basePrice + rushFee + remoteFee;
-                                                }, 0) || 0;
+                                                // Calculate customer payment from only the recipients assigned to this process server
+                                                const myRecipients = order.recipients?.filter((d: any) =>
+                                                    d.assignedProcessServerId === profile?.id
+                                                ) || [];
+
+                                                // finalAgreedPrice already includes base + rush + remote fees
+                                                const customerPayment = myRecipients.reduce((sum: number, d: any) => {
+                                                    return sum + (parseFloat(d.finalAgreedPrice) || 0);
+                                                }, 0);
 
                                                 const platformFee = customerPayment * 0.15;
                                                 const processServerEarnings = customerPayment - platformFee;
@@ -446,34 +477,44 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                         )}
 
                         {/* Place Bid */}
-                        {!isMyOrder && !bids.find((b: any) => b.processServerId === (user?.processServerProfileId || user?.userId)) && (order.status === 'OPEN' || order.status === 'BIDDING') && (
-                            <div className="card">
-                                <h2 className="text-xl font-bold mb-4">Place Your Bid</h2>
-                                <form onSubmit={handlePlaceBid} className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2">
-                                            Bid Amount ($)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            value={bidAmount}
-                                            onChange={(e) => setBidAmount(e.target.value)}
-                                            className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
-                                            placeholder="Enter your bid"
-                                            required
-                                        />
-                                    </div>
-                                    <button
-                                        type="submit"
-                                        disabled={submitting}
-                                        className="btn-primary w-full disabled:opacity-50"
-                                    >
-                                        {submitting ? 'Submitting...' : 'Submit Bid'}
-                                    </button>
-                                </form>
-                            </div>
-                        )}
+                        {(() => {
+                            // Check if there are any OPEN or BIDDING recipients available for bidding
+                            const hasAvailableRecipients = order.recipients?.some((d: any) =>
+                                d.status === 'OPEN' || d.status === 'BIDDING'
+                            );
+                            const canBid = !isMyOrder &&
+                                !bids.find((b: any) => b.processServerId === (user?.processServerProfileId || user?.userId)) &&
+                                ((order.status === 'OPEN' || order.status === 'BIDDING' || order.status === 'PARTIALLY_ASSIGNED') && hasAvailableRecipients);
+
+                            return canBid ? (
+                                <div className="card">
+                                    <h2 className="text-xl font-bold mb-4">Place Your Bid</h2>
+                                    <form onSubmit={handlePlaceBid} className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">
+                                                Bid Amount ($)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={bidAmount}
+                                                onChange={(e) => setBidAmount(e.target.value)}
+                                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                                placeholder="Enter your bid"
+                                                required
+                                            />
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={submitting}
+                                            className="btn-primary w-full disabled:opacity-50"
+                                        >
+                                            {submitting ? 'Submitting...' : 'Submit Bid'}
+                                        </button>
+                                    </form>
+                                </div>
+                            ) : null;
+                        })()}
 
 
                     </div>

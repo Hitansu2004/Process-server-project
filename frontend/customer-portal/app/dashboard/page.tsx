@@ -148,10 +148,22 @@ export default function Dashboard() {
     }
 
     const calculateOrderPrice = (order: any): number | null => {
-        // Calculate from dropoffs as source of truth
-        if (order.dropoffs && order.dropoffs.length > 0) {
-            const total = order.dropoffs.reduce((sum: number, dropoff: any) => {
-                return sum + (dropoff.finalAgreedPrice || 0)
+        // Calculate from recipients as source of truth
+        if (order.recipients && order.recipients.length > 0) {
+            const total = order.recipients.reduce((sum: number, recipient: any) => {
+                const isAutomatedPending = recipient.recipientType === 'AUTOMATED' &&
+                    (recipient.status === 'OPEN' || recipient.status === 'BIDDING');
+
+                if (isAutomatedPending) {
+                    // For AUTOMATED pending orders, show estimated fees
+                    const rushFee = recipient.rushService ? 50 : 0;
+                    const remoteFee = recipient.remoteLocation ? 30 : 0;
+                    return sum + rushFee + remoteFee;
+                } else {
+                    // For assigned/completed, use actual finalAgreedPrice
+                    const recipientTotal = parseFloat(recipient.finalAgreedPrice) || 0;
+                    return sum + recipientTotal;
+                }
             }, 0)
             if (total > 0) return total
         }
@@ -161,6 +173,31 @@ export default function Dashboard() {
         if (order.customerPaymentAmount) return order.customerPaymentAmount
 
         return null
+    }
+
+    // Determine which step to start from based on draft data
+    const determineStartStep = (order: any): number => {
+        // Step 1: Document Details - if any document info exists, move to step 2
+        const hasDocumentData = order.caseNumber || order.jurisdiction || order.documentType || order.deadline
+
+        // Step 2: Recipients - if recipients exist, move to step 3
+        const hasRecipients = order.recipients && order.recipients.length > 0
+
+        // Start from the first incomplete step
+        if (!hasDocumentData) return 1  // Start at document details
+        if (!hasRecipients) return 2     // Start at recipients
+        return 3                          // Start at service options
+    }
+
+    const handleOrderClick = (order: any) => {
+        if (order.status === 'DRAFT') {
+            // For drafts, redirect to order creation wizard
+            const startStep = determineStartStep(order)
+            router.push(`/orders/create?orderId=${order.id}&step=${startStep}`)
+        } else {
+            // For regular orders, go to detail page
+            router.push(`/orders/${order.id}`)
+        }
     }
 
     const handleLogout = () => {
@@ -261,7 +298,7 @@ export default function Dashboard() {
                         <motion.button
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
-                            onClick={() => router.push('/orders/new')}
+                            onClick={() => router.push('/orders/create?new=true')}
                             className="relative px-4 py-2.5 text-sm sm:text-base rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold shadow-lg hover:shadow-xl transition-shadow overflow-hidden group"
                         >
                             <span className="relative z-10">
@@ -298,6 +335,7 @@ export default function Dashboard() {
                 >
                     {orderCounts && [
                         { status: 'TOTAL', label: 'Total Orders', color: 'from-blue-600 to-purple-600', icon: '📊' },
+                        { status: 'DRAFT', label: 'Draft', color: 'from-gray-400 to-gray-500', icon: '📝' },
                         { status: 'OPEN', label: 'Open', color: 'from-yellow-500 to-orange-500', icon: '📋' },
                         { status: 'BIDDING', label: 'Bidding', color: 'from-purple-500 to-pink-500', icon: '🏷️' },
                         { status: 'ASSIGNED', label: 'Assigned', color: 'from-blue-500 to-cyan-500', icon: '👤' },
@@ -380,7 +418,8 @@ export default function Dashboard() {
                             className="overflow-hidden"
                         >
                             <div className="bg-white/90 backdrop-blur-xl rounded-2xl p-4 sm:p-6 border border-gray-200 shadow-lg">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {/* First Row: Status, Date Range, Sort By, Clear Filters - Always on same line */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                                     <div>
                                         <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">Status</label>
                                         <select
@@ -389,6 +428,7 @@ export default function Dashboard() {
                                             className="w-full px-4 py-2.5 text-sm rounded-xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                                         >
                                             <option value="ALL">All Statuses</option>
+                                            <option value="DRAFT">Draft</option>
                                             <option value="OPEN">Open</option>
                                             <option value="BIDDING">Bidding</option>
                                             <option value="ASSIGNED">Assigned</option>
@@ -413,61 +453,58 @@ export default function Dashboard() {
                                             <option value="custom">Custom Range</option>
                                         </select>
                                     </div>
-                                    {dateRange === 'custom' && (
-                                        <>
-                                            <motion.div
-                                                initial={{ opacity: 0, scale: 0.9 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                transition={{ duration: 0.2 }}
-                                            >
-                                                <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">Start Date</label>
-                                                <input
-                                                    type="date"
-                                                    value={customStartDate}
-                                                    onChange={(e) => setCustomStartDate(e.target.value)}
-                                                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                                />
-                                            </motion.div>
-                                            <motion.div
-                                                initial={{ opacity: 0, scale: 0.9 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                transition={{ duration: 0.2, delay: 0.05 }}
-                                            >
-                                                <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">End Date</label>
-                                                <input
-                                                    type="date"
-                                                    value={customEndDate}
-                                                    onChange={(e) => setCustomEndDate(e.target.value)}
-                                                    className="w-full px-4 py-2.5 text-sm rounded-xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                                />
-                                            </motion.div>
-                                        </>
-                                    )}
-                                    <div className={dateRange === 'custom' ? 'sm:col-span-2 lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4' : ''}>
-                                        <div>
-                                            <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">Sort By</label>
-                                            <select
-                                                value={sortOrder}
-                                                onChange={(e) => setSortOrder(e.target.value)}
-                                                className="w-full px-4 py-2.5 text-sm rounded-xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                            >
-                                                <option value="newest">Newest First</option>
-                                                <option value="oldest">Oldest First</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">&nbsp;</label>
-                                            <motion.button
-                                                whileHover={{ scale: 1.02 }}
-                                                whileTap={{ scale: 0.98 }}
-                                                onClick={clearFilters}
-                                                className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-sm font-medium text-gray-700 transition-all shadow-sm hover:shadow-md"
-                                            >
-                                                Clear Filters
-                                            </motion.button>
-                                        </div>
+                                    <div>
+                                        <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">Sort By</label>
+                                        <select
+                                            value={sortOrder}
+                                            onChange={(e) => setSortOrder(e.target.value)}
+                                            className="w-full px-4 py-2.5 text-sm rounded-xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                        >
+                                            <option value="newest">Newest First</option>
+                                            <option value="oldest">Oldest First</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">&nbsp;</label>
+                                        <motion.button
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={clearFilters}
+                                            className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-sm font-medium text-gray-700 transition-all shadow-sm hover:shadow-md"
+                                        >
+                                            Clear Filters
+                                        </motion.button>
                                     </div>
                                 </div>
+                                {/* Second Row: Custom Date Range (appears only when needed) */}
+                                {dateRange === 'custom' && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+                                    >
+                                        <div>
+                                            <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">Start Date</label>
+                                            <input
+                                                type="date"
+                                                value={customStartDate}
+                                                onChange={(e) => setCustomStartDate(e.target.value)}
+                                                className="w-full px-4 py-2.5 text-sm rounded-xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs sm:text-sm text-gray-600 mb-2 font-medium">End Date</label>
+                                            <input
+                                                type="date"
+                                                value={customEndDate}
+                                                onChange={(e) => setCustomEndDate(e.target.value)}
+                                                className="w-full px-4 py-2.5 text-sm rounded-xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                            />
+                                        </div>
+                                    </motion.div>
+                                )}
                             </div>
                         </motion.div>
                     )}
@@ -505,7 +542,7 @@ export default function Dashboard() {
                                 <motion.button
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
-                                    onClick={() => router.push('/orders/new')}
+                                    onClick={() => router.push('/orders/create?new=true')}
                                     className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all text-sm sm:text-base"
                                 >
                                     Create Your First Order
@@ -524,7 +561,7 @@ export default function Dashboard() {
                                         transition={{ duration: 0.3, delay: index * 0.05 }}
                                         whileHover={{ scale: 1.01, y: -2 }}
                                         whileTap={{ scale: 0.99 }}
-                                        onClick={() => router.push(`/orders/${order.id}`)}
+                                        onClick={() => handleOrderClick(order)}
                                         className="relative bg-white/80 backdrop-blur-sm rounded-xl p-4 sm:p-5 border border-gray-200 hover:border-blue-300 cursor-pointer transition-all shadow-sm hover:shadow-lg group overflow-hidden"
                                     >
                                         {/* Gradient overlay on hover */}
@@ -541,7 +578,7 @@ export default function Dashboard() {
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                                     </svg>
                                                     <span className="truncate">{order.pickupAddress}</span>
-                                                    <span className="flex-shrink-0">→ {order.totalDropoffs} dropoff(s)</span>
+                                                    <span className="flex-shrink-0">→ {order.totalRecipients} recipient(s)</span>
                                                 </p>
                                             </div>
                                             <motion.span

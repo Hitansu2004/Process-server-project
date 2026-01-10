@@ -2,11 +2,20 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '@/lib/api'
-import { Edit, Lock, X, MessageCircle } from 'lucide-react'
+import {
+    ArrowLeft, MessageCircle, X, Edit, Download, FileText,
+    Calendar, Clock, MapPin, DollarSign, User, Package,
+    CheckCircle, AlertCircle, TrendingUp, Zap, Building,
+    Phone, Mail, Save, XCircle, Eye, Lock, Shield, Star
+} from 'lucide-react'
 import ChatWindow from '@/components/chat/ChatWindow'
+import OrderHistory from '@/components/orders/OrderHistory'
+import EditRecipientModal from '@/components/orders/EditRecipientModal'
+import EditDocumentModal from '@/components/orders/EditDocumentModal'
 
-export default function OrderDetails() {
+export default function OrderDetailsNew() {
     const router = useRouter()
     const params = useParams()
     const [order, setOrder] = useState<any>(null)
@@ -20,6 +29,13 @@ export default function OrderDetails() {
     const [cancelNotes, setCancelNotes] = useState('')
     const [showChat, setShowChat] = useState(false)
     const [unreadCount, setUnreadCount] = useState(0)
+    const [editingRecipient, setEditingRecipient] = useState<any>(null)
+    const [editingDocument, setEditingDocument] = useState(false)
+    const [showAcceptBidModal, setShowAcceptBidModal] = useState(false)
+    const [selectedBid, setSelectedBid] = useState<any>(null)
+    const [acceptingBid, setAcceptingBid] = useState(false)
+    const [showSuccessModal, setShowSuccessModal] = useState(false)
+    const [lastUpdated, setLastUpdated] = useState<string>(Date.now().toString())
 
     useEffect(() => {
         loadOrderDetails()
@@ -28,25 +44,24 @@ export default function OrderDetails() {
     const loadOrderDetails = async () => {
         try {
             const token = sessionStorage.getItem('token')
-
-            // Load order details with dropoffs
             const orderData = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${params.id}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             }).then(res => res.json())
 
             setOrder(orderData)
 
-            // Load bids if order is in BIDDING status
-            if (orderData.status === 'BIDDING') {
+            const hasBiddingRecipients = orderData.recipients?.some((d: any) =>
+                d.status === 'BIDDING' || d.status === 'OPEN'
+            )
+            if (orderData.status === 'BIDDING' || orderData.status === 'PARTIALLY_ASSIGNED' || hasBiddingRecipients) {
                 const bidsData = await api.getOrderBids(params.id as string, token!)
                 setBids(bidsData.sort((a: any, b: any) => a.bidAmount - b.bidAmount))
             }
 
-            // Load process server details if order is ASSIGNED, IN_PROGRESS, or COMPLETED
             if (['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(orderData.status)) {
-                if (orderData.dropoffs) {
+                if (orderData.recipients) {
                     const uniqueServerIds = Array.from(new Set(
-                        orderData.dropoffs
+                        orderData.recipients
                             .map((d: any) => d.assignedProcessServerId)
                             .filter((id: string) => id)
                     )) as string[]
@@ -64,13 +79,14 @@ export default function OrderDetails() {
                 }
             }
 
-            // Requirement 8: Check if order is editable
             try {
                 const editabilityData = await api.checkOrderEditability(params.id as string, token!)
                 setEditability(editabilityData)
             } catch (error) {
                 console.error('Failed to check editability:', error)
             }
+
+            setLastUpdated(Date.now().toString())
         } catch (error) {
             console.error('Failed to load order details:', error)
         } finally {
@@ -78,639 +94,939 @@ export default function OrderDetails() {
         }
     }
 
-    const handleAcceptBid = async (bidId: string) => {
-        if (!confirm('Accept this bid? The process server will be assigned to this order.')) return
+    const handleAcceptBid = async (bid: any) => {
+        setSelectedBid(bid)
+        setShowAcceptBidModal(true)
+    }
 
+    const confirmAcceptBid = async () => {
+        if (!selectedBid) return
+        setAcceptingBid(true)
         try {
             const token = sessionStorage.getItem('token')
-            await api.acceptBid(bidId, token!)
-            alert('Bid accepted! Process server has been assigned.')
-            router.push('/dashboard')
+            await api.acceptBid(selectedBid.id, token!)
+            setShowAcceptBidModal(false)
+            setAcceptingBid(false)
+            setSelectedBid(null)
+            setShowSuccessModal(true)
+            await loadOrderDetails()
+            setTimeout(() => setShowSuccessModal(false), 3000)
         } catch (error) {
             alert('Failed to accept bid')
+            setAcceptingBid(false)
         }
     }
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        })
-    }
-
-    const calculateTotalPrice = (order: any): number | null => {
-        // Calculate from dropoffs as source of truth
-        if (order.dropoffs && order.dropoffs.length > 0) {
-            const total = order.dropoffs.reduce((sum: number, dropoff: any) => {
-                const basePrice = parseFloat(dropoff.finalAgreedPrice) || 0;
-                const rushFee = parseFloat(dropoff.rushServiceFee) || 0;
-                const remoteFee = parseFloat(dropoff.remoteLocationFee) || 0;
-                return sum + basePrice + rushFee + remoteFee;
-            }, 0)
-            return total > 0 ? total : null
-        }
-
-        // Fallback to order-level prices
-        return order.finalAgreedPrice || order.customerPaymentAmount || null
-    }
-
-    // Requirement 8: Cancel order handler
     const handleCancelOrder = async () => {
-        if (!cancelReason.trim()) {
-            alert('Please provide a cancellation reason')
+        if (!cancelReason) {
+            alert('Please select a cancellation reason')
             return
         }
-
         setCancelling(true)
         try {
             const token = sessionStorage.getItem('token')
-            const userData = JSON.parse(sessionStorage.getItem('user') || '{}')
-
-            await api.cancelOrder(
-                params.id as string,
-                {
-                    cancellationReason: cancelReason,
-                    additionalNotes: cancelNotes
-                },
-                token!,
-                userData.userId
-            )
-
-            alert('Order cancelled successfully')
+            const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+            const userId = user.roles?.[0]?.id || user.userId
+            await api.cancelOrder(params.id as string, {
+                cancellationReason: cancelReason,
+                additionalNotes: cancelNotes
+            }, token!, userId)
             setShowCancelModal(false)
-            await loadOrderDetails() // Reload order
-        } catch (error: any) {
-            alert(error.message || 'Failed to cancel order')
+            await loadOrderDetails()
+        } catch (error) {
+            console.error('Cancel order error:', error)
+            alert('Failed to cancel order')
         } finally {
             setCancelling(false)
         }
     }
 
-    const getBidsForDropoff = (dropoffId: string) => {
-        return bids
-            .filter((bid: any) => bid.orderDropoffId === dropoffId)
+    const formatDate = (dateString: string) => {
+        if (!dateString) return 'N/A'
+        return new Date(dateString).toLocaleString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        })
+    }
+
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency', currency: 'USD'
+        }).format(amount || 0)
+    }
+
+    const calculateTotalPrice = (order: any): number => {
+        if (order.recipients && order.recipients.length > 0) {
+            const subtotal = order.recipients.reduce((sum: number, recipient: any) => {
+                const isAutomatedPending = recipient.recipientType === 'AUTOMATED' &&
+                    (recipient.status === 'OPEN' || recipient.status === 'BIDDING')
+
+                const isDirectStandard = recipient.recipientType === 'GUIDED' && !recipient.quotedPrice && !recipient.negotiatedPrice
+
+                if (isAutomatedPending || isDirectStandard) {
+                    let recipientTotal = 0
+                    if (recipient.processService) recipientTotal += 75
+                    if (recipient.certifiedMail) recipientTotal += 25
+                    if (recipient.rushService) recipientTotal += 50
+                    if (recipient.remoteLocation) recipientTotal += 40
+                    return sum + recipientTotal
+                } else {
+                    return sum + (parseFloat(recipient.finalAgreedPrice) || 0)
+                }
+            }, 0)
+
+            // Add 3% processing fee
+            return subtotal + (subtotal * 0.03)
+        }
+        return order.customerPaymentAmount || 0
+    }
+
+    const getBidsForRecipient = (recipientId: string) => {
+        return bids.filter((b: any) => b.orderRecipientId === recipientId)
             .sort((a: any, b: any) => a.bidAmount - b.bidAmount)
     }
 
-    const getStatusColor = (status: string) => {
-        const colors: any = {
-            'OPEN': 'bg-blue-500/20 text-blue-400',
-            'BIDDING': 'bg-yellow-500/20 text-yellow-400',
-            'ASSIGNED': 'bg-purple-500/20 text-purple-400',
-            'IN_PROGRESS': 'bg-blue-500/20 text-blue-400',
-            'COMPLETED': 'bg-green-500/20 text-green-400',
-            'FAILED': 'bg-red-500/20 text-red-400',
-            'CANCELLED': 'bg-gray-500/20 text-gray-400'
+    const getStatusConfig = (status: string) => {
+        const configs: any = {
+            'DRAFT': {
+                color: 'from-gray-500 to-gray-600',
+                bg: 'bg-gray-100',
+                text: 'text-gray-700',
+                icon: <Save className="w-5 h-5" />
+            },
+            'OPEN': {
+                color: 'from-blue-500 to-blue-600',
+                bg: 'bg-blue-50',
+                text: 'text-blue-700',
+                icon: <Clock className="w-5 h-5" />
+            },
+            'BIDDING': {
+                color: 'from-yellow-500 to-orange-500',
+                bg: 'bg-yellow-50',
+                text: 'text-yellow-700',
+                icon: <TrendingUp className="w-5 h-5" />
+            },
+            'ASSIGNED': {
+                color: 'from-purple-500 to-purple-600',
+                bg: 'bg-purple-50',
+                text: 'text-purple-700',
+                icon: <User className="w-5 h-5" />
+            },
+            'PARTIALLY_ASSIGNED': {
+                color: 'from-indigo-500 to-purple-500',
+                bg: 'bg-indigo-50',
+                text: 'text-indigo-700',
+                icon: <Package className="w-5 h-5" />
+            },
+            'IN_PROGRESS': {
+                color: 'from-blue-600 to-indigo-600',
+                bg: 'bg-blue-50',
+                text: 'text-blue-700',
+                icon: <Package className="w-5 h-5" />
+            },
+            'COMPLETED': {
+                color: 'from-green-500 to-green-600',
+                bg: 'bg-green-50',
+                text: 'text-green-700',
+                icon: <CheckCircle className="w-5 h-5" />
+            },
+            'FAILED': {
+                color: 'from-red-500 to-red-600',
+                bg: 'bg-red-50',
+                text: 'text-red-700',
+                icon: <XCircle className="w-5 h-5" />
+            },
+            'CANCELLED': {
+                color: 'from-gray-400 to-gray-500',
+                bg: 'bg-gray-50',
+                text: 'text-gray-700',
+                icon: <XCircle className="w-5 h-5" />
+            }
         }
-        return colors[status] || 'bg-gray-500/20 text-gray-400'
+        return configs[status] || configs['OPEN']
     }
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+            <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center gap-4"
+                >
+                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-gray-600 font-medium">Loading order details...</p>
+                </motion.div>
             </div>
         )
     }
 
     if (!order) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="text-center">
-                    <p className="text-xl text-gray-400">Order not found</p>
-                    <button onClick={() => router.back()} className="btn-primary mt-4">Go Back</button>
-                </div>
+            <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center"
+                >
+                    <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                    <p className="text-xl text-gray-700 mb-6">Order not found</p>
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => router.back()}
+                        className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-medium"
+                    >
+                        Go Back
+                    </motion.button>
+                </motion.div>
             </div>
         )
     }
 
+    const statusConfig = getStatusConfig(order.status)
+    const totalPrice = calculateTotalPrice(order)
+
     return (
-        <div className="min-h-screen p-6">
-            <div className="max-w-6xl mx-auto">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-4">
-                        <button
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-8">
+            <div className="max-w-7xl mx-auto px-4">
+                {/* Header Section */}
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-8"
+                >
+                    <div className="flex items-center gap-4 mb-6">
+                        <motion.button
+                            whileHover={{ scale: 1.05, x: -5 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => router.back()}
-                            className="glass px-4 py-2 rounded-lg hover:bg-white/10"
+                            className="p-3 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all text-gray-700"
                         >
-                            ← Back
-                        </button>
-                        <div>
-                            <h1 className="text-3xl font-bold">{order.orderNumber}</h1>
-                            <p className="text-gray-400 mt-1">
-                                Created {formatDate(order.createdAt)}
-                            </p>
+                            <ArrowLeft className="w-5 h-5" />
+                        </motion.button>
+                        <div className="flex-1">
+                            <div className="flex items-center gap-4 flex-wrap">
+                                <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                                    {order.orderNumber}
+                                </h1>
+                                <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${statusConfig.bg} ${statusConfig.text} font-semibold`}>
+                                    {statusConfig.icon}
+                                    <span>{order.status.replace(/_/g, ' ')}</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4 mt-2 text-gray-600">
+                                <div className="flex items-center gap-2">
+                                    <Calendar className="w-4 h-4" />
+                                    <span className="text-sm">Created {formatDate(order.createdAt)}</span>
+                                </div>
+                                {order.deadline && (
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="w-4 h-4" />
+                                        <span className="text-sm">Due {formatDate(order.deadline)}</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {/* Requirement 8: Edit Button */}
-                        {editability?.canEdit && (
-                            <button
-                                onClick={() => router.push(`/orders/${params.id}/edit`)}
-                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors"
-                            >
-                                <Edit className="w-4 h-4" />
-                                Edit Order
-                            </button>
-                        )}
 
-                        {/* Requirement 9: Chat Button */}
-                        <button
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 flex-wrap">
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => setShowChat(true)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary font-medium transition-colors relative"
+                            className="relative flex items-center gap-2 px-6 py-3 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all text-gray-700 font-medium"
                         >
-                            <MessageCircle className="w-4 h-4" />
+                            <MessageCircle className="w-5 h-5" />
                             Chat
                             {unreadCount > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
                                     {unreadCount}
                                 </span>
                             )}
-                        </button>
+                        </motion.button>
 
-                        {/* Cancel Button (for editable orders) */}
                         {editability?.canEdit && order.status !== 'CANCELLED' && (
-                            <button
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
                                 onClick={() => setShowCancelModal(true)}
-                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 font-medium transition-colors border border-red-500/30"
+                                className="flex items-center gap-2 px-6 py-3 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all text-red-600 font-medium border-2 border-red-200 hover:border-red-300"
                             >
-                                <X className="w-4 h-4" />
+                                <X className="w-5 h-5" />
                                 Cancel Order
-                            </button>
+                            </motion.button>
                         )}
-
-                        {/* Lock Indicator */}
-                        {editability && !editability.canEdit && (
-                            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-500/10 text-gray-500 border border-gray-500/30">
-                                <Lock className="w-4 h-4" />
-                                <span className="text-sm font-medium">{editability.lockReason}</span>
-                            </div>
-                        )}
-
-                        <span className={`px-4 py-2 rounded-full text-sm font-semibold ${getStatusColor(order.status)}`}>
-                            {order.status}
-                        </span>
                     </div>
-                </div>
+                </motion.div>
 
+                {/* Main Content Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Main Content */}
+                    {/* Left Column - Order Details */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Order Information */}
-                        <div className="card">
-                            <h2 className="text-2xl font-bold mb-4">Order Information</h2>
-                            <div className="space-y-3">
-                                {order.pickupAddress && (
-                                    <div>
-                                        <p className="text-sm text-gray-400">Pickup Address</p>
-                                        <p className="text-lg">{order.pickupAddress}</p>
-                                        <p className="text-sm text-gray-400">ZIP: {order.pickupZipCode}</p>
+                        {/* Document Information Card */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all"
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl text-white">
+                                        <FileText className="w-6 h-6" />
                                     </div>
-                                )}
-                                <div>
-                                    <p className="text-sm text-gray-400">Deadline</p>
-                                    <p className="text-lg">{formatDate(order.deadline)}</p>
+                                    <h2 className="text-2xl font-bold text-gray-800">Document Information</h2>
                                 </div>
-                                {order.specialInstructions && (
-                                    <div>
-                                        <p className="text-sm text-gray-400">Special Instructions</p>
-                                        <p className="text-lg">{order.specialInstructions}</p>
-                                    </div>
+                                {editability?.canEdit && (
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => router.push(`/orders/${params.id}/edit-document`)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors font-medium"
+                                    >
+                                        <Edit className="w-4 h-4" />
+                                        Edit
+                                    </motion.button>
                                 )}
-                                <div>
-                                    <p className="text-sm text-gray-400">Total Dropoffs</p>
-                                    <p className="text-lg">{order.totalDropoffs}</p>
-                                </div>
                             </div>
-                        </div>
 
-                        {/* Document Information */}
-                        <div className="card">
-                            <h2 className="text-2xl font-bold mb-4">Document Information</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-sm text-gray-400">Document Type</p>
-                                    <p className="text-lg font-medium">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <p className="text-sm text-gray-500 font-medium">Document Type</p>
+                                    <p className="text-lg font-semibold text-gray-800">
                                         {order.documentType === 'OTHER' ? order.otherDocumentType : order.documentType?.replace(/_/g, ' ')}
                                     </p>
                                 </div>
-                                <div>
-                                    <p className="text-sm text-gray-400">Case Number</p>
-                                    <p className="text-lg font-medium">{order.caseNumber || 'N/A'}</p>
+                                <div className="space-y-2">
+                                    <p className="text-sm text-gray-500 font-medium">Case Number</p>
+                                    <p className="text-lg font-semibold text-gray-800">{order.caseNumber || 'N/A'}</p>
                                 </div>
-                                <div>
-                                    <p className="text-sm text-gray-400">Jurisdiction</p>
-                                    <p className="text-lg font-medium">{order.jurisdiction || 'N/A'}</p>
+                                <div className="space-y-2 md:col-span-2">
+                                    <p className="text-sm text-gray-500 font-medium">Jurisdiction</p>
+                                    <p className="text-lg font-semibold text-gray-800">{order.jurisdiction || 'N/A'}</p>
                                 </div>
-                                {order.documentUrl && (
-                                    <div className="md:col-span-2 pt-2">
-                                        <p className="text-sm text-gray-400 mb-2">Uploaded Document</p>
-                                        <button
-                                            onClick={() => {
-                                                const token = sessionStorage.getItem('token');
-                                                fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${order.id}/document`, {
-                                                    headers: { 'Authorization': `Bearer ${token}` }
-                                                })
-                                                    .then(response => response.blob())
-                                                    .then(blob => {
-                                                        const url = window.URL.createObjectURL(blob);
-                                                        const a = document.createElement('a');
-                                                        a.href = url;
-                                                        a.download = order.documentUrl; // Use actual filename with original extension
-                                                        document.body.appendChild(a);
-                                                        a.click();
-                                                        window.URL.revokeObjectURL(url);
-                                                        document.body.removeChild(a);
-                                                    })
-                                                    .catch(err => alert('Failed to download document'));
-                                            }}
-                                            className="flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-colors"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                            Download Document
-                                        </button>
+                                {order.specialInstructions && (
+                                    <div className="space-y-2 md:col-span-2">
+                                        <p className="text-sm text-gray-500 font-medium">Special Instructions</p>
+                                        <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{order.specialInstructions}</p>
                                     </div>
                                 )}
+                                {order.documentUrl && (
+                                    <div className="md:col-span-2">
+                                        <motion.button
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={async () => {
+                                                try {
+                                                    const token = sessionStorage.getItem('token')
+                                                    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${order.id}/document`, {
+                                                        headers: { 'Authorization': `Bearer ${token}` }
+                                                    })
+
+                                                    if (!response.ok) throw new Error('Download failed')
+
+                                                    const blob = await response.blob()
+                                                    const url = window.URL.createObjectURL(blob)
+                                                    const a = document.createElement('a')
+                                                    a.href = url
+                                                    // Use the filename from the URL or a default name
+                                                    a.download = order.documentUrl.split('/').pop() || `order-${order.orderNumber}-document.pdf`
+                                                    document.body.appendChild(a)
+                                                    a.click()
+                                                    window.URL.revokeObjectURL(url)
+                                                    document.body.removeChild(a)
+                                                } catch (err) {
+                                                    console.error('Download error:', err)
+                                                    alert('Failed to download document. Please try again.')
+                                                }
+                                            }}
+                                            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all"
+                                        >
+                                            <Download className="w-5 h-5" />
+                                            Download Document
+                                        </motion.button>
+                                    </div>
+
+                                )}
                             </div>
-                        </div>
+                        </motion.div>
 
-                        {/* Dropoffs */}
-                        <div className="card">
-                            <h2 className="text-2xl font-bold mb-4">Dropoff Locations</h2>
+                        {/* Recipients Card */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all"
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-3 bg-gradient-to-br from-green-500 to-teal-600 rounded-xl text-white">
+                                        <MapPin className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-gray-800">Recipients</h2>
+                                        <p className="text-sm text-gray-500">{order.totalRecipients || 0} location(s)</p>
+                                    </div>
+                                </div>
+                                {editability?.canEdit && (
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => router.push(`/orders/${params.id}/edit-recipients`)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors font-medium"
+                                    >
+                                        <Edit className="w-4 h-4" />
+                                        Edit
+                                    </motion.button>
+                                )}
+                            </div>
+
                             <div className="space-y-4">
-                                {order.dropoffs?.map((dropoff: any, index: number) => (
-                                    <div key={dropoff.id} className="glass rounded-lg p-4">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <h3 className="font-semibold">Dropoff {index + 1}: {dropoff.recipientName}</h3>
-                                                <p className="text-sm text-gray-400 mt-1">{dropoff.dropoffAddress}</p>
-                                                <p className="text-sm text-gray-400">ZIP: {dropoff.dropoffZipCode}</p>
-
-                                                {/* Badges for Rush and Remote */}
-                                                <div className="flex gap-2 mt-2">
-                                                    {dropoff.rushService && (
-                                                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
-                                                            ⚡ Rush Service
-                                                        </span>
-                                                    )}
-                                                    {dropoff.remoteLocation && (
-                                                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                                                            🏝️ Remote Location
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(dropoff.status)}`}>
-                                                {dropoff.status}
-                                            </span>
-                                        </div>
-                                        {dropoff.finalAgreedPrice && (
-                                            <p className="text-sm mt-2">
-                                                Price: <span className="font-semibold text-primary">
-                                                    ${(
-                                                        parseFloat(dropoff.finalAgreedPrice) +
-                                                        (dropoff.rushServiceFee || 0) +
-                                                        (dropoff.remoteLocationFee || 0)
-                                                    ).toFixed(2)}
-                                                </span>
-                                            </p>
-                                        )}
-
-                                        {/* Show assigned process server */}
-                                        {['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(order.status) && dropoff.assignedProcessServerId && processServers[dropoff.assignedProcessServerId] && (
-                                            <div className="mt-3 pt-3 border-t border-white/10">
-                                                <p className="text-sm text-gray-400">Assigned to</p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
-                                                        {(processServers[dropoff.assignedProcessServerId].firstName?.[0] || '?')}{(processServers[dropoff.assignedProcessServerId].lastName?.[0] || '?')}
+                                {order.recipients?.map((recipient: any, index: number) => (
+                                    <motion.div
+                                        key={recipient.id}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.1 * index }}
+                                        className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-5 border-2 border-gray-200 hover:border-blue-300 transition-all"
+                                    >
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <div className="p-2 bg-white rounded-lg shadow-sm">
+                                                        <User className="w-5 h-5 text-blue-600" />
                                                     </div>
                                                     <div>
-                                                        <p className="font-semibold text-sm">
-                                                            {processServers[dropoff.assignedProcessServerId].firstName || 'Unknown'} {processServers[dropoff.assignedProcessServerId].lastName || 'User'}
+                                                        <h3 className="font-bold text-gray-800">Recipient {index + 1}</h3>
+                                                        <p className="text-sm text-gray-600">{recipient.recipientName}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="ml-11 space-y-1">
+                                                    <p className="text-sm text-gray-700">{recipient.recipientAddress}</p>
+                                                    <p className="text-sm text-gray-600">ZIP: {recipient.recipientZipCode}</p>
+                                                </div>
+                                            </div>
+                                            <span className={`px-3 py-1 rounded-lg text-xs font-bold ${recipient.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                                                recipient.status === 'ASSIGNED' ? 'bg-purple-100 text-purple-700' :
+                                                    recipient.status === 'BIDDING' ? 'bg-yellow-100 text-yellow-700' :
+                                                        'bg-blue-100 text-blue-700'
+                                                }`}>
+                                                {recipient.status}
+                                            </span>
+                                        </div>
+
+                                        {/* Service Badges */}
+                                        <div className="flex gap-2 mb-4">
+                                            {recipient.rushService && (
+                                                <span className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                                                    <Zap className="w-3 h-3" />
+                                                    Rush Service
+                                                </span>
+                                            )}
+                                            {recipient.remoteLocation && (
+                                                <span className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                                                    <Building className="w-3 h-3" />
+                                                    Remote Location
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Price */}
+                                        {(() => {
+                                            const isDirectStandard = recipient.recipientType === 'GUIDED' && !recipient.quotedPrice && !recipient.negotiatedPrice
+                                            const isAutomatedPending = recipient.recipientType === 'AUTOMATED' && (recipient.status === 'OPEN' || recipient.status === 'BIDDING')
+
+                                            const displayPrice = (isDirectStandard || isAutomatedPending) ? (() => {
+                                                let price = 0
+                                                if (recipient.processService) price += 75
+                                                if (recipient.certifiedMail) price += 25
+                                                if (recipient.rushService) price += 50
+                                                if (recipient.remoteLocation) price += 40
+                                                return price
+                                            })() : recipient.finalAgreedPrice
+
+                                            return displayPrice ? (
+                                                <div className="flex items-center gap-2 text-lg font-bold text-green-600 mb-4">
+                                                    <DollarSign className="w-5 h-5" />
+                                                    {formatCurrency(displayPrice)}
+                                                </div>
+                                            ) : null
+                                        })()}
+
+                                        {/* Assigned Process Server */}
+                                        {recipient.assignedProcessServerId && processServers[recipient.assignedProcessServerId] && (
+                                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                                <p className="text-xs text-gray-500 font-medium mb-2">Assigned to</p>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                                        {(processServers[recipient.assignedProcessServerId].firstName?.[0] || '?')}
+                                                        {(processServers[recipient.assignedProcessServerId].lastName?.[0] || '?')}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-gray-800">
+                                                            {processServers[recipient.assignedProcessServerId].firstName || 'Unknown'}{' '}
+                                                            {processServers[recipient.assignedProcessServerId].lastName || 'User'}
                                                         </p>
-                                                        <p className="text-xs text-gray-400">
-                                                            {processServers[dropoff.assignedProcessServerId].successfulDeliveries > 0
-                                                                ? `${processServers[dropoff.assignedProcessServerId].successfulDeliveries} Completed Orders`
-                                                                : 'New Process Server'}
+                                                        <p className="text-sm text-gray-600 flex items-center gap-1">
+                                                            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                                            {processServers[recipient.assignedProcessServerId].successfulDeliveries || 0} completed orders
                                                         </p>
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {/* Show bids for BIDDING status dropoffs */}
-                                        {order.status === 'BIDDING' && (() => {
-                                            const dropoffBids = getBidsForDropoff(dropoff.id)
-                                            return dropoffBids.length > 0 && (
-                                                <div className="mt-4">
-                                                    <h4 className="font-semibold text-sm mb-2">
-                                                        Bids for this location ({dropoffBids.length})
+                                        {/* Bids Section */}
+                                        {(recipient.status === 'BIDDING' || recipient.status === 'OPEN') && (() => {
+                                            const recipientBids = getBidsForRecipient(recipient.id)
+                                            return recipientBids.length > 0 && (
+                                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                                    <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                                        <TrendingUp className="w-4 h-4" />
+                                                        Bids Received ({recipientBids.length})
                                                     </h4>
                                                     <div className="space-y-2">
-                                                        {dropoffBids.map((bid: any) => (
-                                                            <div key={bid.id} className="bg-black/20 rounded p-3">
-                                                                <div className="flex justify-between items-start mb-2">
-                                                                    <div>
-                                                                        <p className="font-bold text-primary text-lg">
-                                                                            ${bid.bidAmount.toFixed(2)}
+                                                        {recipientBids.slice(0, 3).map((bid: any) => (
+                                                            <motion.div
+                                                                key={bid.id}
+                                                                whileHover={{ scale: 1.02 }}
+                                                                className="bg-white rounded-lg p-4 border border-gray-200 cursor-pointer"
+                                                                onClick={() => handleAcceptBid(bid)}
+                                                            >
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex-1">
+                                                                        <p className="font-bold text-green-600 text-lg">
+                                                                            {formatCurrency(bid.bidAmount)}
                                                                         </p>
                                                                         {bid.comment && (
-                                                                            <p className="text-sm text-gray-300 mt-1">{bid.comment}</p>
+                                                                            <p className="text-sm text-gray-600 mt-1">{bid.comment}</p>
                                                                         )}
                                                                     </div>
-                                                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${bid.status === 'ACCEPTED' ? 'bg-green-500/20 text-green-400' :
-                                                                        bid.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                                            'bg-gray-500/20 text-gray-400'
-                                                                        }`}>
-                                                                        {bid.status}
-                                                                    </span>
-                                                                </div>
-                                                                <p className="text-xs text-gray-400">
-                                                                    Placed: {formatDate(bid.createdAt)}
-                                                                </p>
-                                                                {bid.status === 'PENDING' && (
-                                                                    <button
-                                                                        onClick={() => handleAcceptBid(bid.id)}
-                                                                        className="w-full mt-2 px-3 py-2 bg-primary/20 hover:bg-primary/30 rounded text-sm font-semibold transition"
+                                                                    <motion.button
+                                                                        whileHover={{ scale: 1.1 }}
+                                                                        whileTap={{ scale: 0.9 }}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            handleAcceptBid(bid)
+                                                                        }}
+                                                                        className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
                                                                     >
-                                                                        Accept This Bid
-                                                                    </button>
-                                                                )}
-                                                            </div>
+                                                                        Accept
+                                                                    </motion.button>
+                                                                </div>
+                                                            </motion.div>
                                                         ))}
                                                     </div>
                                                 </div>
                                             )
                                         })()}
-
-                                        {/* Show delivery attempts for completed/in-progress dropoffs */}
-                                        {dropoff.attempts && dropoff.attempts.length > 0 && (
-                                            <div className="mt-4 space-y-2">
-                                                <h4 className="font-semibold text-sm">Delivery Attempts</h4>
-                                                {dropoff.attempts
-                                                    .sort((a: any, b: any) => a.attemptNumber - b.attemptNumber)
-                                                    .map((attempt: any, idx: number) => (
-                                                        <div key={attempt.id} className="bg-black/20 rounded p-3 text-sm">
-                                                            <div className="flex justify-between items-start mb-1">
-                                                                <span className="font-semibold">Attempt {attempt.attemptNumber}</span>
-                                                                {attempt.wasSuccessful ? (
-                                                                    <span className="text-green-400 text-xs">✓ Successful</span>
-                                                                ) : (
-                                                                    <span className="text-red-400 text-xs">✗ Failed</span>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-gray-400 text-xs mb-1">{formatDate(attempt.attemptTime)}</p>
-                                                            {attempt.outcomeNotes && (
-                                                                <p className="text-gray-300">{attempt.outcomeNotes}</p>
-                                                            )}
-                                                            {attempt.photoProofUrl && (
-                                                                <div className="mt-2">
-                                                                    <img
-                                                                        src={attempt.photoProofUrl}
-                                                                        alt="Delivery proof"
-                                                                        className="rounded max-h-48 cursor-pointer hover:opacity-80"
-                                                                        onClick={() => window.open(attempt.photoProofUrl, '_blank')}
-                                                                        onError={(e) => {
-                                                                            e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="150"%3E%3Crect fill="%23374151" width="200" height="150"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%239CA3AF" font-size="14"%3EPhoto Not Available%3C/text%3E%3C/svg%3E'
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            )}
-                                                            {attempt.gpsLatitude && attempt.gpsLongitude && (
-                                                                <p className="text-xs text-gray-500 mt-1">
-                                                                    📍 GPS: {attempt.gpsLatitude}, {attempt.gpsLongitude}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                            </div>
-                                        )}
-                                    </div>
+                                    </motion.div>
                                 ))}
                             </div>
-                        </div>
+                        </motion.div>
+
+                        {/* Activity Log */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="bg-white rounded-2xl p-6 shadow-lg"
+                        >
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-3 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl text-white">
+                                    <Clock className="w-6 h-6" />
+                                </div>
+                                <h2 className="text-2xl font-bold text-gray-800">Activity Log</h2>
+                            </div>
+                            <OrderHistory orderId={params.id as string} key={lastUpdated} />
+                        </motion.div>
                     </div>
 
-                    {/* Sidebar */}
+                    {/* Right Column - Summary */}
                     <div className="space-y-6">
-                        {/* Price Summary */}
-                        {(() => {
-                            const totalPrice = calculateTotalPrice(order)
-                            return totalPrice && (
-                                <div className="card">
-                                    <h3 className="text-lg font-semibold mb-4">Price Summary</h3>
-                                    <div className="space-y-2">
-                                        {order.dropoffs && order.dropoffs.length > 1 && (
-                                            <>
-                                                {order.dropoffs.map((dropoff: any, idx: number) => (
-                                                    dropoff.finalAgreedPrice && (
-                                                        <div key={dropoff.id} className="flex justify-between text-sm">
-                                                            <span className="text-gray-400">Dropoff {idx + 1}</span>
-                                                            <span className="font-semibold">${dropoff.finalAgreedPrice}</span>
-                                                        </div>
-                                                    )
-                                                ))}
-                                                <div className="border-t border-gray-700 my-2"></div>
-                                            </>
-                                        )}
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">Total Amount</span>
-                                            <span className="font-bold text-primary text-xl">
-                                                ${totalPrice.toFixed(2)}
-                                            </span>
-                                        </div>
-                                    </div>
+                        {/* Price Summary Card */}
+                        <motion.div
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all"
+                        >
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl text-white">
+                                    <DollarSign className="w-6 h-6" />
                                 </div>
-                            )
-                        })()}
+                                <h2 className="text-2xl font-bold text-gray-800">Price Summary</h2>
+                            </div>
 
-                        {/* Process Server Info - For ASSIGNED/IN_PROGRESS/COMPLETED orders */}
-                        {['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(order.status) && Object.keys(processServers).length > 0 && (
                             <div className="space-y-4">
-                                {Object.values(processServers).map((ps: any) => (
-                                    <div key={ps.id} className="card">
-                                        <h3 className="text-lg font-semibold mb-4">Assigned Process Server</h3>
-                                        <div className="space-y-3">
-                                            <div>
-                                                <p className="text-sm text-gray-400">Name</p>
-                                                <p className="font-semibold">{ps.firstName || 'Unknown'} {ps.lastName || 'User'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-400">Rating</p>
-                                                <p className="font-semibold">
-                                                    ⭐ {(ps.currentRating || 0).toFixed(1)} / 5.0
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-400">Total Completed Orders</p>
-                                                <p className="font-semibold">
-                                                    {ps.successfulDeliveries > 0 ? ps.successfulDeliveries : <span className="text-blue-400">New</span>}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-400">Success Rate</p>
-                                                <p className="font-semibold text-green-400">
-                                                    {ps.totalOrdersAssigned > 0
-                                                        ? ((ps.successfulDeliveries / ps.totalOrdersAssigned) * 100).toFixed(1)
-                                                        : 0}%
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-400">Attempts</p>
-                                                <p className="font-semibold">
-                                                    {order.dropoffs
-                                                        .filter((d: any) => d.assignedProcessServerId === ps.id)
-                                                        .reduce((sum: number, d: any) => sum + (d.attempts?.length || 0), 0)}
-                                                </p>
-                                            </div>
-                                            {/* Show assigned dropoffs */}
-                                            <div className="pt-2 border-t border-white/10">
-                                                <p className="text-xs text-gray-400 mb-1">Assigned Dropoffs</p>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {order.dropoffs
-                                                        .map((d: any, idx: number) => ({ ...d, index: idx + 1 }))
-                                                        .filter((d: any) => d.assignedProcessServerId === ps.id)
-                                                        .map((d: any) => (
-                                                            <span key={d.id} className="px-2 py-0.5 bg-white/10 rounded text-xs">
-                                                                Dropoff {d.index}
-                                                            </span>
-                                                        ))}
+                                {order.recipients?.map((recipient: any, index: number) => {
+                                    const isAutomatedPending = recipient.recipientType === 'AUTOMATED' &&
+                                        (recipient.status === 'OPEN' || recipient.status === 'BIDDING')
+
+                                    const isDirectStandard = recipient.recipientType === 'GUIDED' && !recipient.quotedPrice && !recipient.negotiatedPrice
+
+                                    if (isAutomatedPending || isDirectStandard) {
+                                        const processFee = recipient.processService ? 75 : 0
+                                        const certifiedFee = recipient.certifiedMail ? 25 : 0
+                                        const rushFee = recipient.rushService ? 50 : 0
+                                        const remoteFee = recipient.remoteLocation ? 40 : 0
+                                        const subtotal = processFee + certifiedFee + rushFee + remoteFee
+
+                                        return (
+                                            <div key={recipient.id} className="pb-4 border-b border-gray-200">
+                                                <p className="font-medium text-gray-700 mb-2">Recipient {index + 1}</p>
+                                                {isAutomatedPending && (
+                                                    <div className="flex justify-between text-sm text-yellow-600 mb-1">
+                                                        <span>Base Service</span>
+                                                        <span className="font-medium">Pending bids</span>
+                                                    </div>
+                                                )}
+                                                {processFee > 0 && (
+                                                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                                        <span>Process Service</span>
+                                                        <span>{formatCurrency(processFee)}</span>
+                                                    </div>
+                                                )}
+                                                {certifiedFee > 0 && (
+                                                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                                        <span>Certified Mail</span>
+                                                        <span>{formatCurrency(certifiedFee)}</span>
+                                                    </div>
+                                                )}
+                                                {rushFee > 0 && (
+                                                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                                        <span>Rush Service</span>
+                                                        <span>{formatCurrency(rushFee)}</span>
+                                                    </div>
+                                                )}
+                                                {remoteFee > 0 && (
+                                                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                                        <span>Remote Location</span>
+                                                        <span>{formatCurrency(remoteFee)}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between text-sm text-gray-600 mt-2 pt-2 border-t">
+                                                    <span className="font-medium">Confirmed Fees</span>
+                                                    <span className="font-medium">{formatCurrency(subtotal)}</span>
                                                 </div>
                                             </div>
+                                        )
+                                    } else {
+                                        // For ASSIGNED recipients, show breakdown
+                                        const basePrice = recipient.basePrice || 0
+                                        const rushFee = recipient.rushServiceFee || 0
+                                        const remoteFee = recipient.remoteLocationFee || 0
+                                        const total = recipient.finalAgreedPrice || 0
+
+                                        return (
+                                            <div key={recipient.id} className="pb-4 border-b border-gray-200">
+                                                <p className="font-medium text-gray-700 mb-2">Recipient {index + 1}</p>
+                                                {basePrice > 0 && (
+                                                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                                        <span>Service Fee</span>
+                                                        <span>{formatCurrency(basePrice)}</span>
+                                                    </div>
+                                                )}
+                                                {rushFee > 0 && (
+                                                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                                        <span>Rush Service</span>
+                                                        <span>{formatCurrency(rushFee)}</span>
+                                                    </div>
+                                                )}
+                                                {remoteFee > 0 && (
+                                                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                                        <span>Remote Location</span>
+                                                        <span>{formatCurrency(remoteFee)}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between items-center mt-2 pt-2 border-t">
+                                                    <span className="font-medium text-gray-700">Subtotal</span>
+                                                    <span className="font-bold text-gray-800">{formatCurrency(total)}</span>
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+                                })}
+
+                                <div className="pt-4">
+                                    <div className="flex justify-between text-sm text-gray-600 mb-2">
+                                        <span>Processing Fee (3%)</span>
+                                        <span>{formatCurrency(totalPrice - (totalPrice / 1.03))}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xl font-bold">
+                                        <span className="text-gray-800">Total Amount</span>
+                                        <span className="text-green-600">{formatCurrency(totalPrice)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        {/* Service Options Card */}
+                        <motion.div
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="bg-white rounded-2xl p-6 shadow-lg"
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white">
+                                        <Package className="w-6 h-6" />
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-gray-800">Service Options</h2>
+                                </div>
+                                {editability?.canEdit && (
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => router.push(`/orders/${params.id}/edit-service`)}
+                                        className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors"
+                                    >
+                                        <Edit className="w-4 h-4" />
+                                    </motion.button>
+                                )}
+                            </div>
+
+                            <div className="space-y-6">
+                                {order.recipients?.map((recipient: any, index: number) => (
+                                    <div key={recipient.id} className="pb-4 border-b border-gray-200 last:border-0 last:pb-0">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <User className="w-4 h-4 text-gray-500" />
+                                            <p className="font-bold text-gray-800">Recipient {index + 1}</p>
+                                            <span className="text-sm text-gray-500">- {recipient.recipientName}</span>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {recipient.processService && (
+                                                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <Package className="w-4 h-4 text-blue-600" />
+                                                        <span className="text-sm font-bold text-blue-700">Process Service</span>
+                                                    </div>
+                                                    <CheckCircle className="w-4 h-4 text-blue-600" />
+                                                </div>
+                                            )}
+
+                                            {recipient.certifiedMail && (
+                                                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <Mail className="w-4 h-4 text-green-600" />
+                                                        <span className="text-sm font-bold text-green-700">Certified Mail</span>
+                                                    </div>
+                                                    <CheckCircle className="w-4 h-4 text-green-600" />
+                                                </div>
+                                            )}
+
+                                            {recipient.rushService && (
+                                                <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <Zap className="w-4 h-4 text-red-600" />
+                                                        <span className="text-sm font-bold text-red-700">Rush Service</span>
+                                                    </div>
+                                                    <CheckCircle className="w-4 h-4 text-red-600" />
+                                                </div>
+                                            )}
+
+                                            {recipient.remoteLocation && (
+                                                <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <Building className="w-4 h-4 text-purple-600" />
+                                                        <span className="text-sm font-bold text-purple-700">Remote Location</span>
+                                                    </div>
+                                                    <CheckCircle className="w-4 h-4 text-purple-600" />
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                        )}
+                        </motion.div>
+                    </div>
+                </div>
+            </div >
 
-                        {/* Completion Info */}
-                        {order.status === 'COMPLETED' && (
-                            <div className="card">
-                                {/* Rating Section */}
-                                <div className="pt-2">
-                                    <h4 className="font-semibold mb-3">Rate Process Server(s)</h4>
-                                    <div className="space-y-6">
-                                        {Object.values(processServers).map((ps: any) => (
-                                            <div key={ps.id} className="space-y-2">
-                                                <p className="text-sm font-medium">{ps.firstName} {ps.lastName}</p>
-                                                <div className="flex gap-2">
-                                                    {[1, 2, 3, 4, 5].map((star) => (
-                                                        <button
-                                                            key={star}
-                                                            onClick={() => {
-                                                                if (confirm(`Rate ${ps.firstName} ${star} stars?`)) {
-                                                                    api.submitRating({
-                                                                        orderId: order.id,
-                                                                        customerId: order.customerId,
-                                                                        processServerId: ps.id,
-                                                                        ratingValue: star,
-                                                                        reviewText: "Great service!" // Placeholder
-                                                                    }, sessionStorage.getItem('token')!)
-                                                                        .then(() => alert('Rating submitted!'))
-                                                                        .catch(err => alert('Failed to submit rating'))
-                                                                }
-                                                            }}
-                                                            className="text-2xl hover:scale-110 transition"
-                                                        >
-                                                            ⭐
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))}
-                                        <p className="text-xs text-gray-400">Click a star to rate each server</p>
+            {/* Modals */}
+            <AnimatePresence>
+                {
+                    showChat && (
+                        <ChatWindow
+                            orderId={params.id as string}
+                            onClose={() => setShowChat(false)}
+                        />
+                    )
+                }
+
+                {
+                    showCancelModal && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                            onClick={() => setShowCancelModal(false)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.9, y: 20 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl"
+                            >
+                                <h3 className="text-2xl font-bold text-gray-800 mb-6">Cancel Order</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Reason</label>
+                                        <select
+                                            value={cancelReason}
+                                            onChange={(e) => setCancelReason(e.target.value)}
+                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+                                        >
+                                            <option value="">Select reason...</option>
+                                            <option value="NO_LONGER_NEEDED">No longer needed</option>
+                                            <option value="FOUND_ALTERNATIVE">Found alternative</option>
+                                            <option value="TOO_EXPENSIVE">Too expensive</option>
+                                            <option value="OTHER">Other</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Additional Notes (Optional)</label>
+                                        <textarea
+                                            value={cancelNotes}
+                                            onChange={(e) => setCancelNotes(e.target.value)}
+                                            rows={3}
+                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none transition-colors resize-none"
+                                            placeholder="Add any additional information..."
+                                        />
+                                    </div>
+                                    <div className="flex gap-3 pt-4">
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => setShowCancelModal(false)}
+                                            className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition-colors"
+                                        >
+                                            Keep Order
+                                        </motion.button>
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={handleCancelOrder}
+                                            disabled={cancelling}
+                                            className="flex-1 px-6 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                                        >
+                                            {cancelling ? 'Cancelling...' : 'Cancel Order'}
+                                        </motion.button>
                                     </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+                            </motion.div>
+                        </motion.div>
+                    )
+                }
 
-            {/* Requirement 8: Cancel Order Modal */}
-            {showCancelModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-gray-900 rounded-2xl p-6 max-w-md w-full border border-gray-700 shadow-2xl">
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-2xl font-bold text-white">Cancel Order</h3>
-                            <button
-                                onClick={() => {
-                                    setShowCancelModal(false)
-                                    setCancelReason('')
-                                    setCancelNotes('')
-                                }}
-                                className="text-gray-400 hover:text-white transition-colors"
+                {
+                    showAcceptBidModal && selectedBid && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                            onClick={() => setShowAcceptBidModal(false)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.9, y: 20 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl"
                             >
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
+                                <h3 className="text-2xl font-bold text-gray-800 mb-6">Accept Bid</h3>
+                                <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 mb-6">
+                                    <p className="text-3xl font-bold text-green-600 mb-2">
+                                        {formatCurrency(selectedBid.bidAmount)}
+                                    </p>
+                                    {selectedBid.comment && (
+                                        <p className="text-gray-700">{selectedBid.comment}</p>
+                                    )}
+                                </div>
+                                <p className="text-gray-600 mb-6">
+                                    Are you sure you want to accept this bid? The process server will be assigned to this delivery.
+                                </p>
+                                <div className="flex gap-3">
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => setShowAcceptBidModal(false)}
+                                        className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition-colors"
+                                    >
+                                        Cancel
+                                    </motion.button>
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={confirmAcceptBid}
+                                        disabled={acceptingBid}
+                                        className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+                                    >
+                                        {acceptingBid ? 'Accepting...' : 'Accept Bid'}
+                                    </motion.button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )
+                }
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-2 text-gray-300">
-                                    Cancellation Reason *
-                                </label>
-                                <textarea
-                                    value={cancelReason}
-                                    onChange={(e) => setCancelReason(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
-                                    rows={3}
-                                    placeholder="Please provide a reason for cancellation"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium mb-2 text-gray-300">
-                                    Additional Notes (optional)
-                                </label>
-                                <textarea
-                                    value={cancelNotes}
-                                    onChange={(e) => setCancelNotes(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
-                                    rows={2}
-                                    placeholder="Any additional information"
-                                />
-                            </div>
-
-                            <div className="flex gap-3 mt-6">
-                                <button
-                                    onClick={() => {
-                                        setShowCancelModal(false)
-                                        setCancelReason('')
-                                        setCancelNotes('')
-                                    }}
-                                    className="flex-1 px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-medium transition-colors"
-                                    disabled={cancelling}
+                {
+                    showSuccessModal && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        >
+                            <motion.div
+                                initial={{ scale: 0.5, rotate: -10 }}
+                                animate={{ scale: 1, rotate: 0 }}
+                                exit={{ scale: 0.5, rotate: 10 }}
+                                className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center"
+                            >
+                                <motion.div
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    transition={{ delay: 0.2, type: 'spring' }}
+                                    className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"
                                 >
-                                    Keep Order
-                                </button>
-                                <button
-                                    onClick={handleCancelOrder}
-                                    className="flex-1 px-4 py-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={cancelling || !cancelReason.trim()}
-                                >
-                                    {cancelling ? 'Cancelling...' : 'Cancel Order'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+                                    <CheckCircle className="w-12 h-12 text-green-600" />
+                                </motion.div>
+                                <h3 className="text-2xl font-bold text-gray-800 mb-2">Success!</h3>
+                                <p className="text-gray-600">Bid accepted successfully</p>
+                            </motion.div>
+                        </motion.div>
+                    )
+                }
 
-            {/* Requirement 9: Chat Window */}
-            {showChat && (
-                <ChatWindow
-                    orderId={params.id as string}
-                    onClose={() => setShowChat(false)}
-                />
-            )}
-        </div>
+                {
+                    editingRecipient && (
+                        <EditRecipientModal
+                            recipient={editingRecipient}
+                            order={order}
+                            onClose={() => setEditingRecipient(null)}
+                            onUpdate={() => loadOrderDetails()}
+                        />
+                    )
+                }
+
+                {
+                    editingDocument && (
+                        <EditDocumentModal
+                            order={order}
+                            onClose={() => setEditingDocument(false)}
+                            onUpdate={() => loadOrderDetails()}
+                        />
+                    )
+                }
+            </AnimatePresence >
+        </div >
     )
 }

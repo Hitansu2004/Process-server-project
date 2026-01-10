@@ -35,9 +35,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             }
 
             // Load process server profiles if order has assigned servers
-            if (orderData.dropoffs) {
+            if (orderData.recipients) {
                 const uniqueServerIds = Array.from(new Set(
-                    orderData.dropoffs
+                    orderData.recipients
                         .map((d: any) => d.assignedProcessServerId)
                         .filter((id: string) => id)
                 )) as string[]
@@ -146,8 +146,8 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                                     <p className="font-medium">{formatDate(order.deadline)}</p>
                                 </div>
                                 <div>
-                                    <p className="text-gray-400">Total Dropoffs</p>
-                                    <p className="font-medium">{order.totalDropoffs}</p>
+                                    <p className="text-gray-400">Total Recipients</p>
+                                    <p className="font-medium">{order.totalRecipients}</p>
                                 </div>
                                 {order.specialInstructions && (
                                     <div className="col-span-2">
@@ -172,57 +172,57 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                             </div>
                         </div>
 
-                        {/* Dropoffs with Delivery Attempts */}
+                        {/* Recipients with Delivery Attempts */}
                         <div className="card">
                             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                                <span className="text-primary">📍</span> Dropoff Locations ({order.dropoffs?.length || 0})
+                                <span className="text-primary">📍</span> Recipient Locations ({order.recipients?.length || 0})
                             </h2>
                             <div className="space-y-4">
-                                {order.dropoffs && order.dropoffs.length > 0 ? (
-                                    order.dropoffs.map((dropoff: any, index: number) => (
-                                        <div key={dropoff.id} className="glass p-4 rounded-lg">
+                                {order.recipients && order.recipients.length > 0 ? (
+                                    order.recipients.map((recipient: any, index: number) => (
+                                        <div key={recipient.id} className="glass p-4 rounded-lg">
                                             <div className="flex justify-between items-start mb-2">
                                                 <div>
-                                                    <p className="font-semibold">Dropoff #{dropoff.sequenceNumber || index + 1}</p>
-                                                    <p className="text-sm text-gray-400">Recipient: {dropoff.recipientName}</p>
+                                                    <p className="font-semibold">Recipient #{recipient.sequenceNumber || index + 1}</p>
+                                                    <p className="text-sm text-gray-400">Recipient: {recipient.name}</p>
                                                 </div>
-                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(dropoff.status)}`}>
-                                                    {dropoff.status}
+                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(recipient.status)}`}>
+                                                    {recipient.status}
                                                 </span>
                                             </div>
-                                            <p className="text-sm">{dropoff.dropoffAddress}</p>
-                                            <p className="text-sm text-gray-400">ZIP: {dropoff.dropoffZipCode}</p>
-                                            {dropoff.finalAgreedPrice && (
+                                            <p className="text-sm">{recipient.address}</p>
+                                            <p className="text-sm text-gray-400">ZIP: {recipient.zipCode}</p>
+                                            {recipient.finalAgreedPrice && (
                                                 <p className="text-sm text-primary mt-2">
-                                                    Agreed Price: ${dropoff.finalAgreedPrice}
+                                                    Agreed Price: ${recipient.finalAgreedPrice}
                                                 </p>
                                             )}
-                                            {dropoff.attemptCount !== undefined && (
+                                            {recipient.attemptCount !== undefined && (
                                                 <p className="text-sm text-gray-400 mt-1">
-                                                    Attempts: {dropoff.attemptCount}/{dropoff.maxAttempts || 'N/A'}
+                                                    Attempts: {recipient.attemptCount}/{recipient.maxAttempts || 'N/A'}
                                                 </p>
                                             )}
-                                            {dropoff.deliveredAt && (
+                                            {recipient.deliveredAt && (
                                                 <p className="text-sm text-green-400 mt-1">
-                                                    Delivered: {formatDate(dropoff.deliveredAt)}
+                                                    Delivered: {formatDate(recipient.deliveredAt)}
                                                 </p>
                                             )}
 
-                                            {/* Show assigned process server for this dropoff */}
-                                            {dropoff.assignedProcessServerId && processServers[dropoff.assignedProcessServerId] && (
+                                            {/* Show assigned process server for this recipient */}
+                                            {recipient.assignedProcessServerId && processServers[recipient.assignedProcessServerId] && (
                                                 <div className="mt-3 pt-3 border-t border-white/10">
                                                     <p className="text-sm text-gray-400 mb-2">Assigned to</p>
                                                     <div className="flex items-center gap-2">
                                                         <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
-                                                            {(processServers[dropoff.assignedProcessServerId].firstName?.[0] || 'S')}{(processServers[dropoff.assignedProcessServerId].lastName?.[0] || '2')}
+                                                            {(processServers[recipient.assignedProcessServerId].firstName?.[0] || 'S')}{(processServers[recipient.assignedProcessServerId].lastName?.[0] || '2')}
                                                         </div>
                                                         <div>
                                                             <p className="font-semibold text-sm">
-                                                                {processServers[dropoff.assignedProcessServerId].firstName || 'Server'} {processServers[dropoff.assignedProcessServerId].lastName || 'Name'}
+                                                                {processServers[recipient.assignedProcessServerId].firstName || 'Server'} {processServers[recipient.assignedProcessServerId].lastName || 'Name'}
                                                             </p>
                                                             <p className="text-xs text-gray-400">
-                                                                {processServers[dropoff.assignedProcessServerId].successfulDeliveries > 0
-                                                                    ? `${processServers[dropoff.assignedProcessServerId].successfulDeliveries} Completed Orders`
+                                                                {processServers[recipient.assignedProcessServerId].successfulDeliveries > 0
+                                                                    ? `${processServers[recipient.assignedProcessServerId].successfulDeliveries} Completed Orders`
                                                                     : 'New Process Server'}
                                                             </p>
                                                         </div>
@@ -231,10 +231,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                                             )}
 
                                             {/* Show delivery attempts */}
-                                            {dropoff.attempts && dropoff.attempts.length > 0 && (
+                                            {recipient.attempts && recipient.attempts.length > 0 && (
                                                 <div className="mt-4 space-y-2">
                                                     <h4 className="font-semibold text-sm">Delivery Attempts</h4>
-                                                    {dropoff.attempts
+                                                    {recipient.attempts
                                                         .sort((a: any, b: any) => a.attemptNumber - b.attemptNumber)
                                                         .map((attempt: any) => (
                                                             <div key={attempt.id} className="bg-black/20 rounded p-3 text-sm">
@@ -262,7 +262,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                                         </div>
                                     ))
                                 ) : (
-                                    <p className="text-gray-400 text-sm">No dropoffs</p>
+                                    <p className="text-gray-400 text-sm">No recipients</p>
                                 )}
                             </div>
                         </div>
@@ -393,21 +393,21 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                                             <div>
                                                 <p className="text-sm text-gray-400">Attempts</p>
                                                 <p className="font-semibold">
-                                                    {order.dropoffs
+                                                    {order.recipients
                                                         .filter((d: any) => d.assignedProcessServerId === ps.id)
                                                         .reduce((sum: number, d: any) => sum + (d.attempts?.length || 0), 0)}
                                                 </p>
                                             </div>
-                                            {/* Show assigned dropoffs */}
+                                            {/* Show assigned Recipients */}
                                             <div className="pt-2 border-t border-white/10">
-                                                <p className="text-xs text-gray-400 mb-1">Assigned Dropoffs</p>
+                                                <p className="text-xs text-gray-400 mb-1">Assigned Recipients</p>
                                                 <div className="flex flex-wrap gap-1">
-                                                    {order.dropoffs
+                                                    {order.recipients
                                                         .map((d: any, idx: number) => ({ ...d, index: idx + 1 }))
                                                         .filter((d: any) => d.assignedProcessServerId === ps.id)
                                                         .map((d: any) => (
                                                             <span key={d.id} className="px-2 py-0.5 bg-white/10 rounded text-xs">
-                                                                Dropoff {d.index}
+                                                                Recipient {d.index}
                                                             </span>
                                                         ))}
                                                 </div>

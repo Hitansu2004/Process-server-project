@@ -26,31 +26,37 @@ public class UpdateOrderRequest {
 
     private String documentType;
 
+    private String otherDocumentType;
+
     private String caseNumber;
 
     private String jurisdiction;
 
     @Valid
-    private List<DropoffUpdate> dropoffUpdates;
+    private List<RecipientUpdate> recipientUpdates;
 
     private String modificationReason; // Optional reason for the update
 
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class DropoffUpdate {
-        private String dropoffId; // If updating existing dropoff
+    public static class RecipientUpdate {
+        private String recipientId; // If updating existing recipient
 
         @NotBlank(message = "Recipient name is required")
         private String recipientName;
 
-        @NotBlank(message = "Dropoff address is required")
-        private String dropoffAddress;
+        @NotBlank(message = "Recipient address is required")
+        private String recipientAddress;
 
         @NotBlank(message = "Zip code is required")
-        private String dropoffZipCode;
+        private String recipientZipCode;
 
-        private String dropoffType; // AUTOMATED or GUIDED
+        private String city; // Added for completeness
+
+        private String state; // Added for completeness
+
+        private String recipientType; // AUTOMATED or GUIDED
 
         private String assignedProcessServerId; // For GUIDED type
 
@@ -60,8 +66,14 @@ public class UpdateOrderRequest {
 
         private Boolean remoteLocation; // Req 2
 
-        private boolean isNew; // Flag to indicate this is a new dropoff being added
+        private Boolean processService; // Added for service options
+
+        private Boolean certifiedMail; // Added for service options
+
+        private boolean isNew; // Flag to indicate this is a new recipient being added
 
         private boolean toBeRemoved; // Flag to mark for deletion
+
+        private String serviceType; // PROCESS_SERVICE or CERTIFIED_MAIL
     }
 }

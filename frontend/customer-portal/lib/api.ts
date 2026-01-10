@@ -30,7 +30,41 @@ export const api = {
             },
             body: JSON.stringify(orderData),
         })
-        if (!response.ok) throw new Error('Failed to create order')
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            const error: any = new Error('Failed to create order')
+            error.response = {
+                status: response.status,
+                statusText: response.statusText,
+                data: errorData
+            }
+            throw error
+        }
+
+        return response.json()
+    },
+
+    async countDocumentPages(file: File, token: string) {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const response = await fetch(`${API_URL}/api/orders/count-pages`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+        })
+        if (!response.ok) throw new Error('Failed to count pages')
+        return response.json()
+    },
+
+    async getOrder(orderId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/${orderId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to fetch order')
         return response.json()
     },
 
@@ -146,6 +180,54 @@ export const api = {
             const error = await response.json()
             throw new Error(error.error || 'Failed to cancel order')
         }
+        return response.json()
+    },
+
+    // Requirement 8: Independent Recipient Editing
+    async updateRecipient(recipientId: string, updateData: any, token: string, userId: string, userRole: string = 'CUSTOMER') {
+        const response = await fetch(`${API_URL}/api/orders/recipients/${recipientId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId,
+                'userRole': userRole
+            },
+            body: JSON.stringify(updateData)
+        })
+        if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to update recipient')
+        }
+    },
+
+    async uploadRecipientDocument(recipientId: string, file: File, token: string, userId: string, userRole: string = 'CUSTOMER') {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const response = await fetch(`${API_URL}/api/orders/recipients/${recipientId}/document`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'userId': userId,
+                'userRole': userRole
+            },
+            body: formData
+        })
+        if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to upload document')
+        }
+        return response.json()
+    },
+
+    async getOrderHistory(orderId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/${orderId}/history`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        if (!response.ok) throw new Error('Failed to fetch order history')
         return response.json()
     },
 
@@ -289,6 +371,12 @@ export const api = {
         return response.json()
     },
 
+    async searchProcessServers(query: string, token: string) {
+        // Reuse getGlobalProcessServers since we don't have a search endpoint yet
+        // Client-side filtering will handle the query
+        return this.getGlobalProcessServers(token)
+    },
+
     async getGlobalProcessServers(token: string) {
         const response = await fetch(`${API_URL}/api/process-servers/global`, {
             headers: { 'Authorization': `Bearer ${token}` },
@@ -401,6 +489,73 @@ export const api = {
             headers: { 'Authorization': `Bearer ${token}` }
         })
         if (!response.ok) throw new Error('Failed to fetch participants')
+        return response.json()
+    },
+
+    // NEW DRAFT SYSTEM - Simple JSON-based draft saving
+    async saveDraft(draftData: any, token: string) {
+        const response = await fetch(`${API_URL}/api/drafts`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(draftData),
+        })
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Failed to save draft' }))
+            throw new Error(error.error || 'Failed to save draft')
+        }
+        return response.json()
+    },
+
+    async updateDraft(draftId: string, draftData: any, token: string) {
+        const response = await fetch(`${API_URL}/api/drafts`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ ...draftData, id: draftId }),
+        })
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Failed to update draft' }))
+            throw new Error(error.error || 'Failed to update draft')
+        }
+        return response.json()
+    },
+
+    async getDraft(draftId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/drafts/${draftId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to get draft')
+        return response.json()
+    },
+
+    async getCustomerDrafts(customerId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/drafts/customer/${customerId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to get drafts')
+        return response.json()
+    },
+
+    async getLatestDraft(customerId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/drafts/customer/${customerId}/latest`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (response.status === 204) return null  // No drafts
+        if (!response.ok) throw new Error('Failed to get latest draft')
+        return response.json()
+    },
+
+    async deleteDraft(draftId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/drafts/${draftId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to delete draft')
         return response.json()
     },
 }

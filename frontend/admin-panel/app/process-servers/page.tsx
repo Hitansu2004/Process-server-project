@@ -67,9 +67,9 @@ export default function DriversManagement() {
     }
 
     const calculateServerStats = (server: any) => {
-        // Find orders where this server is assigned to any dropoff
+        // Find orders where this server is assigned to any Recipient
         const assignedOrders = orders.filter(order =>
-            order.dropoffs?.some((d: any) => d.assignedProcessServerId === server.id)
+            order.recipients?.some((d: any) => d.assignedProcessServerId === server.id)
         )
 
         // Count pending bids for this server

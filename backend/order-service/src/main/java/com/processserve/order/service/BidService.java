@@ -2,13 +2,13 @@ package com.processserve.order.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.processserve.order.client.TenantClient;
-import com.processserve.order.dto.PaymentBreakdown;
+
 import com.processserve.order.dto.PlaceBidRequest;
 import com.processserve.order.entity.Bid;
 import com.processserve.order.entity.Order;
-import com.processserve.order.entity.OrderDropoff;
+import com.processserve.order.entity.OrderRecipient;
 import com.processserve.order.repository.BidRepository;
-import com.processserve.order.repository.OrderDropoffRepository;
+import com.processserve.order.repository.OrderRecipientRepository;
 import com.processserve.order.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,40 +29,39 @@ public class BidService {
 
     private final BidRepository bidRepository;
     private final OrderRepository orderRepository;
-    private final OrderDropoffRepository dropoffRepository;
-    private final PaymentCalculationService paymentCalculationService;
+    private final OrderRecipientRepository recipientRepository;
+
     private final TenantClient tenantClient;
     private final com.processserve.order.client.NotificationClient notificationClient;
 
     @Transactional
     public Bid placeBid(PlaceBidRequest request) {
-        log.info("Placing bid for dropoff: {} by process server: {}",
-                request.getOrderDropoffId(), request.getProcessServerId());
+        log.info("Placing bid for recipient: {} by process server: {}",
+                request.getOrderRecipientId(), request.getProcessServerId());
 
-        // Check if bid already exists for this dropoff and process server
-        // Workaround: fetch all bids for dropoff and check.
-        List<Bid> existingBids = bidRepository.findByOrderDropoffId(request.getOrderDropoffId());
+        // Check if bid already exists for this recipient and process server
+        // Workaround: fetch all bids for recipient and check.
 
         // ... (validation logic)
 
-        // Get dropoff and validate
-        OrderDropoff dropoff = dropoffRepository.findById(request.getOrderDropoffId())
-                .orElseThrow(() -> new RuntimeException("Dropoff not found"));
+        // Get recipient and validate
+        OrderRecipient recipient = recipientRepository.findById(request.getOrderRecipientId())
+                .orElseThrow(() -> new RuntimeException("Recipient not found"));
 
-        if (dropoff.getStatus() != OrderDropoff.DropoffStatus.OPEN &&
-                dropoff.getStatus() != OrderDropoff.DropoffStatus.PENDING &&
-                dropoff.getStatus() != OrderDropoff.DropoffStatus.BIDDING) {
-            throw new RuntimeException("Dropoff is not accepting bids");
+        if (recipient.getStatus() != OrderRecipient.RecipientStatus.OPEN &&
+                recipient.getStatus() != OrderRecipient.RecipientStatus.PENDING &&
+                recipient.getStatus() != OrderRecipient.RecipientStatus.BIDDING) {
+            throw new RuntimeException("Recipient is not accepting bids");
         }
 
-        if (dropoff.getDropoffType() == OrderDropoff.DropoffType.GUIDED) {
-            throw new RuntimeException("Cannot place bid on GUIDED dropoff");
+        if (recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED) {
+            throw new RuntimeException("Cannot place bid on GUIDED recipient");
         }
 
         // Create bid
         Bid bid = new Bid();
         bid.setId(UUID.randomUUID().toString());
-        bid.setDropoff(dropoff);
+        bid.setRecipient(recipient);
         bid.setProcessServerId(request.getProcessServerId());
         bid.setBidAmount(request.getBidAmount());
         bid.setComment(request.getComment());
@@ -70,14 +69,14 @@ public class BidService {
 
         bid = bidRepository.save(bid);
 
-        // Update dropoff status to BIDDING if it was PENDING or OPEN
-        if (dropoff.getStatus() == OrderDropoff.DropoffStatus.PENDING ||
-                dropoff.getStatus() == OrderDropoff.DropoffStatus.OPEN) {
-            dropoff.setStatus(OrderDropoff.DropoffStatus.BIDDING);
-            dropoffRepository.save(dropoff);
+        // Update recipient status to BIDDING if it was PENDING or OPEN
+        if (recipient.getStatus() == OrderRecipient.RecipientStatus.PENDING ||
+                recipient.getStatus() == OrderRecipient.RecipientStatus.OPEN) {
+            recipient.setStatus(OrderRecipient.RecipientStatus.BIDDING);
+            recipientRepository.save(recipient);
 
             // Also update Order status if needed?
-            Order order = dropoff.getOrder();
+            Order order = recipient.getOrder();
             if (order.getStatus() == Order.OrderStatus.OPEN) {
                 order.setStatus(Order.OrderStatus.BIDDING);
                 orderRepository.save(order);
@@ -99,16 +98,16 @@ public class BidService {
             throw new RuntimeException("Bid is not in pending status");
         }
 
-        OrderDropoff dropoff = bid.getDropoff();
-        Order order = dropoff.getOrder();
+        OrderRecipient recipient = bid.getRecipient();
+        Order order = recipient.getOrder();
 
         // Accept this bid
         bid.setStatus(Bid.BidStatus.ACCEPTED);
         bidRepository.save(bid);
 
-        // Reject all other pending bids for this dropoff
-        List<Bid> otherBids = bidRepository.findByOrderDropoffIdAndStatus(
-                dropoff.getId(), Bid.BidStatus.PENDING);
+        // Reject all other pending bids for this recipient
+        List<Bid> otherBids = bidRepository.findByOrderRecipientIdAndStatus(
+                recipient.getId(), Bid.BidStatus.PENDING);
 
         for (Bid otherBid : otherBids) {
             if (!otherBid.getId().equals(bidId)) {
@@ -118,9 +117,21 @@ public class BidService {
         }
 
         // Calculate payment breakdown
-        // Treat bidAmount as the Customer Payment (Gross)
-        // Commission is deducted from this amount
-        BigDecimal customerPayment = bid.getBidAmount();
+        // Treat bidAmount as the BASE PRICE for the recipient
+        // Add rush and remote fees if applicable
+        BigDecimal basePrice = bid.getBidAmount();
+        BigDecimal rushFee = recipient.getRushService() != null && recipient.getRushService()
+                ? new BigDecimal("50.00")
+                : BigDecimal.ZERO;
+        BigDecimal remoteFee = recipient.getRemoteLocation() != null && recipient.getRemoteLocation()
+                ? new BigDecimal("30.00")
+                : BigDecimal.ZERO;
+
+        // Total price = bid amount + rush + remote
+        BigDecimal totalPrice = basePrice.add(rushFee).add(remoteFee);
+
+        // Customer pays the total price
+        BigDecimal customerPayment = totalPrice;
         BigDecimal tenantCommissionRate = new BigDecimal("0.15"); // 15%
         BigDecimal superAdminFeeRate = new BigDecimal("0.05"); // 5% of commission
 
@@ -137,11 +148,14 @@ public class BidService {
         BigDecimal processServerPayout = customerPayment.subtract(tenantCommission)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        // Update dropoff
-        dropoff.setAssignedProcessServerId(bid.getProcessServerId());
-        dropoff.setFinalAgreedPrice(bid.getBidAmount());
-        dropoff.setStatus(OrderDropoff.DropoffStatus.ASSIGNED);
-        dropoffRepository.save(dropoff);
+        // Update recipient with final pricing
+        recipient.setAssignedProcessServerId(bid.getProcessServerId());
+        recipient.setBasePrice(basePrice); // Set base price from bid
+        recipient.setRushServiceFee(rushFee); // Calculate rush fee
+        recipient.setRemoteLocationFee(remoteFee); // Calculate remote fee
+        recipient.setFinalAgreedPrice(totalPrice); // Total = base + rush + remote
+        recipient.setStatus(OrderRecipient.RecipientStatus.ASSIGNED);
+        recipientRepository.save(recipient);
 
         // Update Order totals
         order.setCustomerPaymentAmount(add(order.getCustomerPaymentAmount(), customerPayment));
@@ -154,11 +168,11 @@ public class BidService {
         BigDecimal commissionRate = getTenantCommissionRate(order.getTenantId());
         order.setCommissionRateApplied(commissionRate);
 
-        // Check if all dropoffs are assigned
-        boolean allAssigned = order.getDropoffs().stream()
-                .allMatch(d -> d.getStatus() == OrderDropoff.DropoffStatus.ASSIGNED ||
-                        d.getStatus() == OrderDropoff.DropoffStatus.IN_PROGRESS ||
-                        d.getStatus() == OrderDropoff.DropoffStatus.DELIVERED);
+        // Check if all recipients are assigned
+        boolean allAssigned = order.getRecipients().stream()
+                .allMatch(d -> d.getStatus() == OrderRecipient.RecipientStatus.ASSIGNED ||
+                        d.getStatus() == OrderRecipient.RecipientStatus.IN_PROGRESS ||
+                        d.getStatus() == OrderRecipient.RecipientStatus.DELIVERED);
 
         if (allAssigned) {
             order.setStatus(Order.OrderStatus.ASSIGNED);
@@ -169,8 +183,8 @@ public class BidService {
 
         orderRepository.save(order);
 
-        log.info("Bid accepted. Dropoff {} assigned to process server {}.",
-                dropoff.getId(), bid.getProcessServerId());
+        log.info("Bid accepted. Recipient {} assigned to process server {}.",
+                recipient.getId(), bid.getProcessServerId());
 
         // Send notification to Process Server
         try {
@@ -186,15 +200,6 @@ public class BidService {
         } catch (Exception e) {
             log.error("Failed to send notification: {}", e.getMessage());
         }
-    }
-
-    private void updateOrderTotals(Order order, PaymentBreakdown breakdown) {
-        order.setCustomerPaymentAmount(add(order.getCustomerPaymentAmount(), breakdown.getCustomerPaymentAmount()));
-        order.setProcessServerPayout(add(order.getProcessServerPayout(), breakdown.getProcessServerPayout()));
-        order.setTenantCommission(add(order.getTenantCommission(), breakdown.getTenantCommission()));
-        order.setSuperAdminFee(add(order.getSuperAdminFee(), breakdown.getSuperAdminFee()));
-        order.setTenantProfit(add(order.getTenantProfit(), breakdown.getTenantProfit()));
-        order.setCommissionRateApplied(breakdown.getCommissionRateApplied());
     }
 
     private BigDecimal add(BigDecimal a, BigDecimal b) {
@@ -225,7 +230,7 @@ public class BidService {
     }
 
     public List<Bid> getBidsByOrderId(String orderId) {
-        return bidRepository.findByDropoffOrderId(orderId);
+        return bidRepository.findByRecipientOrderId(orderId);
     }
 
     public List<com.processserve.order.dto.BidDTO> getBidsByProcessServerId(String processServerId) {
@@ -234,8 +239,8 @@ public class BidService {
     }
 
     private com.processserve.order.dto.BidDTO mapToDTO(Bid bid) {
-        OrderDropoff dropoff = bid.getDropoff();
-        Order order = dropoff != null ? dropoff.getOrder() : null;
+        OrderRecipient recipient = bid.getRecipient();
+        Order order = recipient != null ? recipient.getOrder() : null;
 
         return com.processserve.order.dto.BidDTO.builder()
                 .id(bid.getId())

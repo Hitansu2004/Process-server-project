@@ -16,11 +16,11 @@ public interface OrderRepository extends JpaRepository<Order, String> {
 
     List<Order> findByCustomerId(String customerId);
 
-    List<Order> findDistinctByDropoffsAssignedProcessServerId(String processServerId);
+    List<Order> findDistinctByRecipientsAssignedProcessServerId(String processServerId);
 
     Optional<Order> findByOrderNumber(String orderNumber);
 
-    @Query("SELECT DISTINCT o FROM Order o JOIN o.dropoffs d WHERE d.assignedProcessServerId = :processServerId ORDER BY o.completedAt DESC")
+    @Query("SELECT DISTINCT o FROM Order o JOIN o.recipients d WHERE d.assignedProcessServerId = :processServerId ORDER BY o.completedAt DESC")
     List<Order> findTop15ByAssignedProcessServerIdOrderByCompletedAtDesc(
             @Param("processServerId") String processServerId);
 
@@ -39,4 +39,7 @@ public interface OrderRepository extends JpaRepository<Order, String> {
 
     @Query("SELECT o FROM Order o WHERE o.caseNumber LIKE %:query% OR o.jurisdiction LIKE %:query%")
     List<Order> searchByCaseInfo(@Param("query") String query);
+
+    // Draft management
+    List<Order> findByCustomerIdAndStatus(String customerId, Order.OrderStatus status);
 }

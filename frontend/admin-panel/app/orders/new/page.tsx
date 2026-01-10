@@ -180,10 +180,10 @@ export default function NewConciergeOrder() {
                             <div>
                                 <label className="block text-sm font-medium mb-2">Deadline</label>
                                 <input
-                                    type="datetime-local"
+                                    type="date"
                                     value={formData.deadline}
                                     onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                    className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                                     required
                                 />
                             </div>

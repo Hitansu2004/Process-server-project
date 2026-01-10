@@ -13,8 +13,8 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class PlaceBidRequest {
 
-    @NotBlank(message = "Order Dropoff ID is required")
-    private String orderDropoffId;
+    @NotBlank(message = "Order Recipient ID is required")
+    private String orderRecipientId;
 
     @NotBlank(message = "Process Server ID is required")
     private String processServerId;

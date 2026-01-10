@@ -32,17 +32,17 @@ spring:
             user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
             user-name-attribute: email
   mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
+    host: ${MAIL_HOST:disabled}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:hitansu0007@gmail.com}
-    password: ${MAIL_PASSWORD:qccr dvpc tiwi faaj}
+    username: ${MAIL_USERNAME:disabled@localhost}
+    password: ${MAIL_PASSWORD:disabled-email-service}
     properties:
       mail:
         smtp:
-          auth: true
+          auth: false
           starttls:
-            enable: true
-            required: true
+            enable: false
+            required: false
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
