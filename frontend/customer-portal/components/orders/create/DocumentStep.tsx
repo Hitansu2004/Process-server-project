@@ -97,16 +97,30 @@ export default function DocumentStep({ data, onChange }: DocumentStepProps) {
     })
   }
 
-  const handleViewFile = () => {
+  const handleViewFile = async () => {
     if (data.document) {
       const url = URL.createObjectURL(data.document)
       window.open(url, '_blank')
     } else if (data.existingDocumentUrl) {
-      window.open(data.existingDocumentUrl, '_blank')
+      try {
+        const token = sessionStorage.getItem('token')
+        const response = await fetch(data.existingDocumentUrl, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        
+        if (!response.ok) throw new Error('Failed to load document')
+        
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        window.open(url, '_blank')
+      } catch (error) {
+        console.error('Error viewing document:', error)
+        alert('Failed to load document. Please try again.')
+      }
     }
   }
 
-  const handleDownloadFile = () => {
+  const handleDownloadFile = async () => {
     if (data.document) {
       const url = URL.createObjectURL(data.document)
       const a = document.createElement('a')
@@ -114,9 +128,27 @@ export default function DocumentStep({ data, onChange }: DocumentStepProps) {
       a.download = data.document.name
       a.click()
     } else if (data.existingDocumentUrl) {
-      // For existing files, we might need a backend endpoint to download or just open
-      // Assuming existingDocumentUrl is a viewable URL or we use a download endpoint
-      window.open(data.existingDocumentUrl, '_blank')
+      try {
+        const token = sessionStorage.getItem('token')
+        const response = await fetch(data.existingDocumentUrl, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        
+        if (!response.ok) throw new Error('Failed to download document')
+        
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = data.existingDocumentName || 'document.pdf'
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      } catch (error) {
+        console.error('Error downloading document:', error)
+        alert('Failed to download document. Please try again.')
+      }
     }
   }
 
@@ -252,28 +284,32 @@ export default function DocumentStep({ data, onChange }: DocumentStepProps) {
               </p>
             </div>
           ) : (
-            <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
+            <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
               <div className="flex items-start justify-between">
                 <div className="flex items-start space-x-3 flex-1">
                   <FileText className="h-8 w-8 text-blue-600 flex-shrink-0 mt-1" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
-                      {data.document ? data.document.name : data.existingDocumentName}
+                      {data.document ? data.document.name : (data.existingDocumentName || 'Document.pdf')}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {data.document ? (data.document.size / 1024 / 1024).toFixed(2) + ' MB' : 'Existing Document'}
+                      {data.document 
+                        ? `${(data.document.size / 1024 / 1024).toFixed(2)} MB` 
+                        : 'Previously uploaded document'}
                     </p>
                     <div className="flex items-center space-x-3 mt-2">
                       <button
+                        type="button"
                         onClick={handleViewFile}
-                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center space-x-1 font-medium"
                       >
                         <Eye className="h-3 w-3" />
                         <span>View</span>
                       </button>
                       <button
+                        type="button"
                         onClick={handleDownloadFile}
-                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center space-x-1 font-medium"
                       >
                         <Download className="h-3 w-3" />
                         <span>Download</span>
@@ -291,13 +327,29 @@ export default function DocumentStep({ data, onChange }: DocumentStepProps) {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={handleRemoveFile}
                   className="ml-4 text-red-600 hover:text-red-800 flex-shrink-0"
-                  title="Remove file"
+                  title="Remove file and upload new"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
+              {data.existingDocumentName && !data.document && (
+                <div className="mt-3 pt-3 border-t border-blue-200">
+                  <label className="inline-block">
+                    <span className="px-4 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 cursor-pointer transition-colors">
+                      Replace Document
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={handleFileInput}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              )}
             </div>
           )}
         </div>

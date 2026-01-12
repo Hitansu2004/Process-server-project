@@ -66,8 +66,7 @@ export default function NewConciergeOrder() {
                 ...formData,
                 deadline: formattedDeadline,
                 documentType: formData.documentType,
-                otherDocumentType: formData.documentType === 'OTHER' ? formData.otherDocumentType : null,
-                status: 'DRAFT'
+                otherDocumentType: formData.documentType === 'OTHER' ? formData.otherDocumentType : null
             }
 
             await api.createOrder(orderData, token!)

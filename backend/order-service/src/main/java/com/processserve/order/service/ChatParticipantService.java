@@ -22,7 +22,7 @@ public class ChatParticipantService {
     private final ChatParticipantRepository participantRepository;
 
     // Add participant to chat
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public ChatParticipantResponse addParticipant(AddParticipantRequest request, String addedByUserId) {
         log.info("Adding participant {} to order {}", request.getUserId(), request.getOrderId());
 

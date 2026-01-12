@@ -34,6 +34,9 @@ public class Order {
     @Column(name = "order_number", unique = true, nullable = false, length = 50)
     private String orderNumber;
 
+    @Column(name = "custom_name", length = 255)
+    private String customName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "order_type", length = 20)
     private OrderType orderType = OrderType.PROCESS_SERVICE;
@@ -53,6 +56,9 @@ public class Order {
 
     @Column(name = "document_url", length = 512)
     private String documentUrl;
+
+    @Column(name = "original_file_name", length = 255)
+    private String originalFileName;
 
     @Column(name = "page_count")
     private Integer pageCount;
@@ -125,7 +131,7 @@ public class Order {
     private String customerName;
 
     public enum OrderStatus {
-        DRAFT, OPEN, BIDDING, PARTIALLY_ASSIGNED, ASSIGNED, IN_PROGRESS, COMPLETED, FAILED, CANCELLED
+        OPEN, BIDDING, PARTIALLY_ASSIGNED, ASSIGNED, IN_PROGRESS, COMPLETED, FAILED, CANCELLED
     }
 
     public enum OrderType {
@@ -160,11 +166,10 @@ public class Order {
     }
 
     // Requirement 8: Check if order can be edited based on status
-    // Only DRAFT, OPEN, and BIDDING statuses allow editing
+    // Only OPEN and BIDDING statuses allow editing
     // ASSIGNED, IN_PROGRESS, COMPLETED, FAILED, CANCELLED are locked
     public boolean canBeEdited() {
-        return this.status == OrderStatus.DRAFT ||
-                this.status == OrderStatus.OPEN ||
+        return this.status == OrderStatus.OPEN ||
                 this.status == OrderStatus.BIDDING ||
                 this.status == OrderStatus.PARTIALLY_ASSIGNED ||
                 this.status == OrderStatus.ASSIGNED;

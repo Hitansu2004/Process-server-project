@@ -22,6 +22,8 @@ public class CreateOrderRequest {
     @NotBlank(message = "Customer ID is required")
     private String customerId;
 
+    private String customName; // Customer-provided order name
+
     private String specialInstructions;
 
     @NotNull(message = "Deadline is required")
@@ -37,8 +39,7 @@ public class CreateOrderRequest {
     private String caseNumber;
     private String jurisdiction;
 
-    // Status for draft orders
-    private String status; // DRAFT, OPEN, etc.
+    private String status; // OPEN, BIDDING, etc.
 
     @NotNull(message = "At least one recipient is required")
     private List<RecipientRequest> recipients = new ArrayList<>();

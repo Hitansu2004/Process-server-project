@@ -391,7 +391,7 @@ export default function Contacts() {
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setActiveTab('personal')}
                             className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${activeTab === 'personal'
-                                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                                ? 'bg-gradient-to-r from-blue-600 to-green-600 text-white shadow-lg'
                                 : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
                                 }`}
                         >
@@ -409,7 +409,7 @@ export default function Contacts() {
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setActiveTab('global')}
                             className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${activeTab === 'global'
-                                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                                ? 'bg-gradient-to-r from-blue-600 to-green-600 text-white shadow-lg'
                                 : 'bg-white/90 text-gray-600 border border-gray-200 hover:border-gray-300'
                                 }`}
                         >
@@ -479,7 +479,7 @@ export default function Contacts() {
                     >
                         <div className="bg-white/90 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 shadow-lg sticky top-6">
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-green-600 flex items-center justify-center">
                                     <Mail className="w-6 h-6 text-white" />
                                 </div>
                                 <h2 className="text-xl font-bold text-gray-800">
@@ -508,7 +508,7 @@ export default function Contacts() {
                                     whileTap={{ scale: 0.98 }}
                                     type="submit"
                                     disabled={inviteLoading}
-                                    className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-green-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     {inviteLoading ? (
                                         <>
@@ -640,7 +640,7 @@ export default function Contacts() {
                                                         <div className="flex items-center gap-4">
                                                             {/* Avatar */}
                                                             <div className="relative flex-shrink-0">
-                                                                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold overflow-hidden">
+                                                                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-green-600 flex items-center justify-center text-white text-lg font-bold overflow-hidden">
                                                                     {server.profilePhotoUrl ? (
                                                                         <img
                                                                             src={`${process.env.NEXT_PUBLIC_API_URL}/api/process-servers/profile-photo/${server.profilePhotoUrl}`}
@@ -828,7 +828,7 @@ export default function Contacts() {
                                                                         whileHover={{ scale: 1.05 }}
                                                                         whileTap={{ scale: 0.95 }}
                                                                         onClick={() => handleAddToPersonal(server)}
-                                                                        className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:shadow-lg transition-all text-sm font-medium flex items-center gap-1 flex-shrink-0"
+                                                                        className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-green-600 text-white hover:shadow-lg transition-all text-sm font-medium flex items-center gap-1 flex-shrink-0"
                                                                     >
                                                                         <UserPlus className="w-4 h-4" />
                                                                         Add

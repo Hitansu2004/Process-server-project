@@ -13,7 +13,6 @@ import {
 import ChatWindow from '@/components/chat/ChatWindow'
 import OrderHistory from '@/components/orders/OrderHistory'
 import EditRecipientModal from '@/components/orders/EditRecipientModal'
-import EditDocumentModal from '@/components/orders/EditDocumentModal'
 
 export default function OrderDetailsNew() {
     const router = useRouter()
@@ -30,7 +29,6 @@ export default function OrderDetailsNew() {
     const [showChat, setShowChat] = useState(false)
     const [unreadCount, setUnreadCount] = useState(0)
     const [editingRecipient, setEditingRecipient] = useState<any>(null)
-    const [editingDocument, setEditingDocument] = useState(false)
     const [showAcceptBidModal, setShowAcceptBidModal] = useState(false)
     const [selectedBid, setSelectedBid] = useState<any>(null)
     const [acceptingBid, setAcceptingBid] = useState(false)
@@ -188,12 +186,6 @@ export default function OrderDetailsNew() {
 
     const getStatusConfig = (status: string) => {
         const configs: any = {
-            'DRAFT': {
-                color: 'from-gray-500 to-gray-600',
-                bg: 'bg-gray-100',
-                text: 'text-gray-700',
-                icon: <Save className="w-5 h-5" />
-            },
             'OPEN': {
                 color: 'from-blue-500 to-blue-600',
                 bg: 'bg-blue-50',
@@ -300,7 +292,7 @@ export default function OrderDetailsNew() {
                         <motion.button
                             whileHover={{ scale: 1.05, x: -5 }}
                             whileTap={{ scale: 0.95 }}
-                            onClick={() => router.back()}
+                            onClick={() => router.push('/orders')}
                             className="p-3 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all text-gray-700"
                         >
                             <ArrowLeft className="w-5 h-5" />
@@ -1012,16 +1004,6 @@ export default function OrderDetailsNew() {
                             recipient={editingRecipient}
                             order={order}
                             onClose={() => setEditingRecipient(null)}
-                            onUpdate={() => loadOrderDetails()}
-                        />
-                    )
-                }
-
-                {
-                    editingDocument && (
-                        <EditDocumentModal
-                            order={order}
-                            onClose={() => setEditingDocument(false)}
                             onUpdate={() => loadOrderDetails()}
                         />
                     )

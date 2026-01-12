@@ -52,7 +52,7 @@ export default function Dashboard() {
 
     // Calculate total revenue from all non-cancelled orders
     const totalRevenue = orders
-        .filter(o => o.status !== 'CANCELLED' && o.status !== 'DRAFT')
+        .filter(o => o.status !== 'CANCELLED' && o.true)
         .reduce((sum, o) => sum + (o.tenantProfit || 0), 0)
 
     const activeProcessServerCount = processServers.filter((d: any) =>

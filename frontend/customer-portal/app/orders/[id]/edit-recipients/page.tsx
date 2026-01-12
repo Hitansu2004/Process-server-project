@@ -42,16 +42,34 @@ export default function EditRecipients() {
 
       // Convert recipients to recipients
       if (orderData.recipients && orderData.recipients.length > 0) {
-        const recipientsData = orderData.recipients.map((recipient: any) => ({
-          id: recipient.id || Date.now().toString(),
-          firstName: recipient.firstName || '',
-          lastName: recipient.lastName || '',
-          address: recipient.address || recipient.recipientAddress || '',
-          city: recipient.city || '',
-          state: recipient.state || '',
-          zipCode: recipient.zipCode || recipient.recipientZipCode || '',
-          notes: recipient.specialInstructions || ''
-        }))
+        const recipientsData = orderData.recipients.map((recipient: any) => {
+          // Split name if firstName/lastName not provided
+          let firstName = recipient.firstName || '';
+          let lastName = recipient.lastName || '';
+
+          if (!firstName && !lastName && recipient.recipientName) {
+            const nameParts = recipient.recipientName.split(' ');
+            firstName = nameParts[0] || '';
+            lastName = nameParts.slice(1).join(' ') || '';
+          }
+
+          return {
+            id: recipient.id || Date.now().toString(),
+            firstName: firstName,
+            lastName: lastName,
+            address: recipient.recipientAddress || recipient.address || '',
+            city: recipient.city || '',
+            state: recipient.state || '',
+            zipCode: recipient.recipientZipCode || recipient.zipCode || '',
+            notes: recipient.specialInstructions || recipient.notes || '',
+            assignmentType: recipient.recipientType || 'AUTOMATED',
+            processServerId: recipient.assignedProcessServerId,
+            processService: recipient.processService || false,
+            certifiedMail: recipient.certifiedMail || false,
+            rushService: recipient.rushService || false,
+            remoteService: recipient.remoteLocation || false
+          };
+        })
         setRecipients(recipientsData)
       }
 
@@ -119,32 +137,42 @@ export default function EditRecipients() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-600 font-medium">Loading order details...</p>
+        </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-8">
+      <div className="max-w-5xl mx-auto px-4">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <button
-            onClick={() => router.push(`/orders/${params.id}`)}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-4"
+          <motion.button
+            whileHover={{ scale: 1.05, x: -5 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => router.back()}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 bg-white px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all"
           >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Order Details</span>
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900">Edit Recipients</h1>
-          <p className="text-gray-600 mt-2">Order ID: {order?.orderNumber}</p>
+            <ArrowLeft className="h-5 w-5" />
+            <span className="font-medium">Back to Order Details</span>
+          </motion.button>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+            Edit Recipients
+          </h1>
+          <p className="text-gray-600">
+            Order: <span className="font-semibold">{order?.orderNumber}</span>
+          </p>
         </motion.div>
 
         <motion.div
@@ -161,23 +189,34 @@ export default function EditRecipients() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex justify-between items-center"
+          className="flex justify-between items-center gap-4"
         >
           <button
-            onClick={() => router.push(`/orders/${params.id}`)}
-            className="px-6 py-3 bg-white text-gray-700 rounded-lg font-medium hover:bg-gray-50 shadow-md hover:shadow-lg transition-all"
+            onClick={() => router.back()}
+            className="px-6 py-3 bg-white text-gray-700 rounded-xl font-medium hover:bg-gray-50 shadow-md hover:shadow-lg transition-all"
           >
             Cancel
           </button>
 
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={handleSubmit}
             disabled={saving}
-            className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save className="h-5 w-5" />
-            <span>{saving ? 'Saving...' : 'Save Changes'}</span>
-          </button>
+            {saving ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-5 w-5" />
+                Save Changes
+              </>
+            )}
+          </motion.button>
         </motion.div>
       </div>
     </div>

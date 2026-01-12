@@ -36,14 +36,9 @@ export default function ServiceOptionsStep({ recipients, deadline, onChange }: S
     const updated = recipients.map(r => {
       if (r.id !== recipientId) return r
 
+      // Simply update the field without enforcing mutual exclusivity
+      // Users can now select BOTH processService AND certifiedMail
       const updates: any = { [field]: value }
-
-      // Enforce mutual exclusivity
-      if (field === 'processService' && value === true) {
-        updates.certifiedMail = false
-      } else if (field === 'certifiedMail' && value === true) {
-        updates.processService = false
-      }
 
       return { ...r, ...updates }
     })
@@ -160,6 +155,7 @@ export default function ServiceOptionsStep({ recipients, deadline, onChange }: S
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h4 className="font-medium text-blue-900 mb-2">Service Information</h4>
         <ul className="text-sm text-blue-700 space-y-1">
+          <li>• <strong>You can select both Process Service AND Certified Mail</strong> for comprehensive delivery</li>
           <li>• Process service provides the highest success rate for service completion</li>
           <li>• Certified mail may take 3-5 business days for delivery</li>
           <li>• Rush service is recommended for deadlines within 72 hours</li>
@@ -193,10 +189,10 @@ function ServiceOption({
   return (
     <label
       className={`block border rounded-lg p-3 cursor-pointer transition-all ${checked
-          ? highlight
-            ? 'border-orange-500 bg-orange-50'
-            : 'border-blue-500 bg-blue-50'
-          : 'border-gray-300 hover:border-gray-400 bg-white'
+        ? highlight
+          ? 'border-orange-500 bg-orange-50'
+          : 'border-blue-500 bg-blue-50'
+        : 'border-gray-300 hover:border-gray-400 bg-white'
         }`}
     >
       <div className="flex items-start space-x-3">

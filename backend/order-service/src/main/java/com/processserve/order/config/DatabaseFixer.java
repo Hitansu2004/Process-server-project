@@ -61,13 +61,13 @@ public class DatabaseFixer implements CommandLineRunner {
             // Fix for C-001-ORD35 Recipient 2 (Double billing issue)
             log.info("Fixing double billing for C-001-ORD35 Recipient 2...");
             jdbcTemplate.update(
-                    "UPDATE order_recipients SET process_service = 1, certified_mail = 0, service_type = 'PROCESS_SERVICE' WHERE order_id = (SELECT id FROM orders WHERE order_number = 'C-001-ORD35') AND recipient_name LIKE 'Try 1 order 1%'");
+                    "UPDATE order_dropoffs SET process_service = 1, certified_mail = 0, service_type = 'PROCESS_SERVICE' WHERE order_id = (SELECT id FROM orders WHERE order_number = 'C-001-ORD35') AND recipient_name LIKE 'Try 1 order 1%'");
             log.info("✅ Recipient 2 fixed.");
 
             // Fix for C-001-ORD35 Recipient 1 (User reported persistence issue)
             log.info("Fixing persistence issue for C-001-ORD35 Recipient 1...");
             jdbcTemplate.update(
-                    "UPDATE order_recipients SET process_service = 1, certified_mail = 0, service_type = 'PROCESS_SERVICE' WHERE order_id = (SELECT id FROM orders WHERE order_number = 'C-001-ORD35') AND recipient_name LIKE 'try 2 orer 2%'");
+                    "UPDATE order_dropoffs SET process_service = 1, certified_mail = 0, service_type = 'PROCESS_SERVICE' WHERE order_id = (SELECT id FROM orders WHERE order_number = 'C-001-ORD35') AND recipient_name LIKE 'try 2 orer 2%'");
             log.info("✅ Recipient 1 fixed.");
         } catch (Exception e) {
             log.warn("⚠️ Failed to fix recipients: {}", e.getMessage());

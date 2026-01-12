@@ -117,18 +117,37 @@ public class BidService {
         }
 
         // Calculate payment breakdown
-        // Treat bidAmount as the BASE PRICE for the recipient
-        // Add rush and remote fees if applicable
-        BigDecimal basePrice = bid.getBidAmount();
-        BigDecimal rushFee = recipient.getRushService() != null && recipient.getRushService()
+        // For AUTOMATED orders, the customer was already charged for service options upfront:
+        // - Process Service: $75
+        // - Certified Mail: $25
+        // - Rush Service: $50
+        // - Remote Location: $40
+        // The bid amount is ONLY for the base delivery service.
+        // We need to ADD the bid amount to the existing fees.
+
+        // Get the existing fees that customer already paid
+        BigDecimal existingProcessServiceFee = Boolean.TRUE.equals(recipient.getProcessService()) 
+                ? new BigDecimal("75.00") 
+                : BigDecimal.ZERO;
+        BigDecimal existingCertifiedMailFee = Boolean.TRUE.equals(recipient.getCertifiedMail()) 
+                ? new BigDecimal("25.00") 
+                : BigDecimal.ZERO;
+        BigDecimal existingRushFee = recipient.getRushService() != null && recipient.getRushService()
                 ? new BigDecimal("50.00")
                 : BigDecimal.ZERO;
-        BigDecimal remoteFee = recipient.getRemoteLocation() != null && recipient.getRemoteLocation()
-                ? new BigDecimal("30.00")
+        BigDecimal existingRemoteFee = recipient.getRemoteLocation() != null && recipient.getRemoteLocation()
+                ? new BigDecimal("40.00")
                 : BigDecimal.ZERO;
 
-        // Total price = bid amount + rush + remote
-        BigDecimal totalPrice = basePrice.add(rushFee).add(remoteFee);
+        // Bid amount is the base delivery price from process server
+        BigDecimal basePrice = bid.getBidAmount();
+
+        // Total price = bid amount + existing service fees
+        BigDecimal totalPrice = basePrice
+                .add(existingProcessServiceFee)
+                .add(existingCertifiedMailFee)
+                .add(existingRushFee)
+                .add(existingRemoteFee);
 
         // Customer pays the total price
         BigDecimal customerPayment = totalPrice;
@@ -151,14 +170,15 @@ public class BidService {
         // Update recipient with final pricing
         recipient.setAssignedProcessServerId(bid.getProcessServerId());
         recipient.setBasePrice(basePrice); // Set base price from bid
-        recipient.setRushServiceFee(rushFee); // Calculate rush fee
-        recipient.setRemoteLocationFee(remoteFee); // Calculate remote fee
-        recipient.setFinalAgreedPrice(totalPrice); // Total = base + rush + remote
+        recipient.setRushServiceFee(existingRushFee); // Keep existing rush fee
+        recipient.setRemoteLocationFee(existingRemoteFee); // Keep existing remote fee
+        recipient.setFinalAgreedPrice(totalPrice); // Total = bid + all service fees
         recipient.setStatus(OrderRecipient.RecipientStatus.ASSIGNED);
         recipientRepository.save(recipient);
 
         // Update Order totals
-        order.setCustomerPaymentAmount(add(order.getCustomerPaymentAmount(), customerPayment));
+        // Don't manually update customerPaymentAmount here - it will be recalculated
+        // by recalculateOrderTotalsFromRecipients() based on the new finalAgreedPrice values
         order.setProcessServerPayout(add(order.getProcessServerPayout(), processServerPayout));
         order.setTenantCommission(add(order.getTenantCommission(), tenantCommission));
         order.setSuperAdminFee(add(order.getSuperAdminFee(), superAdminFee));

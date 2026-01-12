@@ -326,7 +326,7 @@ export default function PaymentStep({
             <strong>Payment Integration Coming Soon</strong>
           </p>
           <p className="text-sm text-blue-700 mt-2">
-            For now, clicking "Submit Order" will create your order as a draft. 
+            Clicking "Submit Order" will create your order. 
             You will be contacted with payment instructions to complete the order.
           </p>
         </div>

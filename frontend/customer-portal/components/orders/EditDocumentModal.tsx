@@ -11,6 +11,7 @@ interface EditDocumentModalProps {
 export default function EditDocumentModal({ order, onClose, onUpdate }: EditDocumentModalProps) {
     const [step, setStep] = useState(1) // 1: Edit, 2: Review
     const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
     const [formData, setFormData] = useState({
         documentType: order.documentType || 'OTHER',
         otherDocumentType: order.otherDocumentType || '',
@@ -35,7 +36,7 @@ export default function EditDocumentModal({ order, onClose, onUpdate }: EditDocu
             onUpdate()
             onClose()
         } catch (error: any) {
-            alert(error.message || 'Failed to update order')
+            setError(error.message || 'Failed to update order')
         } finally {
             setLoading(false)
         }
@@ -92,6 +93,13 @@ export default function EditDocumentModal({ order, onClose, onUpdate }: EditDocu
                         <X className="w-6 h-6" />
                     </button>
                 </div>
+
+                {error && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5" />
+                        {error}
+                    </div>
+                )}
 
                 {step === 1 ? (
                     <div className="space-y-6">

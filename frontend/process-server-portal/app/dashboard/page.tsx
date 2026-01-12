@@ -72,10 +72,24 @@ export default function Dashboard() {
             setProfile(profileData)
             setIsGlobal(profileData.isGlobal || false)
 
+            // Use profile.id (process_server_profile.id) as the ID for fetching orders and bids
+            // This is what's stored in the database for assignedProcessServerId
             const processServerId = profileData.id
+
+            // Debug: Show what ID we're using
+            if (!processServerId) {
+                alert('ERROR: Profile ID is missing! profileData.id = ' + profileData.id)
+            }
 
             // Load assigned orders
             const assigned = await api.getDeliveryPersonOrders(processServerId, token)
+            
+            // Debug: Show result
+            if (assigned.length === 0) {
+                console.error('DEBUG: No orders found for processServerId:', processServerId)
+                console.error('DEBUG: Profile data:', JSON.stringify({ id: profileData.id, tenantUserRoleId: profileData.tenantUserRoleId }))
+            }
+            
             setAssignedOrders(assigned)
 
             // Check for new assignments to show popup

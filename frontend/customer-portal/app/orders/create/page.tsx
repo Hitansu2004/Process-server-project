@@ -40,11 +40,14 @@ export default function CreateOrderWizard() {
 
     const [currentStep, setCurrentStep] = useState(1)
     const [isSubmitting, setIsSubmitting] = useState(false)
-    const [isSaving, setIsSaving] = useState(false)
-    const [draftId, setDraftId] = useState<string | null>(null)
     const [isEditMode, setIsEditMode] = useState(false)
     const [showSuccessModal, setShowSuccessModal] = useState(false)
-    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+    // Draft management state
+    const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
+    const [isSavingDraft, setIsSavingDraft] = useState(false)
+    const [lastSaved, setLastSaved] = useState<Date | null>(null)
+    const debounceSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
 
     const [documentData, setDocumentData] = useState({
         caseNumber: '',
@@ -55,9 +58,105 @@ export default function CreateOrderWizard() {
         filePageCount: 0,
     })
 
+    const [customName, setCustomName] = useState('')
+
     const [recipients, setRecipients] = useState<Recipient[]>([])
 
-    // Load draft or edit order from API after mount
+    // Auto-save function
+    const saveDraftToBackend = useCallback(async () => {
+        try {
+            const token = sessionStorage.getItem('token')
+            const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+            const customerId = user.roles?.[0]?.id || user.userId
+            const tenantId = user.roles?.[0]?.tenantId
+
+            if (!token || !customerId || !tenantId) return
+
+            // Don't save if no data entered yet
+            if (!documentData.caseNumber && !documentData.jurisdiction && recipients.length === 0) {
+                return
+            }
+
+            setIsSavingDraft(true)
+
+            const draftData = {
+                tenantId: tenantId,
+                customerId: customerId,
+                draftName: customName || `Draft - ${new Date().toLocaleDateString()}`,
+                currentStep: currentStep,
+                documentData: JSON.stringify({
+                    caseNumber: documentData.caseNumber,
+                    jurisdiction: documentData.jurisdiction,
+                    documentType: documentData.documentType,
+                    deadline: documentData.deadline,
+                    filePageCount: documentData.filePageCount,
+                }),
+                recipientsData: JSON.stringify(recipients),
+                serviceOptionsData: JSON.stringify({
+                    customName: customName
+                }),
+                isComplete: false
+            }
+
+            if (currentDraftId) {
+                // Update existing draft
+                await api.updateDraft(currentDraftId, draftData, token)
+            } else {
+                // Create new draft
+                const response = await api.saveDraft(draftData, token)
+                setCurrentDraftId(response.id)
+            }
+
+            setLastSaved(new Date())
+        } catch (error) {
+            console.error('Failed to save draft:', error)
+        } finally {
+            setIsSavingDraft(false)
+        }
+    }, [documentData, recipients, customName, currentStep, currentDraftId])
+
+    // Debounced save function - saves 1 second after user stops typing (like Gmail)
+    const debouncedSaveDraft = useCallback(() => {
+        if (isEditMode) return // Don't auto-save in edit mode
+
+        // Clear existing timer
+        if (debounceSaveTimerRef.current) {
+            clearTimeout(debounceSaveTimerRef.current)
+        }
+
+        // Set new timer - save after 1 second of inactivity
+        debounceSaveTimerRef.current = setTimeout(() => {
+            saveDraftToBackend()
+        }, 1000) // 1 second debounce (instant feel like Gmail)
+    }, [isEditMode, saveDraftToBackend])
+
+    // Auto-save on any data change (instant like Gmail)
+    useEffect(() => {
+        if (!isEditMode) {
+            debouncedSaveDraft()
+        }
+
+        // Cleanup
+        return () => {
+            if (debounceSaveTimerRef.current) {
+                clearTimeout(debounceSaveTimerRef.current)
+            }
+        }
+    }, [documentData, recipients, customName, isEditMode, debouncedSaveDraft])
+
+    // Save draft on step change (immediate, no debounce)
+    useEffect(() => {
+        if (currentStep > 1 && !isEditMode) {
+            // Cancel debounce and save immediately on step change
+            if (debounceSaveTimerRef.current) {
+                clearTimeout(debounceSaveTimerRef.current)
+            }
+            saveDraftToBackend()
+        }
+    }, [currentStep, isEditMode, saveDraftToBackend])
+
+    // Load draft or order data
+    // Load draft or order data
     useEffect(() => {
         const loadInitialData = async () => {
             setIsMounted(true)
@@ -83,7 +182,13 @@ export default function CreateOrderWizard() {
             const urlParams = new URLSearchParams(window.location.search)
             const isNewOrder = urlParams.get('new') === 'true'
             const editOrderId = urlParams.get('orderId')
-            const startStep = urlParams.get('step')
+            const draftId = urlParams.get('draftId')
+            const orderName = urlParams.get('orderName')
+
+            // Set custom order name if provided
+            if (orderName) {
+                setCustomName(decodeURIComponent(orderName))
+            }
 
             if (isNewOrder) {
                 console.log('🆕 New order requested')
@@ -91,43 +196,85 @@ export default function CreateOrderWizard() {
                 return
             }
 
+            // Load draft if draftId provided
+            if (draftId) {
+                await loadDraftData(draftId, token)
+                return
+            }
+
+            // Load order for editing if orderId provided
             if (editOrderId) {
-                console.log('📝 Loading draft/order:', editOrderId)
-                setDraftId(editOrderId)
                 await loadOrderData(editOrderId, token)
-            } else {
-                // Check for existing drafts to resume
-                try {
-                    console.log('🔍 Checking for existing drafts...')
-                    const drafts = await api.getCustomerDrafts(customerId, token)
-                    if (drafts && drafts.length > 0) {
-                        // Sort by last modified (assuming backend returns date or ID is roughly chronological)
-                        // For now, just take the first one or the one with highest ID/date
-                        const latestDraft = drafts[0] // You might want to sort this
-                        console.log('📂 Found existing draft, resuming:', latestDraft.id)
+                return
+            }
 
-                        // Ask user if they want to resume? For now, auto-resume
-                        setDraftId(latestDraft.id)
-                        await loadOrderData(latestDraft.id, token)
-
-                        // Update URL
-                        window.history.replaceState({}, '', `/orders/create?orderId=${latestDraft.id}`)
+            // Try to load latest draft automatically
+            try {
+                const latestDraft = await api.getLatestDraft(customerId, token)
+                if (latestDraft && !latestDraft.isComplete) {
+                    // Ask user if they want to continue from draft
+                    const shouldContinue = window.confirm(
+                        `You have a saved draft from ${new Date(latestDraft.updatedAt).toLocaleString()}. Would you like to continue from where you left off?`
+                    )
+                    if (shouldContinue) {
+                        await loadDraftData(latestDraft.id, token)
                     }
-                } catch (error) {
-                    console.error('❌ Failed to check for drafts:', error)
                 }
+            } catch (error) {
+                console.log('No previous draft found, starting fresh')
+            }
+        }
+
+        const loadDraftData = async (id: string, token: string) => {
+            try {
+                const draft = await api.getDraft(id, token)
+                console.log('✅ Loaded draft data:', draft)
+
+                setCurrentDraftId(draft.id)
+                setCurrentStep(draft.currentStep || 1)
+
+                // Parse and load document data
+                if (draft.documentData) {
+                    const docData = JSON.parse(draft.documentData)
+                    setDocumentData({
+                        caseNumber: docData.caseNumber || '',
+                        jurisdiction: docData.jurisdiction || '',
+                        documentType: docData.documentType || '',
+                        deadline: docData.deadline || '',
+                        document: null,
+                        filePageCount: docData.filePageCount || 0,
+                    })
+                }
+
+                // Parse and load recipients data
+                if (draft.recipientsData) {
+                    const recipientsData = JSON.parse(draft.recipientsData)
+                    if (Array.isArray(recipientsData)) {
+                        setRecipients(recipientsData)
+                    }
+                }
+
+                // Parse and load service options
+                if (draft.serviceOptionsData) {
+                    const serviceData = JSON.parse(draft.serviceOptionsData)
+                    if (serviceData.customName) {
+                        setCustomName(serviceData.customName)
+                    }
+                }
+
+                setLastSaved(new Date(draft.updatedAt))
+            } catch (error: any) {
+                console.error('❌ Failed to load draft:', error)
+                alert('Failed to load draft. Starting with a new order.')
             }
         }
 
         const loadOrderData = async (id: string, token: string) => {
             try {
-                // Fetch the order/draft data from database
                 const order = await api.getOrder(id, token)
                 console.log('✅ Loaded order data from database:', order)
 
-                // Check if this is a draft or published order
-                const isDraft = order.status === 'DRAFT'
-                setIsEditMode(!isDraft)  // Only set edit mode if it's a published order
+                setIsEditMode(true)
 
                 // Load document data
                 setDocumentData({
@@ -179,98 +326,6 @@ export default function CreateOrderWizard() {
 
         loadInitialData()
     }, [])
-
-    // Auto-save to database with debouncing
-    const saveDraftToDatabase = useCallback(async () => {
-        if (!isMounted || isEditMode) return
-
-        const token = sessionStorage.getItem('token')
-        if (!token) return
-
-        const user = JSON.parse(sessionStorage.getItem('user') || '{}')
-        const customerId = user.roles?.[0]?.id || user.userId
-        const tenantId = user.roles?.[0]?.tenantId
-
-        if (!customerId || !tenantId) return
-
-        const hasData = documentData.caseNumber || documentData.jurisdiction ||
-            documentData.documentType || documentData.deadline || recipients.length > 0
-
-        if (!hasData) return
-
-        // Format deadline to LocalDateTime format (YYYY-MM-DDTHH:mm:ss)
-        let formattedDeadline = null
-        if (documentData.deadline) {
-            // Ensure it has time component
-            formattedDeadline = documentData.deadline.includes('T')
-                ? documentData.deadline
-                : `${documentData.deadline}T00:00:00`
-        }
-
-        const draftData = {
-            tenantId,
-            customerId,
-            caseNumber: documentData.caseNumber || null,
-            jurisdiction: documentData.jurisdiction || null,
-            documentType: documentData.documentType || null,
-            deadline: formattedDeadline,
-            pageCount: documentData.filePageCount || null,
-            recipients: recipients.map(r => ({
-                recipientName: `${r.firstName} ${r.lastName}`.trim() || null,
-                recipientAddress: r.address || null,
-                recipientZipCode: r.zipCode || null,
-                city: r.city || null,
-                state: r.state || null,
-                stateId: r.stateId ? String(r.stateId) : null,
-                notes: r.notes || null,
-                recipientType: r.assignmentType || 'AUTOMATED',
-                serviceType: r.processService ? 'PROCESS_SERVICE' : r.certifiedMail ? 'CERTIFIED_MAIL' : 'PROCESS_SERVICE',
-                processService: r.processService || false,
-                certifiedMail: r.certifiedMail || false,
-                rushService: r.rushService || false,
-                remoteLocation: r.remoteService || false,
-                assignedProcessServerId: r.processServerId || null,
-                processServerName: r.processServerName || null,
-                quotedPrice: r.quotedPrice || null,
-                negotiatedPrice: r.negotiatedPrice || null,
-                priceStatus: r.priceStatus || null,
-            }))
-        }
-
-        try {
-            setIsSaving(true)
-            let savedDraft
-            if (draftId) {
-                savedDraft = await api.updateDraft(draftId, draftData, token)
-                console.log('💾 Draft updated in database:', savedDraft.id)
-            } else {
-                savedDraft = await api.saveDraft(draftData, token)
-                console.log('💾 New draft saved to database:', savedDraft.id)
-                setDraftId(savedDraft.id)
-                // Update URL with draft ID
-                window.history.replaceState({}, '', `/orders/create?orderId=${savedDraft.id}&step=${currentStep}`)
-            }
-        } catch (error) {
-            console.error('❌ Failed to save draft to database:', error)
-        } finally {
-            setIsSaving(false)
-        }
-    }, [isMounted, draftId, isEditMode, documentData, recipients, currentStep])
-
-    // Debounced auto-save effect
-    useEffect(() => {
-        if (!isMounted) return
-
-        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
-
-        saveTimeoutRef.current = setTimeout(() => {
-            saveDraftToDatabase()
-        }, 2000)
-
-        return () => {
-            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
-        }
-    }, [isMounted, documentData, recipients, saveDraftToDatabase])
 
     const steps = [
         { number: 1, title: 'Document Details', icon: FileText, description: 'Case information & documents' },
@@ -335,6 +390,14 @@ export default function CreateOrderWizard() {
 
             // If editing, save changes and return to dashboard
             if (isEditMode) {
+                const urlParams = new URLSearchParams(window.location.search)
+                const editOrderId = urlParams.get('orderId')
+                
+                if (!editOrderId) {
+                    alert('Order ID not found')
+                    return
+                }
+
                 const updateData = {
                     caseNumber: documentData.caseNumber,
                     jurisdiction: documentData.jurisdiction,
@@ -352,7 +415,7 @@ export default function CreateOrderWizard() {
                     }))
                 }
 
-                await api.updateOrder(draftId!, updateData, token, customerId)
+                await api.updateOrder(editOrderId, updateData, token, customerId)
                 alert('Order updated successfully!')
                 router.push('/orders')
                 return
@@ -361,10 +424,11 @@ export default function CreateOrderWizard() {
             const orderData = {
                 tenantId: user.roles[0]?.tenantId,
                 customerId: customerId,
+                customName: customName || null, // Add custom order name
                 caseNumber: documentData.caseNumber,
                 jurisdiction: documentData.jurisdiction,
                 documentType: documentData.documentType?.toUpperCase(),
-                deadline: documentData.deadline,
+                deadline: documentData.deadline.includes('T') ? documentData.deadline : `${documentData.deadline}T00:00:00`,
                 status: 'OPEN',
                 recipients: recipients.map(r => ({
                     recipientName: `${r.firstName} ${r.lastName}`.trim(),
@@ -417,13 +481,24 @@ export default function CreateOrderWizard() {
             console.log('✅ Order created:', createdOrder)
             console.log('📄 Order ID:', createdOrder.id)
 
-            // Delete draft if it exists
-            if (draftId) {
+            // Upload document if exists
+            if (documentData.document && createdOrder.id) {
                 try {
-                    await api.deleteDraft(draftId, token)
-                    console.log('🗑️ Draft deleted')
+                    await api.uploadOrderDocument(createdOrder.id, documentData.document, token)
+                    console.log('✅ Document uploaded successfully')
                 } catch (error) {
-                    console.error('❌ Failed to delete draft:', error)
+                    console.error('❌ Document upload failed:', error)
+                }
+            }
+
+            // Delete draft after successful order creation
+            if (currentDraftId) {
+                try {
+                    await api.deleteDraft(currentDraftId, token)
+                    console.log('✅ Draft deleted after order creation')
+                } catch (error) {
+                    console.error('Failed to delete draft:', error)
+                    // Don't fail the order creation if draft deletion fails
                 }
             }
 
@@ -460,10 +535,20 @@ export default function CreateOrderWizard() {
                     <p className="text-gray-600">
                         {isEditMode ? 'Update your order details' : 'Complete the steps below to submit your request'}
                     </p>
-                    {isSaving && (
-                        <div className="flex items-center justify-center gap-2 text-sm text-blue-600 mt-2">
-                            <Save className="w-4 h-4 animate-pulse" />
-                            <span>Saving draft...</span>
+                    {/* Draft Status Indicator */}
+                    {!isEditMode && (
+                        <div className="flex items-center justify-center gap-2 mt-4">
+                            {isSavingDraft ? (
+                                <div className="flex items-center gap-2 text-sm text-blue-600">
+                                    <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                                    <span>Saving...</span>
+                                </div>
+                            ) : lastSaved ? (
+                                <div className="flex items-center gap-2 text-sm text-green-600">
+                                    <Check className="w-4 h-4" />
+                                    <span>All changes saved</span>
+                                </div>
+                            ) : null}
                         </div>
                     )}
                 </motion.div>
@@ -522,17 +607,31 @@ export default function CreateOrderWizard() {
                     animate={{ opacity: 1 }}
                     className="flex justify-between items-center gap-4"
                 >
-                    <button
-                        onClick={handlePrevious}
-                        disabled={currentStep === 1}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all ${currentStep === 1
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
-                            }`}
-                    >
-                        <ChevronLeft className="w-5 h-5" />
-                        Previous
-                    </button>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handlePrevious}
+                            disabled={currentStep === 1}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all ${currentStep === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
+                                }`}
+                        >
+                            <ChevronLeft className="w-5 h-5" />
+                            Previous
+                        </button>
+
+                        {/* Save Draft Button */}
+                        {!isEditMode && currentStep < 5 && (
+                            <button
+                                onClick={saveDraftToBackend}
+                                disabled={isSavingDraft}
+                                className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                            >
+                                <Save className="w-5 h-5" />
+                                Save Draft
+                            </button>
+                        )}
+                    </div>
 
                     {currentStep < 5 ? (
                         <motion.button

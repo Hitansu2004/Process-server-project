@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { api } from '@/lib/api'
-import { motion } from 'framer-motion'
-import { ArrowLeft, Save, Package, Zap, MapPin, Mail, AlertTriangle, Loader } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowLeft, Save, Package, Zap, MapPin, Mail, AlertTriangle, Loader, CheckCircle } from 'lucide-react'
 
 interface ServiceOptions {
   processService: boolean
@@ -32,6 +32,8 @@ export default function EditServiceOptions() {
   const [order, setOrder] = useState<any>(null)
   const [recipients, setRecipients] = useState<RecipientServiceData[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     loadOrderDetails()
@@ -159,11 +161,13 @@ export default function EditServiceOptions() {
         throw new Error(`Update failed: ${errorText}`)
       }
 
-      alert('Service options updated successfully!')
-      router.push(`/orders/${params.id}`)
-    } catch (error) {
+      setShowSuccessModal(true)
+      setTimeout(() => {
+        router.push(`/orders/${params.id}`)
+      }, 2000)
+    } catch (error: any) {
       console.error('Failed to update service options:', error)
-      alert('Failed to update service options. Please try again.')
+      setError(error.message || 'Failed to update service options. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -229,6 +233,17 @@ export default function EditServiceOptions() {
             </motion.p>
           )}
         </motion.div>
+
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 flex items-center gap-2"
+          >
+            <AlertTriangle className="w-5 h-5" />
+            {error}
+          </motion.div>
+        )}
 
         {/* Recipients */}
         <div className="space-y-6 mb-8">
@@ -383,6 +398,35 @@ export default function EditServiceOptions() {
             <li>• <strong>Each recipient can have different service options</strong> based on their needs</li>
           </ul>
         </motion.div>
+
+        <AnimatePresence>
+          {showSuccessModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.5, rotate: -10 }}
+                animate={{ scale: 1, rotate: 0 }}
+                exit={{ scale: 0.5, rotate: 10 }}
+                className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center"
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2, type: 'spring' }}
+                  className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"
+                >
+                  <CheckCircle className="w-12 h-12 text-green-600" />
+                </motion.div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-2">Success!</h3>
+                <p className="text-gray-600">Service options updated successfully</p>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

@@ -166,6 +166,22 @@ export const api = {
         return response.json()
     },
 
+    async updateOrderName(orderId: string, customName: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/${orderId}/custom-name`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ customName })
+        })
+        if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to update order name')
+        }
+        return response.json()
+    },
+
     async cancelOrder(orderId: string, cancellationData: any, token: string, userId: string) {
         const response = await fetch(`${API_URL}/api/orders/${orderId}/cancel`, {
             method: 'POST',
@@ -492,7 +508,7 @@ export const api = {
         return response.json()
     },
 
-    // NEW DRAFT SYSTEM - Simple JSON-based draft saving
+    // Draft Management APIs
     async saveDraft(draftData: any, token: string) {
         const response = await fetch(`${API_URL}/api/drafts`, {
             method: 'POST',
@@ -502,26 +518,20 @@ export const api = {
             },
             body: JSON.stringify(draftData),
         })
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: 'Failed to save draft' }))
-            throw new Error(error.error || 'Failed to save draft')
-        }
+        if (!response.ok) throw new Error('Failed to save draft')
         return response.json()
     },
 
     async updateDraft(draftId: string, draftData: any, token: string) {
-        const response = await fetch(`${API_URL}/api/drafts`, {
-            method: 'POST',
+        const response = await fetch(`${API_URL}/api/drafts/${draftId}`, {
+            method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
             },
-            body: JSON.stringify({ ...draftData, id: draftId }),
+            body: JSON.stringify(draftData),
         })
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: 'Failed to update draft' }))
-            throw new Error(error.error || 'Failed to update draft')
-        }
+        if (!response.ok) throw new Error('Failed to update draft')
         return response.json()
     },
 
@@ -529,7 +539,7 @@ export const api = {
         const response = await fetch(`${API_URL}/api/drafts/${draftId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         })
-        if (!response.ok) throw new Error('Failed to get draft')
+        if (!response.ok) throw new Error('Failed to fetch draft')
         return response.json()
     },
 
@@ -537,7 +547,7 @@ export const api = {
         const response = await fetch(`${API_URL}/api/drafts/customer/${customerId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         })
-        if (!response.ok) throw new Error('Failed to get drafts')
+        if (!response.ok) throw new Error('Failed to fetch drafts')
         return response.json()
     },
 
@@ -545,8 +555,18 @@ export const api = {
         const response = await fetch(`${API_URL}/api/drafts/customer/${customerId}/latest`, {
             headers: { 'Authorization': `Bearer ${token}` }
         })
-        if (response.status === 204) return null  // No drafts
-        if (!response.ok) throw new Error('Failed to get latest draft')
+        if (!response.ok) {
+            if (response.status === 404) return null
+            throw new Error('Failed to fetch latest draft')
+        }
+        return response.json()
+    },
+
+    async getDraftCount(customerId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/drafts/customer/${customerId}/count`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to get draft count')
         return response.json()
     },
 
@@ -556,6 +576,13 @@ export const api = {
             headers: { 'Authorization': `Bearer ${token}` }
         })
         if (!response.ok) throw new Error('Failed to delete draft')
+    },
+
+    async convertDraftToOrder(draftId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/drafts/${draftId}/convert`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to convert draft to order')
         return response.json()
     },
 }

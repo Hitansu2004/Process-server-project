@@ -144,7 +144,7 @@ export default function LoginPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 max-w-md w-full relative z-10 border border-white/20"
+                className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 max-w-md w-full relative z-10 border border-white/50"
             >
                 {/* Header */}
                 <motion.div
@@ -153,30 +153,28 @@ export default function LoginPage() {
                     transition={{ delay: 0.2 }}
                     className="text-center mb-8"
                 >
-                    <motion.div
-                        animate={{ rotate: [0, 10, -10, 0] }}
-                        transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-                        className="inline-block mb-4"
-                    >
-                        <Sparkles className="text-purple-600" size={40} />
-                    </motion.div>
-                    <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+                    <div className="flex justify-center mb-6">
+                        <div className="p-4 bg-blue-50 rounded-2xl">
+                            <Sparkles className="text-blue-600 w-8 h-8" />
+                        </div>
+                    </div>
+                    <h1 className="text-3xl font-bold text-gray-900 mb-2">
                         Welcome Back
                     </h1>
-                    <p className="text-gray-600">Login to your ProcessServe account</p>
+                    <p className="text-gray-500 text-lg">Login to your account</p>
                 </motion.div>
 
                 {/* Success Message */}
                 <AnimatePresence>
                     {successMessage && (
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 20 }}
-                            className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 rounded-lg flex items-start gap-3"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mb-6 p-4 bg-green-50 border border-green-100 rounded-xl flex items-start gap-3"
                         >
                             <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
-                            <p className="text-green-700 text-sm">{successMessage}</p>
+                            <p className="text-green-700 text-sm font-medium">{successMessage}</p>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -185,13 +183,13 @@ export default function LoginPage() {
                 <AnimatePresence>
                     {error && (
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 20 }}
-                            className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg flex items-start gap-3"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3"
                         >
                             <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
-                            <p className="text-red-700 text-sm">{error}</p>
+                            <p className="text-red-700 text-sm font-medium">{error}</p>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -199,21 +197,21 @@ export default function LoginPage() {
                 <form onSubmit={handleSubmit} className="space-y-5">
                     {/* Email Field */}
                     <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.3 }}
                     >
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2 ml-1">
                             Email Address
                         </label>
-                        <div className="relative">
-                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                        <div className="relative group">
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={20} />
                             <input
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-white/50"
-                                placeholder="you@example.com"
+                                className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none"
+                                placeholder="name@company.com"
                                 required
                             />
                         </div>
@@ -221,20 +219,20 @@ export default function LoginPage() {
 
                     {/* Password Field */}
                     <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.4 }}
                     >
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2 ml-1">
                             Password
                         </label>
-                        <div className="relative">
-                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                        <div className="relative group">
+                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={20} />
                             <input
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-white/50"
+                                className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none"
                                 placeholder="Enter your password"
                                 required
                             />
@@ -250,22 +248,21 @@ export default function LoginPage() {
                         whileTap={{ scale: 0.98 }}
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed mt-6"
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-blue-500/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed mt-8"
                     >
                         {loading ? (
                             <>
                                 <motion.div
                                     animate={{ rotate: 360 }}
                                     transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                    className="w-6 h-6 border-3 border-white border-t-transparent rounded-full"
+                                    className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
                                 />
-                                Logging in...
+                                <span className="text-base">Signing in...</span>
                             </>
                         ) : (
                             <>
-                                <LogIn size={20} />
-                                Login
-                                <ArrowRight size={20} />
+                                <span className="text-base">Sign In</span>
+                                <ArrowRight size={18} />
                             </>
                         )}
                     </motion.button>
@@ -278,13 +275,13 @@ export default function LoginPage() {
                     transition={{ delay: 0.6 }}
                     className="mt-8 text-center"
                 >
-                    <p className="text-gray-600">
+                    <p className="text-gray-500 text-sm">
                         Don't have an account?{' '}
                         <button
                             onClick={() => router.push('/register')}
-                            className="text-blue-600 hover:text-purple-600 font-semibold transition-colors"
+                            className="text-blue-600 hover:text-blue-700 font-semibold transition-colors hover:underline"
                         >
-                            Register here
+                            Create an account
                         </button>
                     </p>
                 </motion.div>

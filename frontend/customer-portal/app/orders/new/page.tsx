@@ -710,7 +710,6 @@ export default function NewOrder() {
         }
     }
 
-    // Auto-save draft when navigating away
     const handleBackToDashboard = async () => {
         // Check if form has any data
         const hasFormData =
@@ -728,18 +727,15 @@ export default function NewOrder() {
             )
 
         if (hasFormData) {
-            const confirmed = confirm('You have unsaved changes. Would you like to save this as a draft before leaving?')
-            if (confirmed) {
-                await handleSubmit(null, true) // Save as draft
-            } else {
-                // Clear localStorage and navigate
-                localStorage.removeItem('newOrder_formData')
-                localStorage.removeItem('newOrder_recipients')
-                router.push('/dashboard')
+            const confirmed = confirm('You have unsaved changes. Are you sure you want to leave?')
+            if (!confirmed) {
+                return
             }
-        } else {
-            router.push('/dashboard')
+            // Clear localStorage and navigate
+            localStorage.removeItem('newOrder_formData')
+            localStorage.removeItem('newOrder_recipients')
         }
+        router.push('/dashboard')
     }
 
 
@@ -774,16 +770,12 @@ export default function NewOrder() {
         localStorage.setItem('newOrder_recipients', JSON.stringify(recipients))
     }, [recipients])
 
-    const handleSubmit = async (e: React.FormEvent | null, forceDraft: boolean = false) => {
+    const handleSubmit = async (e: React.FormEvent | null) => {
         if (e) e.preventDefault()
-        await saveOrder(forceDraft) // false = not a draft, true = force draft
+        await saveOrder()
     }
 
-    const handleSaveAsDraft = async () => {
-        await saveOrder(true) // true = save as draft
-    }
-
-    const saveOrder = async (isDraft: boolean) => {
+    const saveOrder = async () => {
         setLoading(true)
 
         try {
@@ -791,7 +783,6 @@ export default function NewOrder() {
             const user = JSON.parse(sessionStorage.getItem('user') || '{}')
             const customerId = user.roles?.[0]?.id || user.userId
 
-            // For drafts, use current date/time if deadline not provided
             const deadline = formData.deadline
                 ? (formData.deadline.includes(':00:') ? formData.deadline : `${formData.deadline}:00`)
                 : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T12:00:00'
@@ -801,11 +792,10 @@ export default function NewOrder() {
                 customerId: customerId,
                 ...formData,
                 deadline: deadline,
-                documentType: formData.documentType || (isDraft ? 'OTHER' : formData.documentType),
+                documentType: formData.documentType || formData.documentType,
                 otherDocumentType: formData.documentType === 'OTHER' ? formData.otherDocumentType : null,
                 caseNumber: formData.caseNumber || '',
                 jurisdiction: formData.jurisdiction || '',
-                status: isDraft ? 'DRAFT' : undefined, // Set status to DRAFT if saving as draft
                 recipients: recipients.map(r => ({
                     ...r,
                     assignedProcessServerId: r.recipientType === 'AUTOMATED' ? null : r.assignedProcessServerId,
@@ -815,7 +805,7 @@ export default function NewOrder() {
 
             const newOrder = await api.createOrder(orderData, token!)
 
-            if (selectedFile && !isDraft) {
+            if (selectedFile) {
                 try {
                     await api.uploadOrderDocument(newOrder.id, selectedFile, token!, (progress) => {
                         setUploadProgress(progress)
@@ -830,14 +820,11 @@ export default function NewOrder() {
             localStorage.removeItem('newOrder_formData')
             localStorage.removeItem('newOrder_recipients')
 
-            if (isDraft) {
-                alert('Order saved as draft successfully!')
-            }
-
+            alert('Order created successfully!')
             router.push(`/orders/${newOrder.id}`)
         } catch (error) {
             console.error('Order creation error:', error)
-            alert(`Failed to ${isDraft ? 'save draft' : 'create order'}`)
+            alert('Failed to create order')
         } finally {
             setLoading(false)
         }
@@ -1396,11 +1383,9 @@ export default function NewOrder() {
                     <div className="flex gap-4">
                         <button
                             type="button"
-                            onClick={handleSaveAsDraft}
                             disabled={loading}
                             className="btn-secondary w-full disabled:opacity-50"
                         >
-                            {loading ? 'Saving...' : 'Save as Draft'}
                         </button>
                         <button
                             type="submit"

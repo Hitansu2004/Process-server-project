@@ -1,7 +1,6 @@
 package com.processserve.shared.enums;
 
 public enum OrderStatus {
-    DRAFT,
     OPEN,
     BIDDING,
     ASSIGNED,

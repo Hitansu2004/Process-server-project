@@ -37,8 +37,31 @@ public class OrderService {
     private final OrderHistoryService historyService;
     private final DocumentPageCounter documentPageCounter;
 
-    @Transactional
     public Order createOrder(CreateOrderRequest request) {
+        int maxRetries = 3;
+        int attempt = 0;
+        while (attempt < maxRetries) {
+            try {
+                return createOrderInternal(request);
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                attempt++;
+                log.warn("Duplicate order number detected, retrying (attempt {}/{})", attempt, maxRetries);
+                if (attempt >= maxRetries) {
+                    throw new RuntimeException(
+                            "Failed to generate unique order number after " + maxRetries + " attempts");
+                }
+                try {
+                    Thread.sleep(100 + new java.util.Random().nextInt(200)); // Random backoff
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        throw new RuntimeException("Failed to create order");
+    }
+
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public Order createOrderInternal(CreateOrderRequest request) {
         log.info("Creating new order for customer: {}", request.getCustomerId());
 
         // Create main order
@@ -59,31 +82,12 @@ public class OrderService {
             shortId = parts[parts.length - 1]; // Get last part (e.g., "001")
         }
 
-        long nextOrderNum = 1;
-        java.util.Optional<Order> lastOrder = orderRepository
-                .findTopByCustomerIdOrderByCreatedAtDesc(request.getCustomerId());
-
-        if (lastOrder.isPresent()) {
-            String lastOrderNumber = lastOrder.get().getOrderNumber();
-            try {
-                // Expected format: C-###-ORD###
-                if (lastOrderNumber != null && lastOrderNumber.contains("-ORD")) {
-                    String numPart = lastOrderNumber.substring(lastOrderNumber.lastIndexOf("-ORD") + 4);
-                    nextOrderNum = Long.parseLong(numPart) + 1;
-                } else {
-                    // Fallback if format doesn't match
-                    nextOrderNum = orderRepository.countByCustomerId(request.getCustomerId()) + 1;
-                }
-            } catch (Exception e) {
-                log.warn("Failed to parse last order number: {}", lastOrderNumber);
-                nextOrderNum = orderRepository.countByCustomerId(request.getCustomerId()) + 1;
-            }
+        // Set custom name if provided by customer
+        if (request.getCustomName() != null && !request.getCustomName().isEmpty()) {
+            order.setCustomName(request.getCustomName());
         }
 
-        order.setOrderNumber("C-" + shortId + "-ORD" + nextOrderNum); // No padding - produces ORD6, ORD7, etc.
-
-        // Set status - use from request if provided (for drafts), otherwise default to
-        // OPEN
+        // Set status - use from request if provided, otherwise default to OPEN
         if (request.getStatus() != null && !request.getStatus().isEmpty()) {
             try {
                 order.setStatus(Order.OrderStatus.valueOf(request.getStatus()));
@@ -127,7 +131,16 @@ public class OrderService {
         order.setSuperAdminFee(BigDecimal.ZERO);
         order.setTenantProfit(BigDecimal.ZERO);
 
-        order = orderRepository.save(order);
+        // Use custom name as order number as requested by user
+        if (request.getCustomName() != null && !request.getCustomName().isEmpty()) {
+            order.setOrderNumber(request.getCustomName());
+        } else {
+            // Fallback to case number or UUID if no custom name provided
+            order.setOrderNumber(
+                    request.getCaseNumber() != null ? request.getCaseNumber() : UUID.randomUUID().toString());
+        }
+
+        order = orderRepository.saveAndFlush(order);
 
         // Create recipients
         int sequence = 1;
@@ -186,7 +199,7 @@ public class OrderService {
                         ? new BigDecimal("50.00")
                         : BigDecimal.ZERO;
                 remoteFee = recipientReq.getRemoteLocation() != null && recipientReq.getRemoteLocation()
-                        ? new BigDecimal("30.00")
+                        ? new BigDecimal("40.00")
                         : BigDecimal.ZERO;
 
                 // finalAgreedPrice from frontend already includes base + rush + remote
@@ -241,7 +254,7 @@ public class OrderService {
                         ? new BigDecimal("50.00")
                         : BigDecimal.ZERO;
                 remoteFee = recipientReq.getRemoteLocation() != null && recipientReq.getRemoteLocation()
-                        ? new BigDecimal("30.00")
+                        ? new BigDecimal("40.00")
                         : BigDecimal.ZERO;
 
                 basePrice = BigDecimal.ZERO; // Will be set when bid is accepted
@@ -294,7 +307,7 @@ public class OrderService {
 
             log.info("Chat initialized for order: {}", order.getId());
         } catch (Exception e) {
-            log.error("Failed to initialize chat participants", e);
+            log.error("Failed to initialize chat participants for order {}: {}", order.getId(), e.getMessage(), e);
             // Don't fail order creation if chat init fails
         }
 
@@ -436,8 +449,23 @@ public class OrderService {
         return order;
     }
 
+    @Transactional
     public List<Order> getOrdersByCustomerId(String customerId) {
-        return orderRepository.findByCustomerId(customerId);
+        log.info("Fetching orders for customer: {}", customerId);
+        List<Order> orders = orderRepository.findByCustomerId(customerId);
+        log.info("Found {} orders for customer {}", orders.size(), customerId);
+
+        // Recalculate totals from recipients to ensure dashboard shows correct amounts
+        for (Order order : orders) {
+            try {
+                recalculateOrderTotalsFromRecipients(order);
+            } catch (Exception e) {
+                log.error("Failed to recalculate totals for order {}: {}",
+                        order.getOrderNumber(), e.getMessage(), e);
+            }
+        }
+
+        return orders;
     }
 
     public List<Order> getOrdersByProcessServerId(String processServerId) {
@@ -505,8 +533,7 @@ public class OrderService {
 
     public BigDecimal getPlatformRevenue() {
         return orderRepository.findAll().stream()
-                .filter(order -> order.getStatus() != Order.OrderStatus.CANCELLED
-                        && order.getStatus() != Order.OrderStatus.DRAFT)
+                .filter(order -> order.getStatus() != Order.OrderStatus.CANCELLED)
                 .map(Order::getSuperAdminFee)
                 .filter(fee -> fee != null)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -563,10 +590,10 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
 
-        // 2. Check if order can be edited (DRAFT, OPEN, BIDDING only)
+        // 2. Check if order can be edited (OPEN, BIDDING only)
         if (!order.canBeEdited()) {
             throw new RuntimeException("Order cannot be edited. Status: " + order.getStatus() +
-                    ". Only DRAFT, OPEN, and BIDDING orders can be edited.");
+                    ". Only OPEN and BIDDING orders can be edited.");
         }
 
         // 3. Store old values for audit trail (as JSON string)
@@ -656,7 +683,11 @@ public class OrderService {
                                 .filter(r -> r.getId().equals(update.getRecipientId()))
                                 .findFirst()
                                 .ifPresent(recipient -> {
-                                    updateRecipientEntity(recipient, update, userId);
+                                    java.util.Map<String, String[]> changesMap = updateRecipientEntity(recipient,
+                                            update, userId);
+                                    if (!changesMap.isEmpty()) {
+                                        historyService.trackRecipientEdit(recipient, changesMap, userId, "CUSTOMER");
+                                    }
                                 });
                     }
                 }
@@ -792,7 +823,7 @@ public class OrderService {
         if ("GUIDED".equalsIgnoreCase(recipientData.getRecipientType())) {
             // GUIDED: Customer specifies total price, we calculate base from it
             rushFee = isRush ? new BigDecimal("50.00") : BigDecimal.ZERO;
-            remoteFee = isRemote ? new BigDecimal("30.00") : BigDecimal.ZERO;
+            remoteFee = isRemote ? new BigDecimal("40.00") : BigDecimal.ZERO;
 
             if (recipientData.getFinalAgreedPrice() != null) {
                 // Customer specified the final price
@@ -875,9 +906,13 @@ public class OrderService {
         OrderRecipient recipient = recipientRepository.findById(recipientId)
                 .orElseThrow(() -> new RuntimeException("Recipient not found: " + recipientId));
 
-        updateRecipientEntity(recipient, update, userId);
+        java.util.Map<String, String[]> changesMap = updateRecipientEntity(recipient, update, userId);
 
         recipientRepository.save(recipient);
+
+        if (!changesMap.isEmpty()) {
+            historyService.trackRecipientEdit(recipient, changesMap, userId, role);
+        }
 
         // Track history (moved from updateRecipientIndependent to here to cover all
         // updates)
@@ -890,46 +925,75 @@ public class OrderService {
     }
 
     /**
-     * Helper to update recipient entity fields
+     * Helper to update recipient entity fields and return changes
      */
-    private void updateRecipientEntity(OrderRecipient recipient, UpdateOrderRequest.RecipientUpdate update,
+    private java.util.Map<String, String[]> updateRecipientEntity(OrderRecipient recipient,
+            UpdateOrderRequest.RecipientUpdate update,
             String userId) {
-        if (update.getRecipientName() != null) {
+        java.util.Map<String, String[]> changes = new java.util.HashMap<>();
+
+        if (update.getRecipientName() != null && !update.getRecipientName().equals(recipient.getRecipientName())) {
+            changes.put("recipientName", new String[] { recipient.getRecipientName(), update.getRecipientName() });
             recipient.setRecipientName(update.getRecipientName());
         }
-        if (update.getRecipientAddress() != null) {
+        if (update.getRecipientAddress() != null
+                && !update.getRecipientAddress().equals(recipient.getRecipientAddress())) {
+            changes.put("recipientAddress",
+                    new String[] { recipient.getRecipientAddress(), update.getRecipientAddress() });
             recipient.setRecipientAddress(update.getRecipientAddress());
         }
-        if (update.getRecipientZipCode() != null) {
+        if (update.getRecipientZipCode() != null
+                && !update.getRecipientZipCode().equals(recipient.getRecipientZipCode())) {
+            changes.put("recipientZipCode",
+                    new String[] { recipient.getRecipientZipCode(), update.getRecipientZipCode() });
             recipient.setRecipientZipCode(update.getRecipientZipCode());
         }
-        if (update.getAssignedProcessServerId() != null) {
+        if (update.getAssignedProcessServerId() != null
+                && !update.getAssignedProcessServerId().equals(recipient.getAssignedProcessServerId())) {
+            changes.put("assignedProcessServerId",
+                    new String[] { recipient.getAssignedProcessServerId(), update.getAssignedProcessServerId() });
             recipient.setAssignedProcessServerId(update.getAssignedProcessServerId());
         }
         if (update.getFinalAgreedPrice() != null) {
-            recipient.setFinalAgreedPrice(BigDecimal.valueOf(update.getFinalAgreedPrice()));
+            BigDecimal newVal = BigDecimal.valueOf(update.getFinalAgreedPrice());
+            if (recipient.getFinalAgreedPrice() == null || newVal.compareTo(recipient.getFinalAgreedPrice()) != 0) {
+                changes.put("finalAgreedPrice",
+                        new String[] { String.valueOf(recipient.getFinalAgreedPrice()), String.valueOf(newVal) });
+                recipient.setFinalAgreedPrice(newVal);
+            }
         }
-        if (update.getRushService() != null) {
+
+        // Booleans
+        if (update.getRushService() != null && !update.getRushService().equals(recipient.getRushService())) {
+            changes.put("rushService", new String[] { String.valueOf(recipient.getRushService()),
+                    String.valueOf(update.getRushService()) });
             recipient.setRushService(update.getRushService());
             recipient.setRushServiceFee(update.getRushService() ? new BigDecimal("50.00") : BigDecimal.ZERO);
         }
-        if (update.getRemoteLocation() != null) {
+        if (update.getRemoteLocation() != null && !update.getRemoteLocation().equals(recipient.getRemoteLocation())) {
+            changes.put("remoteLocation", new String[] { String.valueOf(recipient.getRemoteLocation()),
+                    String.valueOf(update.getRemoteLocation()) });
             recipient.setRemoteLocation(update.getRemoteLocation());
-            recipient.setRemoteLocationFee(update.getRemoteLocation() ? new BigDecimal("30.00") : BigDecimal.ZERO);
+            recipient.setRemoteLocationFee(update.getRemoteLocation() ? new BigDecimal("40.00") : BigDecimal.ZERO);
         }
 
         // Handle Service Type from booleans first
         if (update.getProcessService() != null || update.getCertifiedMail() != null) {
-            if (update.getProcessService() != null) {
+            boolean oldProcess = Boolean.TRUE.equals(recipient.getProcessService());
+            boolean oldCertified = Boolean.TRUE.equals(recipient.getCertifiedMail());
+
+            if (update.getProcessService() != null && !update.getProcessService().equals(oldProcess)) {
+                changes.put("processService",
+                        new String[] { String.valueOf(oldProcess), String.valueOf(update.getProcessService()) });
                 recipient.setProcessService(update.getProcessService());
             }
-            if (update.getCertifiedMail() != null) {
+            if (update.getCertifiedMail() != null && !update.getCertifiedMail().equals(oldCertified)) {
+                changes.put("certifiedMail",
+                        new String[] { String.valueOf(oldCertified), String.valueOf(update.getCertifiedMail()) });
                 recipient.setCertifiedMail(update.getCertifiedMail());
             }
 
             // Set serviceType based on what's selected
-            // If both are true, prefer PROCESS_SERVICE as primary
-            // If only one is true, use that one
             if (recipient.getProcessService() && recipient.getCertifiedMail()) {
                 recipient.setServiceType(OrderRecipient.ServiceType.PROCESS_SERVICE);
             } else if (recipient.getProcessService()) {
@@ -939,17 +1003,28 @@ public class OrderService {
             }
         }
 
-        // Handle Service Type from enum (fallback if booleans not provided)
+        // Handle Service Type from enum
         if (update.getServiceType() != null) {
             try {
                 OrderRecipient.ServiceType newType = OrderRecipient.ServiceType.valueOf(update.getServiceType());
-                recipient.setServiceType(newType);
+                if (recipient.getServiceType() != newType) {
+                    changes.put("serviceType",
+                            new String[] { String.valueOf(recipient.getServiceType()), String.valueOf(newType) });
+                    recipient.setServiceType(newType);
+                }
+
                 // Sync booleans only if not already set
                 if (update.getProcessService() == null) {
-                    recipient.setProcessService(newType == OrderRecipient.ServiceType.PROCESS_SERVICE);
+                    boolean newVal = newType == OrderRecipient.ServiceType.PROCESS_SERVICE;
+                    if (recipient.getProcessService() != newVal) {
+                        recipient.setProcessService(newVal);
+                    }
                 }
                 if (update.getCertifiedMail() == null) {
-                    recipient.setCertifiedMail(newType == OrderRecipient.ServiceType.CERTIFIED_MAIL);
+                    boolean newVal = newType == OrderRecipient.ServiceType.CERTIFIED_MAIL;
+                    if (recipient.getCertifiedMail() != newVal) {
+                        recipient.setCertifiedMail(newVal);
+                    }
                 }
             } catch (Exception e) {
                 log.warn("Invalid service type: {}", update.getServiceType());
@@ -958,6 +1033,20 @@ public class OrderService {
 
         // Recalculate price if fees changed AND recipient is GUIDED type
         if (recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED) {
+            boolean serviceChanged = (update.getProcessService() != null || update.getCertifiedMail() != null
+                    || update.getServiceType() != null);
+
+            if (serviceChanged) {
+                BigDecimal newBase = BigDecimal.ZERO;
+                if (Boolean.TRUE.equals(recipient.getProcessService())) {
+                    newBase = newBase.add(new BigDecimal("75.00"));
+                }
+                if (Boolean.TRUE.equals(recipient.getCertifiedMail())) {
+                    newBase = newBase.add(new BigDecimal("25.00"));
+                }
+                recipient.setBasePrice(newBase);
+            }
+
             if (update.getFinalAgreedPrice() != null) {
                 // Customer updated the final price - recalculate base
                 recipient.setFinalAgreedPrice(BigDecimal.valueOf(update.getFinalAgreedPrice()));
@@ -967,7 +1056,7 @@ public class OrderService {
                         : BigDecimal.ZERO;
                 BigDecimal newBase = recipient.getFinalAgreedPrice().subtract(rush).subtract(remote);
                 recipient.setBasePrice(newBase);
-            } else if (update.getRushService() != null || update.getRemoteLocation() != null) {
+            } else if (update.getRushService() != null || update.getRemoteLocation() != null || serviceChanged) {
                 // Fees changed but price not updated - recalculate final from base + new fees
                 BigDecimal base = recipient.getBasePrice() != null ? recipient.getBasePrice() : BigDecimal.ZERO;
                 BigDecimal rush = recipient.getRushServiceFee() != null ? recipient.getRushServiceFee()
@@ -980,6 +1069,8 @@ public class OrderService {
 
         recipient.setLastEditedAt(LocalDateTime.now());
         recipient.setLastEditedBy(userId);
+
+        return changes;
     }
 
     private void populateCustomerNames(List<Order> orders) {
@@ -1101,6 +1192,95 @@ public class OrderService {
                 totalSuperAdminFee, totalTenantProfit);
     }
 
+    /**
+     * Recalculate order totals from recipients
+     * This ensures the dashboard displays correct amounts by syncing order-level
+     * totals
+     * with the sum of recipient-level prices
+     */
+    private void recalculateOrderTotalsFromRecipients(Order order) {
+        if (order.getRecipients() == null || order.getRecipients().isEmpty()) {
+            log.debug("No recipients for order {}, skipping recalculation", order.getId());
+            return;
+        }
+
+        // Calculate subtotal from all recipients
+        // Match frontend logic: calculate from service flags for AUTOMATED/OPEN
+        // recipients
+        BigDecimal subtotal = order.getRecipients().stream()
+                .map(recipient -> {
+                    // Check if this is an AUTOMATED recipient that's OPEN or BIDDING
+                    boolean isAutomatedPending = recipient.getRecipientType() == OrderRecipient.RecipientType.AUTOMATED
+                            &&
+                            (recipient.getStatus() == OrderRecipient.RecipientStatus.OPEN ||
+                                    recipient.getStatus() == OrderRecipient.RecipientStatus.BIDDING);
+
+                    // Check if this is a GUIDED recipient without quoted/negotiated price
+                    boolean isDirectStandard = recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED &&
+                            recipient.getQuotedPrice() == null &&
+                            (recipient.getFinalAgreedPrice() == null
+                                    || recipient.getFinalAgreedPrice().compareTo(BigDecimal.ZERO) == 0);
+
+                    if (isAutomatedPending || isDirectStandard) {
+                        // Calculate from service options (matching frontend logic)
+                        BigDecimal price = BigDecimal.ZERO;
+                        if (Boolean.TRUE.equals(recipient.getProcessService())) {
+                            price = price.add(new BigDecimal("75"));
+                        }
+                        if (Boolean.TRUE.equals(recipient.getCertifiedMail())) {
+                            price = price.add(new BigDecimal("25"));
+                        }
+                        if (Boolean.TRUE.equals(recipient.getRushService())) {
+                            price = price.add(new BigDecimal("50"));
+                        }
+                        if (Boolean.TRUE.equals(recipient.getRemoteLocation())) {
+                            price = price.add(new BigDecimal("40"));
+                        }
+                        return price;
+                    } else {
+                        // Use stored finalAgreedPrice for assigned/completed recipients
+                        return recipient.getFinalAgreedPrice() != null ? recipient.getFinalAgreedPrice()
+                                : BigDecimal.ZERO;
+                    }
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Calculate processing fee (3% of subtotal)
+        BigDecimal processingFeeRate = new BigDecimal("0.03");
+        BigDecimal processingFee = subtotal.multiply(processingFeeRate)
+                .setScale(2, java.math.RoundingMode.HALF_UP);
+
+        // Total amount = subtotal + processing fee
+        BigDecimal totalAmount = subtotal.add(processingFee);
+
+        // Update order's customer payment amount
+        // Within transaction - changes will be auto-saved
+        if (order.getCustomerPaymentAmount() == null ||
+                order.getCustomerPaymentAmount().compareTo(totalAmount) != 0) {
+            order.setCustomerPaymentAmount(totalAmount);
+            order.setFinalAgreedPrice(subtotal);
+
+            log.info("Recalculated totals for order {}: Subtotal=${}, ProcessingFee=${}, Total=${}",
+                    order.getOrderNumber(), subtotal, processingFee, totalAmount);
+        }
+    }
+
+    /**
+     * Public method to recalculate order totals for a specific order
+     * Useful for fixing orders with incorrect amounts
+     */
+    @Transactional
+    public Order recalculateOrderTotals(String orderId) {
+        log.info("Manual recalculation requested for order: {}", orderId);
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+        recalculateOrderTotalsFromRecipients(order);
+
+        // Refresh order to get updated values
+        return orderRepository.findById(orderId).orElseThrow();
+    }
+
     @Transactional
     public void cleanupOrdersForInvitation(String invitationId) {
         log.info("Cleaning up orders for expired invitation: {}", invitationId);
@@ -1212,9 +1392,10 @@ public class OrderService {
             // Update order with file URL/Path
             String fileUrl = filename; // Storing just filename, will serve via endpoint
             order.setDocumentUrl(fileUrl);
+            order.setOriginalFileName(originalFilename); // Store original filename for display
             orderRepository.save(order);
 
-            log.info("Document uploaded successfully: {}", filename);
+            log.info("Document uploaded successfully: {} (original: {})", filename, originalFilename);
             return fileUrl;
         } catch (Exception e) {
             log.error("Failed to upload document", e);
@@ -1306,34 +1487,13 @@ public class OrderService {
             throw new RuntimeException("Cannot edit recipient in status: " + recipient.getStatus());
         }
 
-        java.util.Map<String, String[]> changes = new java.util.HashMap<>();
+        // Use the helper to update fields and get changes
+        java.util.Map<String, String[]> changesMap = updateRecipientEntity(recipient, update, userId);
 
-        // Capture old values for history
-        boolean oldRush = recipient.getRushService();
-        boolean oldRemote = recipient.getRemoteLocation();
-        String oldName = recipient.getRecipientName();
-        // ... capture other fields if needed for history ...
-
-        // Use the helper to update fields
-        updateRecipientEntity(recipient, update, userId);
-
-        // Calculate changes for history (simplified for now)
-        if (update.getRecipientName() != null && !update.getRecipientName().equals(oldName)) {
-            changes.put("recipientName", new String[] { oldName, update.getRecipientName() });
-        }
-        if (update.getRushService() != null && !update.getRushService().equals(oldRush)) {
-            changes.put("rushService",
-                    new String[] { String.valueOf(oldRush), String.valueOf(update.getRushService()) });
-        }
-        if (update.getRemoteLocation() != null && !update.getRemoteLocation().equals(oldRemote)) {
-            changes.put("remoteLocation",
-                    new String[] { String.valueOf(oldRemote), String.valueOf(update.getRemoteLocation()) });
-        }
-
-        if (!changes.isEmpty()) {
+        if (!changesMap.isEmpty()) {
             recipientRepository.save(recipient);
             // Track history
-            historyService.trackRecipientEdit(recipient, changes, userId, role);
+            historyService.trackRecipientEdit(recipient, changesMap, userId, role);
         }
     }
 
@@ -1412,5 +1572,30 @@ public class OrderService {
         } catch (Exception e) {
             throw new RuntimeException("Could not read file: " + filename, e);
         }
+    }
+
+    /**
+     * Update the custom name of an order
+     */
+    @Transactional
+    public Order updateOrderCustomName(String orderId, String customName) {
+        log.info("Updating custom name for order: {}", orderId);
+
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found with id: " + orderId));
+
+        // Validate custom name
+        if (customName == null || customName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Custom name cannot be empty");
+        }
+
+        if (customName.length() > 255) {
+            throw new IllegalArgumentException("Custom name cannot exceed 255 characters");
+        }
+
+        order.setCustomName(customName.trim());
+        order.incrementModificationCount();
+
+        return orderRepository.save(order);
     }
 }

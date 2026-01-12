@@ -40,6 +40,5 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     @Query("SELECT o FROM Order o WHERE o.caseNumber LIKE %:query% OR o.jurisdiction LIKE %:query%")
     List<Order> searchByCaseInfo(@Param("query") String query);
 
-    // Draft management
     List<Order> findByCustomerIdAndStatus(String customerId, Order.OrderStatus status);
 }

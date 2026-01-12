@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
+import java.util.Map;
 import org.springframework.http.HttpHeaders;
 
 import java.util.HashMap;
@@ -270,7 +271,7 @@ public class OrderController {
             }
 
             Map<String, Long> counts = new HashMap<>();
-            counts.put("DRAFT", orders.stream().filter(o -> o.getStatus() == Order.OrderStatus.DRAFT).count());
+
             counts.put("OPEN", orders.stream().filter(o -> o.getStatus() == Order.OrderStatus.OPEN).count());
             counts.put("BIDDING", orders.stream().filter(o -> o.getStatus() == Order.OrderStatus.BIDDING).count());
             counts.put("ASSIGNED", orders.stream().filter(o -> o.getStatus() == Order.OrderStatus.ASSIGNED
@@ -288,6 +289,25 @@ public class OrderController {
             Map<String, String> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    @PostMapping("/{id}/recalculate-totals")
+    public ResponseEntity<?> recalculateOrderTotals(@PathVariable String id) {
+        try {
+            Order order = orderService.recalculateOrderTotals(id);
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Order totals recalculated successfully");
+            response.put("orderId", id);
+            response.put("orderNumber", order.getOrderNumber());
+            response.put("customerPaymentAmount", order.getCustomerPaymentAmount());
+            response.put("finalAgreedPrice", order.getFinalAgreedPrice());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to recalculate totals for order {}: {}", id, e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
     }
 
@@ -424,5 +444,44 @@ public class OrderController {
     @GetMapping("/{id}/history")
     public ResponseEntity<?> getOrderHistory(@PathVariable String id) {
         return ResponseEntity.ok(historyService.getOrderHistory(id));
+    }
+
+    /**
+     * Update the custom name of an order
+     */
+    @PutMapping("/{id}/custom-name")
+    public ResponseEntity<?> updateOrderCustomName(
+            @PathVariable String id,
+            @RequestBody Map<String, String> request) {
+        try {
+            String customName = request.get("customName");
+            if (customName == null || customName.trim().isEmpty()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Custom name is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+
+            // Try to update regular order
+            try {
+                Order order = orderService.updateOrderCustomName(id, customName);
+                Map<String, Object> response = new HashMap<>();
+                response.put("message", "Order name updated successfully");
+                response.put("orderId", id);
+                response.put("customName", order.getCustomName());
+                return ResponseEntity.ok(response);
+            } catch (Exception e) {
+                throw e;
+            }
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid custom name for order {}: {}", id, e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        } catch (Exception e) {
+            log.error("Failed to update custom name for order {}: {}", id, e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
     }
 }
