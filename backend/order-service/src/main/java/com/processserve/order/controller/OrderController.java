@@ -5,9 +5,19 @@ import com.processserve.order.dto.RecordAttemptRequest;
 import com.processserve.order.dto.UpdateOrderRequest;
 import com.processserve.order.dto.CancelOrderRequest;
 import com.processserve.order.dto.OrderEditabilityResponse;
+import com.processserve.order.dto.ProposePriceRequest;
+import com.processserve.order.dto.CounterOfferRequest;
+import com.processserve.order.dto.AcceptNegotiationRequest;
+import com.processserve.order.dto.RejectNegotiationRequest;
+import com.processserve.order.dto.OrderDraftRequest;
 import com.processserve.order.entity.Order;
+import com.processserve.order.entity.OrderDraft;
+import com.processserve.order.entity.OrderDocument;
+import com.processserve.order.entity.PriceNegotiation;
 import com.processserve.order.service.OrderService;
 import com.processserve.order.service.OrderHistoryService;
+import com.processserve.order.service.PriceNegotiationService;
+import com.processserve.order.service.OrderDraftService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +42,8 @@ public class OrderController {
 
     private final OrderService orderService;
     private final OrderHistoryService historyService;
+    private final PriceNegotiationService negotiationService;
+    private final OrderDraftService draftService;
 
     @PostMapping
     public ResponseEntity<?> createOrder(@Valid @RequestBody CreateOrderRequest request) {
@@ -386,6 +398,101 @@ public class OrderController {
     }
 
     // ============================================
+    // MULTIPLE DOCUMENTS FEATURE - New Endpoints
+    // ============================================
+
+    /**
+     * Upload a new document to an order
+     */
+    @PostMapping(value = "/{id}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> uploadOrderDocument(
+            @PathVariable String id,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "documentType", required = false) String documentType) {
+        try {
+            log.info("Uploading document for order: {}, type: {}", id, documentType);
+            
+            // Validate file size (50MB limit)
+            long maxFileSize = 50 * 1024 * 1024; // 50MB in bytes
+            if (file.getSize() > maxFileSize) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "File size exceeds 50MB limit");
+                return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(error);
+            }
+            
+            OrderDocument document = orderService.uploadOrderDocument(id, file, documentType);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Document uploaded successfully");
+            response.put("document", document);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to upload document: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Get all documents for an order
+     */
+    @GetMapping("/{id}/documents")
+    public ResponseEntity<?> getOrderDocuments(@PathVariable String id) {
+        try {
+            log.info("Fetching documents for order: {}", id);
+            List<OrderDocument> documents = orderService.getOrderDocuments(id);
+            return ResponseEntity.ok(documents);
+        } catch (Exception e) {
+            log.error("Failed to fetch documents: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Download a specific document
+     */
+    @GetMapping("/documents/{documentId}/download")
+    public ResponseEntity<Resource> downloadOrderDocument(@PathVariable String documentId) {
+        try {
+            log.info("Downloading document: {}", documentId);
+            Resource resource = orderService.getOrderDocumentResource(documentId);
+            String originalFilename = orderService.getDocumentOriginalFilename(documentId);
+            
+            String contentType = "application/octet-stream";
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + originalFilename + "\"")
+                    .body(resource);
+        } catch (Exception e) {
+            log.error("Failed to download document: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
+     * Delete a specific document
+     */
+    @DeleteMapping("/documents/{documentId}")
+    public ResponseEntity<?> deleteOrderDocument(@PathVariable String documentId) {
+        try {
+            log.info("Deleting document: {}", documentId);
+            orderService.deleteOrderDocument(documentId);
+            
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Document deleted successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to delete document: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    // ============================================
     // REQUIREMENT 8: Independent Recipient Editing & History Endpoints
     // ============================================
 
@@ -461,7 +568,7 @@ public class OrderController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
             }
 
-            // Try to update regular order
+            // Try to update regular order first
             try {
                 Order order = orderService.updateOrderCustomName(id, customName);
                 Map<String, Object> response = new HashMap<>();
@@ -469,8 +576,28 @@ public class OrderController {
                 response.put("orderId", id);
                 response.put("customName", order.getCustomName());
                 return ResponseEntity.ok(response);
-            } catch (Exception e) {
-                throw e;
+            } catch (RuntimeException e) {
+                // If order not found, try draft
+                if (e.getMessage() != null && e.getMessage().contains("Order not found")) {
+                    try {
+                        OrderDraft draft = draftService.getDraft(id);
+                        draft.setDraftName(customName.trim());
+                        draftService.updateDraft(id, convertDraftToRequest(draft));
+                        
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("message", "Draft name updated successfully");
+                        response.put("orderId", id);
+                        response.put("customName", draft.getDraftName());
+                        return ResponseEntity.ok(response);
+                    } catch (Exception draftError) {
+                        // Neither order nor draft found
+                        log.error("Failed to update custom name for id {}: {}", id, e.getMessage());
+                        throw e;
+                    }
+                } else {
+                    // Some other runtime exception
+                    throw e;
+                }
             }
         } catch (IllegalArgumentException e) {
             log.error("Invalid custom name for order {}: {}", id, e.getMessage());
@@ -479,6 +606,169 @@ public class OrderController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         } catch (Exception e) {
             log.error("Failed to update custom name for order {}: {}", id, e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    // Helper method to convert draft to request
+    private OrderDraftRequest convertDraftToRequest(OrderDraft draft) {
+        OrderDraftRequest request = new OrderDraftRequest();
+        request.setTenantId(draft.getTenantId());
+        request.setCustomerId(draft.getCustomerId());
+        request.setDraftName(draft.getDraftName());
+        request.setCurrentStep(draft.getCurrentStep());
+        request.setDocumentData(draft.getDocumentData());
+        request.setRecipientsData(draft.getRecipientsData());
+        request.setServiceOptionsData(draft.getServiceOptionsData());
+        return request;
+    }
+
+    // ============================================
+    // PRICE NEGOTIATION ENDPOINTS for GUIDED ORDERS
+    // ============================================
+
+    /**
+     * Process Server proposes a price for a GUIDED order
+     */
+    @PostMapping("/recipients/{recipientId}/propose-price")
+    public ResponseEntity<?> proposePrice(
+            @PathVariable String recipientId,
+            @Valid @RequestBody ProposePriceRequest request,
+            @RequestHeader(value = "userId", required = true) String processServerId) {
+        try {
+            request.setOrderRecipientId(recipientId);
+            PriceNegotiation negotiation = negotiationService.proposePrice(request, processServerId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Price proposed successfully");
+            response.put("negotiationId", negotiation.getId());
+            response.put("proposedAmount", negotiation.getProposedAmount());
+            response.put("status", negotiation.getStatus().toString());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to propose price: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Customer submits a counter-offer
+     */
+    @PostMapping("/negotiations/{negotiationId}/counter-offer")
+    public ResponseEntity<?> counterOffer(
+            @PathVariable String negotiationId,
+            @Valid @RequestBody CounterOfferRequest request,
+            @RequestHeader(value = "userId", required = true) String customerId) {
+        try {
+            request.setNegotiationId(negotiationId);
+            PriceNegotiation negotiation = negotiationService.submitCounterOffer(request, customerId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Counter-offer submitted successfully");
+            response.put("negotiationId", negotiation.getId());
+            response.put("counterOfferAmount", negotiation.getCounterOfferAmount());
+            response.put("status", negotiation.getStatus().toString());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to submit counter-offer: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Accept current negotiation (either PS accepts customer counter or customer accepts PS proposal)
+     */
+    @PostMapping("/negotiations/{negotiationId}/accept")
+    public ResponseEntity<?> acceptNegotiation(
+            @PathVariable String negotiationId,
+            @Valid @RequestBody AcceptNegotiationRequest request,
+            @RequestHeader(value = "userId", required = true) String userId,
+            @RequestHeader(value = "userRole", required = true) String userRole) {
+        try {
+            request.setNegotiationId(negotiationId);
+            boolean isProcessServer = "PROCESS_SERVER".equals(userRole);
+            PriceNegotiation negotiation = negotiationService.acceptNegotiation(request, userId, isProcessServer);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Negotiation accepted successfully");
+            response.put("negotiationId", negotiation.getId());
+            response.put("finalAmount", negotiation.getCounterOfferAmount() != null 
+                    ? negotiation.getCounterOfferAmount() 
+                    : negotiation.getProposedAmount());
+            response.put("status", negotiation.getStatus().toString());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to accept negotiation: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Reject current negotiation
+     */
+    @PostMapping("/negotiations/{negotiationId}/reject")
+    public ResponseEntity<?> rejectNegotiation(
+            @PathVariable String negotiationId,
+            @Valid @RequestBody RejectNegotiationRequest request,
+            @RequestHeader(value = "userId", required = true) String userId,
+            @RequestHeader(value = "userRole", required = true) String userRole) {
+        try {
+            request.setNegotiationId(negotiationId);
+            boolean isProcessServer = "PROCESS_SERVER".equals(userRole);
+            PriceNegotiation negotiation = negotiationService.rejectNegotiation(request, userId, isProcessServer);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Negotiation rejected successfully");
+            response.put("negotiationId", negotiation.getId());
+            response.put("status", negotiation.getStatus().toString());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to reject negotiation: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
+     * Get negotiation history for a recipient
+     */
+    @GetMapping("/recipients/{recipientId}/negotiations")
+    public ResponseEntity<?> getNegotiationHistory(@PathVariable String recipientId) {
+        try {
+            List<PriceNegotiation> negotiations = negotiationService.getNegotiationHistory(recipientId);
+            return ResponseEntity.ok(negotiations);
+        } catch (Exception e) {
+            log.error("Failed to get negotiation history: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * Get active negotiation for a recipient
+     */
+    @GetMapping("/recipients/{recipientId}/negotiations/active")
+    public ResponseEntity<?> getActiveNegotiation(@PathVariable String recipientId) {
+        try {
+            PriceNegotiation negotiation = negotiationService.getActiveNegotiation(recipientId);
+            if (negotiation == null) {
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "No active negotiation found");
+                return ResponseEntity.ok(response);
+            }
+            return ResponseEntity.ok(negotiation);
+        } catch (Exception e) {
+            log.error("Failed to get active negotiation: {}", e.getMessage());
             Map<String, String> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);

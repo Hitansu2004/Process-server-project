@@ -1,0 +1,13 @@
+package com.processserve.order.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class RejectNegotiationRequest {
+    private String negotiationId;
+    private String reason;
+}

@@ -156,4 +156,40 @@ public class OrderDraftController {
         response.put("service", "order-draft-service");
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * Upload document for draft (immediate upload before order creation)
+     * Documents are stored in /uploads/documents with draft ID prefix
+     * When order is created, documents are linked to the order
+     */
+    @PostMapping(value = "/{draftId}/documents", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> uploadDraftDocument(
+            @PathVariable String draftId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam(value = "documentType", required = false) String documentType) {
+        try {
+            log.info("Uploading document for draft: {}, type: {}", draftId, documentType);
+            
+            // Validate file size (50MB limit)
+            long maxFileSize = 50 * 1024 * 1024; // 50MB in bytes
+            if (file.getSize() > maxFileSize) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "File size exceeds 50MB limit");
+                return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(error);
+            }
+            
+            // Upload document and link to draft
+            Map<String, Object> documentData = draftService.uploadDraftDocument(draftId, file, documentType);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Draft document uploaded successfully");
+            response.put("document", documentData);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to upload draft document: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
 }

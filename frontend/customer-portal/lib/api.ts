@@ -247,6 +247,115 @@ export const api = {
         return response.json()
     },
 
+    // Multiple Documents Feature - New Methods
+    async uploadMultipleOrderDocuments(orderId: string, files: File[], token: string, documentType?: string, onProgress?: (progress: number) => void) {
+        const uploadPromises = files.map((file, index) => {
+            return new Promise((resolve, reject) => {
+                const formData = new FormData()
+                formData.append('file', file)
+                if (documentType) {
+                    formData.append('documentType', documentType)
+                }
+
+                const xhr = new XMLHttpRequest()
+                xhr.open('POST', `${API_URL}/api/orders/${orderId}/documents`)
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable && onProgress) {
+                        const fileProgress = (event.loaded / event.total) * 100
+                        const totalProgress = ((index + fileProgress / 100) / files.length) * 100
+                        onProgress(Math.round(totalProgress))
+                    }
+                }
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve(JSON.parse(xhr.responseText))
+                    } else {
+                        reject(new Error(xhr.statusText || 'Failed to upload document'))
+                    }
+                }
+
+                xhr.onerror = () => reject(new Error('Network error'))
+
+                xhr.send(formData)
+            })
+        })
+
+        return Promise.all(uploadPromises)
+    },
+
+    async getOrderDocuments(orderId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/${orderId}/documents`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        if (!response.ok) throw new Error('Failed to fetch order documents')
+        return response.json()
+    },
+
+    async downloadOrderDocument(documentId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/documents/${documentId}/download`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        if (!response.ok) throw new Error('Failed to download document')
+        return response.blob()
+    },
+
+    async deleteOrderDocument(documentId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/documents/${documentId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to delete document')
+        }
+        return response.json()
+    },
+
+    // Draft Document Upload - Upload documents immediately for draft (before order creation)
+    // Documents are stored temporarily and linked to draft, then moved to order when created
+    async uploadDraftDocument(draftId: string, file: File, token: string, documentType?: string, onProgress?: (progress: number) => void) {
+        return new Promise((resolve, reject) => {
+            const formData = new FormData()
+            formData.append('file', file)
+            if (documentType) {
+                formData.append('documentType', documentType)
+            }
+
+            const xhr = new XMLHttpRequest()
+            // Upload to drafts folder with draftId
+            xhr.open('POST', `${API_URL}/api/drafts/${draftId}/documents`)
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable && onProgress) {
+                    const progress = Math.round((event.loaded / event.total) * 100)
+                    onProgress(progress)
+                }
+            }
+
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve(JSON.parse(xhr.responseText))
+                } else {
+                    reject(new Error(xhr.statusText || 'Failed to upload draft document'))
+                }
+            }
+
+            xhr.onerror = () => reject(new Error('Network error'))
+
+            xhr.send(formData)
+        })
+    },
+
 
     async getOrderBids(orderId: string, token: string) {
         const response = await fetch(`${API_URL}/api/bids/order/${orderId}`, {
@@ -583,6 +692,77 @@ export const api = {
             headers: { 'Authorization': `Bearer ${token}` }
         })
         if (!response.ok) throw new Error('Failed to convert draft to order')
+        return response.json()
+    },
+
+    // Price Negotiation APIs
+    async counterOffer(negotiationId: string, counterOfferAmount: number, notes: string, userId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/negotiations/${negotiationId}/counter-offer`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId
+            },
+            body: JSON.stringify({ counterOfferAmount, notes }),
+        })
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Failed to submit counter-offer' }))
+            throw new Error(error.error || 'Failed to submit counter-offer')
+        }
+        return response.json()
+    },
+
+    async acceptNegotiation(negotiationId: string, notes: string, userId: string, userRole: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/negotiations/${negotiationId}/accept`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId,
+                'userRole': userRole
+            },
+            body: JSON.stringify({ notes }),
+        })
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Failed to accept negotiation' }))
+            throw new Error(error.error || 'Failed to accept negotiation')
+        }
+        return response.json()
+    },
+
+    async rejectNegotiation(negotiationId: string, reason: string, userId: string, userRole: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/negotiations/${negotiationId}/reject`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId,
+                'userRole': userRole
+            },
+            body: JSON.stringify({ reason }),
+        })
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Failed to reject negotiation' }))
+            throw new Error(error.error || 'Failed to reject negotiation')
+        }
+        return response.json()
+    },
+
+    async getActiveNegotiation(recipientId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/recipients/${recipientId}/negotiations/active`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!response.ok) return null
+        const data = await response.json()
+        return data.message ? null : data // Return null if no active negotiation
+    },
+
+    async getNegotiationHistory(recipientId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/orders/recipients/${recipientId}/negotiations`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!response.ok) return []
         return response.json()
     },
 }

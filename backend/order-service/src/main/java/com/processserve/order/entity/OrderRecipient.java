@@ -117,6 +117,20 @@ public class OrderRecipient {
     @JsonManagedReference("recipient-attempts")
     private List<ProcessServerAttempt> attempts = new ArrayList<>();
 
+    @OneToMany(mappedBy = "recipient", cascade = CascadeType.ALL)
+    @JsonManagedReference("recipient-negotiations")
+    private List<PriceNegotiation> negotiations = new ArrayList<>();
+
+    // Price Negotiation tracking fields
+    @Column(name = "negotiation_status", length = 50)
+    private String negotiationStatus = "NONE"; // NONE, PENDING_PROPOSAL, PENDING_COUNTER, ACCEPTED, REJECTED
+
+    @Column(name = "active_negotiation_id", length = 36)
+    private String activeNegotiationId;
+
+    @Column(name = "last_negotiation_at")
+    private LocalDateTime lastNegotiationAt;
+
     public enum RecipientStatus {
         OPEN, PENDING, BIDDING, ASSIGNED, IN_PROGRESS, DELIVERED, FAILED
     }

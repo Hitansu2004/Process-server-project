@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -45,6 +46,7 @@ public class OrderDraftService {
         draft.setDocumentData(request.getDocumentData());
         draft.setRecipientsData(request.getRecipientsData());
         draft.setServiceOptionsData(request.getServiceOptionsData());
+        draft.setDocumentsData(request.getDocumentsData());
 
         return draftRepository.save(draft);
     }
@@ -76,6 +78,9 @@ public class OrderDraftService {
         }
         if (request.getServiceOptionsData() != null) {
             draft.setServiceOptionsData(request.getServiceOptionsData());
+        }
+        if (request.getDocumentsData() != null) {
+            draft.setDocumentsData(request.getDocumentsData());
         }
 
         return draftRepository.save(draft);
@@ -152,5 +157,71 @@ public class OrderDraftService {
 
         // Draft will be deleted after successful order creation
         return draft;
+    }
+
+    /**
+     * Upload document for draft (immediate upload)
+     * Stores file and updates draft with document URL
+     */
+    @Transactional
+    public Map<String, Object> uploadDraftDocument(String draftId, org.springframework.web.multipart.MultipartFile file, String documentType) {
+        try {
+            log.info("Processing draft document upload for draft: {}", draftId);
+            
+            // Verify draft exists
+            OrderDraft draft = getDraft(draftId);
+            
+            // Generate filename: draft_{draftId}_{timestamp}_{originalName}
+            String timestamp = String.valueOf(System.currentTimeMillis());
+            String originalFilename = file.getOriginalFilename();
+            String filename = String.format("draft_%s_%s_%s", draftId, timestamp, originalFilename);
+            
+            // Define upload directory
+            java.nio.file.Path uploadDir = java.nio.file.Paths.get("/home/ubuntu/uploads/documents");
+            if (!java.nio.file.Files.exists(uploadDir)) {
+                java.nio.file.Files.createDirectories(uploadDir);
+            }
+            
+            // Save file
+            java.nio.file.Path filePath = uploadDir.resolve(filename);
+            file.transferTo(filePath.toFile());
+            
+            log.info("Draft document saved to: {}", filePath);
+            
+            // Generate document URL (relative path for storage)
+            String documentUrl = "/uploads/documents/" + filename;
+            
+            // Update draft's documentsData JSON array
+            String currentDocumentsData = draft.getDocumentsData();
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.List<Map<String, Object>> documents;
+            
+            if (currentDocumentsData == null || currentDocumentsData.isEmpty()) {
+                documents = new java.util.ArrayList<>();
+            } else {
+                documents = mapper.readValue(currentDocumentsData, 
+                    new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Map<String, Object>>>() {});
+            }
+            
+            // Add new document to list
+            Map<String, Object> newDocument = new java.util.HashMap<>();
+            newDocument.put("url", documentUrl);
+            newDocument.put("filename", originalFilename);
+            newDocument.put("fileSize", file.getSize());
+            newDocument.put("documentType", documentType);
+            newDocument.put("uploadedAt", LocalDateTime.now().toString());
+            documents.add(newDocument);
+            
+            // Save updated JSON back to draft
+            draft.setDocumentsData(mapper.writeValueAsString(documents));
+            draftRepository.save(draft);
+            
+            log.info("Draft updated with document URL: {}", documentUrl);
+            
+            return newDocument;
+        } catch (Exception e) {
+            log.error("Failed to upload draft document: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to upload document: " + e.getMessage());
+        }
     }
 }

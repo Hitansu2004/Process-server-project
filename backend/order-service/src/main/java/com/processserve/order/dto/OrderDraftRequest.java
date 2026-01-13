@@ -12,4 +12,5 @@ public class OrderDraftRequest {
     private String documentData;    // JSON string
     private String recipientsData;  // JSON string
     private String serviceOptionsData; // JSON string
+    private String documentsData;   // JSON array of uploaded document URLs
 }

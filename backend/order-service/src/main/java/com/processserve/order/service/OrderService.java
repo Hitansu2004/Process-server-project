@@ -36,6 +36,7 @@ public class OrderService {
     private final ChatParticipantService chatParticipantService;
     private final OrderHistoryService historyService;
     private final DocumentPageCounter documentPageCounter;
+    private final OrderDocumentRepository orderDocumentRepository;
 
     public Order createOrder(CreateOrderRequest request) {
         int maxRetries = 3;
@@ -1597,5 +1598,155 @@ public class OrderService {
         order.incrementModificationCount();
 
         return orderRepository.save(order);
+    }
+
+    /**
+     * Upload multiple documents for an order
+     */
+    @Transactional
+    public OrderDocument uploadOrderDocument(String orderId, MultipartFile file, String documentType) {
+        log.info("Uploading document for order: {}, type: {}", orderId, documentType);
+
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+        try {
+            // Create uploads directory if not exists
+            Path uploadDir = Paths.get("/home/ubuntu/uploads/documents");
+            log.info("Saving document to: {}", uploadDir);
+            if (!Files.exists(uploadDir)) {
+                Files.createDirectories(uploadDir);
+            }
+
+            // Generate unique filename
+            String originalFilename = file.getOriginalFilename();
+            String extension = "";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            }
+
+            String filename = orderId + "_" + UUID.randomUUID().toString() + extension;
+            Path filePath = uploadDir.resolve(filename);
+
+            // Save file
+            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+            // Count pages if supported format
+            int pageCount = 0;
+            try {
+                pageCount = documentPageCounter.countPages(filePath.toFile());
+                log.info("Document page count: {} for file: {}", pageCount, filename);
+            } catch (Exception e) {
+                log.warn("Failed to count pages for document, continuing without page count", e);
+            }
+
+            // Create OrderDocument entity
+            OrderDocument document = new OrderDocument();
+            document.setId(UUID.randomUUID().toString());
+            document.setOrder(order);
+            document.setDocumentUrl(filename);
+            document.setOriginalFileName(originalFilename);
+            document.setFileSize(file.getSize());
+            document.setPageCount(pageCount > 0 ? pageCount : null);
+            document.setDocumentType(documentType);
+            
+            // Set display order to be last
+            long existingCount = orderDocumentRepository.countByOrderId(orderId);
+            document.setDisplayOrder((int) existingCount);
+
+            OrderDocument savedDocument = orderDocumentRepository.save(document);
+            
+            log.info("Document uploaded successfully: {} (original: {})", filename, originalFilename);
+            return savedDocument;
+            
+        } catch (Exception e) {
+            log.error("Failed to upload document", e);
+            throw new RuntimeException("Failed to upload document: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get all documents for an order
+     */
+    public List<OrderDocument> getOrderDocuments(String orderId) {
+        log.info("Fetching documents for order: {}", orderId);
+        
+        // Verify order exists
+        orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+        
+        return orderDocumentRepository.findByOrderIdOrderByDisplayOrderAsc(orderId);
+    }
+
+    /**
+     * Get a specific document resource for download
+     */
+    public Resource getOrderDocumentResource(String documentId) {
+        log.info("Fetching document resource for id: {}", documentId);
+        
+        OrderDocument document = orderDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new RuntimeException("Document not found: " + documentId));
+
+        try {
+            Path filePath = Paths.get("/home/ubuntu/uploads/documents").resolve(document.getDocumentUrl());
+            
+            // Fallback for local dev
+            if (!Files.exists(filePath)) {
+                filePath = Paths.get("uploads/documents").resolve(document.getDocumentUrl());
+            }
+            
+            Resource resource = new UrlResource(filePath.toUri());
+
+            if (resource.exists() || resource.isReadable()) {
+                return resource;
+            } else {
+                throw new RuntimeException("Could not read file: " + document.getDocumentUrl());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Could not read file: " + document.getDocumentUrl(), e);
+        }
+    }
+
+    /**
+     * Delete a specific document
+     */
+    @Transactional
+    public void deleteOrderDocument(String documentId) {
+        log.info("Deleting document: {}", documentId);
+        
+        OrderDocument document = orderDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new RuntimeException("Document not found: " + documentId));
+
+        try {
+            // Delete physical file
+            Path filePath = Paths.get("/home/ubuntu/uploads/documents").resolve(document.getDocumentUrl());
+            
+            // Fallback for local dev
+            if (!Files.exists(filePath)) {
+                filePath = Paths.get("uploads/documents").resolve(document.getDocumentUrl());
+            }
+            
+            if (Files.exists(filePath)) {
+                Files.delete(filePath);
+                log.info("Physical file deleted: {}", filePath);
+            }
+            
+            // Delete database record
+            orderDocumentRepository.delete(document);
+            log.info("Document record deleted from database");
+            
+        } catch (Exception e) {
+            log.error("Failed to delete document", e);
+            throw new RuntimeException("Failed to delete document: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get original filename for a document
+     */
+    public String getDocumentOriginalFilename(String documentId) {
+        OrderDocument document = orderDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new RuntimeException("Document not found: " + documentId));
+        return document.getOriginalFileName();
     }
 }

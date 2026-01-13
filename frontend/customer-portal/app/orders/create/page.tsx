@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Check, FileText, MapPin, Package, Eye, CreditCard, Save } from 'lucide-react'
 import StepIndicator from '@/components/orders/create/StepIndicator'
-import DocumentStep from '@/components/orders/create/DocumentStep'
+import DocumentStepMultiple from '@/components/orders/create/DocumentStepMultiple'
 import RecipientsStep from '@/components/orders/create/RecipientsStep'
 import ServiceOptionsStep from '@/components/orders/create/ServiceOptionsStep'
 import ReviewStep from '@/components/orders/create/ReviewStep'
@@ -54,7 +54,7 @@ export default function CreateOrderWizard() {
         jurisdiction: '',
         documentType: '',
         deadline: '',
-        document: null as File | null,
+        documents: [] as any[], // Changed from single document to array
         filePageCount: 0,
     })
 
@@ -79,6 +79,17 @@ export default function CreateOrderWizard() {
 
             setIsSavingDraft(true)
 
+            // Prepare documents data - only include uploaded documents with URLs
+            const uploadedDocuments = documentData.documents
+                .filter(doc => doc.uploadedUrl)
+                .map(doc => ({
+                    url: doc.uploadedUrl,
+                    filename: doc.originalFileName || doc.file?.name,
+                    fileSize: doc.fileSize || doc.file?.size || 0,
+                    pageCount: doc.pageCount || 0,
+                    documentType: doc.documentType
+                }))
+
             const draftData = {
                 tenantId: tenantId,
                 customerId: customerId,
@@ -91,6 +102,7 @@ export default function CreateOrderWizard() {
                     deadline: documentData.deadline,
                     filePageCount: documentData.filePageCount,
                 }),
+                documentsData: uploadedDocuments.length > 0 ? JSON.stringify(uploadedDocuments) : null,
                 recipientsData: JSON.stringify(recipients),
                 serviceOptionsData: JSON.stringify({
                     customName: customName
@@ -236,12 +248,35 @@ export default function CreateOrderWizard() {
                 // Parse and load document data
                 if (draft.documentData) {
                     const docData = JSON.parse(draft.documentData)
+                    
+                    // Load uploaded documents from documentsData
+                    let loadedDocuments: any[] = []
+                    if (draft.documentsData) {
+                        try {
+                            const documentsArray = JSON.parse(draft.documentsData)
+                            if (Array.isArray(documentsArray)) {
+                                loadedDocuments = documentsArray.map((doc: any) => ({
+                                    id: `loaded-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                    file: null,
+                                    uploadedUrl: doc.url,
+                                    originalFileName: doc.filename,
+                                    fileSize: doc.fileSize || 0,
+                                    pageCount: doc.pageCount || 0,
+                                    documentType: doc.documentType
+                                }))
+                                console.log('✅ Loaded', loadedDocuments.length, 'documents from draft')
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse documentsData:', e)
+                        }
+                    }
+                    
                     setDocumentData({
                         caseNumber: docData.caseNumber || '',
                         jurisdiction: docData.jurisdiction || '',
                         documentType: docData.documentType || '',
                         deadline: docData.deadline || '',
-                        document: null,
+                        documents: loadedDocuments,
                         filePageCount: docData.filePageCount || 0,
                     })
                 }
@@ -282,7 +317,7 @@ export default function CreateOrderWizard() {
                     jurisdiction: order.jurisdiction || '',
                     documentType: order.documentType || '',
                     deadline: order.deadline || '',
-                    document: null,
+                    documents: [],
                     filePageCount: order.pageCount || 0,
                 })
 
@@ -339,7 +374,8 @@ export default function CreateOrderWizard() {
         switch (step) {
             case 1:
                 return !!(documentData.caseNumber.trim() && documentData.jurisdiction.trim() &&
-                    documentData.documentType && documentData.deadline && documentData.document)
+                    documentData.documentType && documentData.deadline && 
+                    documentData.documents && documentData.documents.length > 0)
             case 2:
                 return recipients.length > 0 && recipients.every(r =>
                     r.firstName && r.lastName && r.address && r.city && r.state && r.zipCode)
@@ -481,13 +517,29 @@ export default function CreateOrderWizard() {
             console.log('✅ Order created:', createdOrder)
             console.log('📄 Order ID:', createdOrder.id)
 
-            // Upload document if exists
-            if (documentData.document && createdOrder.id) {
+            // Upload multiple documents if they exist
+            if (documentData.documents && documentData.documents.length > 0 && createdOrder.id) {
                 try {
-                    await api.uploadOrderDocument(createdOrder.id, documentData.document, token)
-                    console.log('✅ Document uploaded successfully')
+                    const filesToUpload = documentData.documents
+                        .filter((doc: any) => doc.file)
+                        .map((doc: any) => doc.file)
+                    
+                    if (filesToUpload.length > 0) {
+                        console.log(`📤 Uploading ${filesToUpload.length} documents...`)
+                        await api.uploadMultipleOrderDocuments(
+                            createdOrder.id,
+                            filesToUpload,
+                            token,
+                            documentData.documentType,
+                            (progress) => {
+                                console.log(`Upload progress: ${progress}%`)
+                            }
+                        )
+                        console.log('✅ All documents uploaded successfully')
+                    }
                 } catch (error) {
                     console.error('❌ Document upload failed:', error)
+                    // Don't fail order creation if document upload fails
                 }
             }
 
@@ -567,9 +619,10 @@ export default function CreateOrderWizard() {
                         className="bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-6"
                     >
                         {currentStep === 1 && (
-                            <DocumentStep
+                            <DocumentStepMultiple
                                 data={documentData}
                                 onChange={setDocumentData}
+                                draftId={currentDraftId || undefined}
                             />
                         )}
                         {currentStep === 2 && (

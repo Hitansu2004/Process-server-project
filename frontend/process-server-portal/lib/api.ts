@@ -173,4 +173,75 @@ export const api = {
         if (!res.ok) throw new Error('Failed to fetch customer')
         return res.json()
     },
+
+    // Price Negotiation APIs
+    async proposePrice(recipientId: string, proposedAmount: number, notes: string, userId: string, token: string) {
+        const res = await fetch(`${API_URL}/api/orders/recipients/${recipientId}/propose-price`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId
+            },
+            body: JSON.stringify({ proposedAmount, notes }),
+        })
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: 'Failed to propose price' }))
+            throw new Error(error.error || 'Failed to propose price')
+        }
+        return res.json()
+    },
+
+    async acceptNegotiation(negotiationId: string, notes: string, userId: string, userRole: string, token: string) {
+        const res = await fetch(`${API_URL}/api/orders/negotiations/${negotiationId}/accept`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId,
+                'userRole': userRole
+            },
+            body: JSON.stringify({ notes }),
+        })
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: 'Failed to accept negotiation' }))
+            throw new Error(error.error || 'Failed to accept negotiation')
+        }
+        return res.json()
+    },
+
+    async rejectNegotiation(negotiationId: string, reason: string, userId: string, userRole: string, token: string) {
+        const res = await fetch(`${API_URL}/api/orders/negotiations/${negotiationId}/reject`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'userId': userId,
+                'userRole': userRole
+            },
+            body: JSON.stringify({ reason }),
+        })
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: 'Failed to reject negotiation' }))
+            throw new Error(error.error || 'Failed to reject negotiation')
+        }
+        return res.json()
+    },
+
+    async getActiveNegotiation(recipientId: string, token: string) {
+        const res = await fetch(`${API_URL}/api/orders/recipients/${recipientId}/negotiations/active`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!res.ok) return null
+        const data = await res.json()
+        return data.message ? null : data // Return null if no active negotiation
+    },
+
+    async getNegotiationHistory(recipientId: string, token: string) {
+        const res = await fetch(`${API_URL}/api/orders/recipients/${recipientId}/negotiations`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!res.ok) return []
+        return res.json()
+    },
 }

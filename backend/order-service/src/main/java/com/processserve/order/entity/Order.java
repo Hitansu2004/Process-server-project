@@ -127,6 +127,10 @@ public class Order {
     @JsonManagedReference("order-recipients")
     private List<OrderRecipient> recipients = new ArrayList<>();
 
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference("order-documents")
+    private List<OrderDocument> documents = new ArrayList<>();
+
     @Transient
     private String customerName;
 

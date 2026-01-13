@@ -51,6 +51,9 @@ public class OrderDraft {
     @Column(name = "service_options_data", columnDefinition = "JSON")
     private String serviceOptionsData; // Step 3: Service options
 
+    @Column(name = "documents_data", columnDefinition = "TEXT")
+    private String documentsData; // Uploaded document URLs and metadata
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

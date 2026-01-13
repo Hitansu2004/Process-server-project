@@ -34,6 +34,13 @@ export default function OrderDetailsNew() {
     const [acceptingBid, setAcceptingBid] = useState(false)
     const [showSuccessModal, setShowSuccessModal] = useState(false)
     const [lastUpdated, setLastUpdated] = useState<string>(Date.now().toString())
+    
+    // Negotiation states - SIMPLIFIED
+    const [negotiations, setNegotiations] = useState<Record<string, any>>({}) // recipientId -> negotiation data
+    const [showCounterModal, setShowCounterModal] = useState<string | null>(null) // negotiationId when countering
+    const [counterAmount, setCounterAmount] = useState('')
+    const [counterNotes, setCounterNotes] = useState('')
+    const [actionLoading, setActionLoading] = useState(false)
 
     useEffect(() => {
         loadOrderDetails()
@@ -47,6 +54,9 @@ export default function OrderDetailsNew() {
             }).then(res => res.json())
 
             setOrder(orderData)
+            
+            // Load negotiations for GUIDED recipients
+            await loadNegotiationsForOrder(orderData, token!)
 
             const hasBiddingRecipients = orderData.recipients?.some((d: any) =>
                 d.status === 'BIDDING' || d.status === 'OPEN'
@@ -136,6 +146,131 @@ export default function OrderDetailsNew() {
             alert('Failed to cancel order')
         } finally {
             setCancelling(false)
+        }
+    }
+    
+    // Load negotiations for GUIDED recipients
+    const loadNegotiationsForOrder = async (orderData: any, token: string) => {
+        if (!orderData.recipients) return
+        
+        const guidedRecipients = orderData.recipients.filter((r: any) => 
+            r.recipientType === 'GUIDED' && 
+            r.status === 'ASSIGNED'
+        )
+        
+        const negotiationsData: Record<string, any> = {}
+        for (const recipient of guidedRecipients) {
+            try {
+                const negotiation = await api.getActiveNegotiation(recipient.id, token)
+                if (negotiation) {
+                    negotiationsData[recipient.id] = negotiation
+                }
+            } catch (err) {
+                console.log(`No active negotiation for recipient ${recipient.id}`)
+            }
+        }
+        setNegotiations(negotiationsData)
+    }
+    
+    const handleCounterOffer = async (negotiationId: string) => {
+        if (!counterAmount || parseFloat(counterAmount) <= 0) {
+            alert('Please enter a valid counter-offer amount')
+            return
+        }
+        
+        setActionLoading(true)
+        try {
+            const token = sessionStorage.getItem('token')
+            // Use order's customerId instead of user.userId
+            const customerId = order?.customerId
+            
+            if (!customerId) {
+                alert('Unable to identify order owner')
+                return
+            }
+            
+            await api.counterOffer(
+                negotiationId,
+                parseFloat(counterAmount),
+                counterNotes || 'Counter-offer',
+                customerId,
+                token!
+            )
+            
+            alert('Counter-offer submitted successfully!')
+            setShowCounterModal(null)
+            setCounterAmount('')
+            setCounterNotes('')
+            
+            await loadOrderDetails()
+        } catch (error) {
+            console.error('Failed to submit counter-offer:', error)
+            alert('Failed to submit counter-offer. Please try again.')
+        } finally {
+            setActionLoading(false)
+        }
+    }
+    
+    const handleAcceptProposal = async (negotiationId: string) => {
+        if (!confirm('Accept this proposed price?')) return
+        
+        setActionLoading(true)
+        try {
+            const token = sessionStorage.getItem('token')
+            const customerId = order?.customerId
+            
+            if (!customerId) {
+                alert('Unable to identify order owner')
+                return
+            }
+            
+            await api.acceptNegotiation(
+                negotiationId,
+                'Accepting proposed price',
+                customerId,
+                'CUSTOMER',
+                token!
+            )
+            
+            alert('Price accepted! Order has been updated.')
+            await loadOrderDetails()
+        } catch (error) {
+            console.error('Failed to accept:', error)
+            alert('Failed to accept proposal. Please try again.')
+        } finally {
+            setActionLoading(false)
+        }
+    }
+    
+    const handleRejectProposal = async (negotiationId: string) => {
+        const reason = prompt('Please provide a reason for rejection:')
+        if (!reason) return
+        
+        setActionLoading(true)
+        try {
+            const token = sessionStorage.getItem('token')
+            const customerId = order?.customerId
+            
+            if (!customerId) {
+                alert('Unable to identify order owner')
+                return
+            }
+            
+            await api.rejectNegotiation(
+                negotiationId,
+                reason,
+                customerId,
+                'CUSTOMER',
+                token!
+            )
+            
+            alert('Proposal rejected. The assignment will be released.')
+            await loadOrderDetails()
+        } catch (error) {
+            console.error('Failed to reject:', error)
+            alert('Failed to reject proposal. Please try again.')
+        } finally {
+            setActionLoading(false)
         }
     }
 
@@ -547,6 +682,138 @@ export default function OrderDetailsNew() {
                                             ) : null
                                         })()}
 
+                                        {/* Price Negotiation Success - Show when price is agreed */}
+                                        {recipient.recipientType === 'GUIDED' && 
+                                         recipient.status === 'ASSIGNED' && 
+                                         recipient.finalAgreedPrice && 
+                                         recipient.negotiationStatus === 'ACCEPTED' &&
+                                         !negotiations[recipient.id] && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 border border-green-300 mb-4"
+                                            >
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <CheckCircle className="w-5 h-5 text-green-600" />
+                                                    <h4 className="text-sm font-bold text-gray-800">Price Agreement Complete</h4>
+                                                </div>
+                                                <div className="bg-white rounded-lg p-3 border border-green-200">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs font-semibold text-gray-600">Final Agreed Price:</span>
+                                                        <span className="text-xl font-bold text-green-600">
+                                                            ${recipient.finalAgreedPrice.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 mt-2">You and the process server have reached a price agreement.</p>
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Price Negotiation for GUIDED/directly assigned orders */}
+                                        {recipient.recipientType === 'GUIDED' && 
+                                         recipient.status === 'ASSIGNED' && 
+                                         negotiations[recipient.id] && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-4 border border-amber-300 mb-4"
+                                            >
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <DollarSign className="w-5 h-5 text-amber-600" />
+                                                    <h4 className="text-sm font-bold text-gray-800">Price Negotiation</h4>
+                                                </div>
+                                                
+                                                <div className="space-y-3">
+                                                    <div className="bg-white rounded-lg p-3 border border-amber-200">
+                                                        <div className="space-y-2">
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs font-semibold text-gray-600">Process Server Proposed:</span>
+                                                                <span className="text-lg font-bold text-blue-600">
+                                                                    ${negotiations[recipient.id].proposedAmount?.toFixed(2) || '0.00'}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            {negotiations[recipient.id].proposerNotes && (
+                                                                <div className="bg-blue-50 rounded p-2 border border-blue-200">
+                                                                    <p className="text-xs font-semibold text-blue-700 mb-0.5">PS Note:</p>
+                                                                    <p className="text-xs text-gray-700 italic">"{negotiations[recipient.id].proposerNotes}"</p>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {negotiations[recipient.id].counterOfferAmount && (
+                                                                <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                                                                    <span className="text-xs font-semibold text-gray-600">Your Counter-Offer:</span>
+                                                                    <span className="text-lg font-bold text-purple-600">
+                                                                        ${negotiations[recipient.id].counterOfferAmount?.toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
+                                                                <span className="text-xs font-semibold text-gray-600">Status:</span>
+                                                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                                                    negotiations[recipient.id].status === 'PENDING' && !negotiations[recipient.id].counterOfferAmount ? 'bg-orange-100 text-orange-700' :
+                                                                    negotiations[recipient.id].status === 'PENDING' && negotiations[recipient.id].counterOfferAmount ? 'bg-yellow-100 text-yellow-700' :
+                                                                    negotiations[recipient.id].status === 'ACCEPTED' ? 'bg-green-100 text-green-700' :
+                                                                    'bg-red-100 text-red-700'
+                                                                }`}>
+                                                                    {negotiations[recipient.id].status === 'PENDING' && !negotiations[recipient.id].counterOfferAmount
+                                                                        ? 'Awaiting Your Response' 
+                                                                        : negotiations[recipient.id].status === 'PENDING' && negotiations[recipient.id].counterOfferAmount
+                                                                        ? 'Awaiting PS Response'
+                                                                        : negotiations[recipient.id].status}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Action Buttons - Show when PS proposed and customer hasn't countered yet */}
+                                                    {negotiations[recipient.id].status === 'PENDING' && !negotiations[recipient.id].counterOfferAmount && (
+                                                        <div className="flex gap-2">
+                                                            <motion.button
+                                                                whileHover={{ scale: 1.02 }}
+                                                                whileTap={{ scale: 0.98 }}
+                                                                onClick={() => handleAcceptProposal(negotiations[recipient.id].id)}
+                                                                disabled={actionLoading}
+                                                                className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-1"
+                                                            >
+                                                                <CheckCircle className="w-4 h-4" />
+                                                                Accept ${negotiations[recipient.id].proposedAmount?.toFixed(2)}
+                                                            </motion.button>
+                                                            <motion.button
+                                                                whileHover={{ scale: 1.02 }}
+                                                                whileTap={{ scale: 0.98 }}
+                                                                onClick={() => setShowCounterModal(negotiations[recipient.id].id)}
+                                                                disabled={actionLoading}
+                                                                className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-1"
+                                                            >
+                                                                <DollarSign className="w-4 h-4" />
+                                                                Counter-Offer
+                                                            </motion.button>
+                                                            <motion.button
+                                                                whileHover={{ scale: 1.02 }}
+                                                                whileTap={{ scale: 0.98 }}
+                                                                onClick={() => handleRejectProposal(negotiations[recipient.id].id)}
+                                                                disabled={actionLoading}
+                                                                className="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 disabled:opacity-50 transition-all flex items-center justify-center gap-1"
+                                                            >
+                                                                <XCircle className="w-4 h-4" />
+                                                                Reject
+                                                            </motion.button>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Waiting message when customer countered */}
+                                                    {negotiations[recipient.id].status === 'PENDING' && negotiations[recipient.id].counterOfferAmount && (
+                                                        <div className="bg-yellow-50 rounded p-3 border border-yellow-200 flex items-center gap-2">
+                                                            <Clock className="w-4 h-4 text-yellow-600" />
+                                                            <p className="text-xs text-yellow-700">Waiting for Process Server to respond to your counter-offer...</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        )}
+
                                         {/* Assigned Process Server */}
                                         {recipient.assignedProcessServerId && processServers[recipient.assignedProcessServerId] && (
                                             <div className="bg-white rounded-lg p-4 border border-gray-200">
@@ -567,6 +834,107 @@ export default function OrderDetailsNew() {
                                                         </p>
                                                     </div>
                                                 </div>
+                                            </div>
+                                        )}
+
+                                        {/* Delivery Attempt History */}
+                                        {recipient.attemptCount > 0 && (
+                                            <div className="mt-4 bg-white rounded-lg p-4 border border-gray-200">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                                                        <Package className="w-4 h-4 text-blue-600" />
+                                                        Delivery History
+                                                    </h4>
+                                                    <span className={`px-2 py-1 rounded-lg text-xs font-bold ${
+                                                        recipient.attemptCount >= recipient.maxAttempts 
+                                                            ? 'bg-red-100 text-red-700' 
+                                                            : 'bg-blue-100 text-blue-700'
+                                                    }`}>
+                                                        {recipient.attemptCount} / {recipient.maxAttempts} Attempts
+                                                    </span>
+                                                </div>
+
+                                                {recipient.attempts && recipient.attempts.length > 0 ? (
+                                                    <div className="space-y-2">
+                                                        {recipient.attempts
+                                                            .sort((a: any, b: any) => b.attemptNumber - a.attemptNumber)
+                                                            .map((attempt: any) => (
+                                                            <div 
+                                                                key={attempt.id} 
+                                                                className={`p-3 rounded-lg border-l-4 ${
+                                                                    attempt.wasSuccessful 
+                                                                        ? 'bg-green-50 border-green-500' 
+                                                                        : 'bg-red-50 border-red-500'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-start justify-between mb-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                                                            attempt.wasSuccessful 
+                                                                                ? 'bg-green-500 text-white' 
+                                                                                : 'bg-red-500 text-white'
+                                                                        }`}>
+                                                                            {attempt.wasSuccessful ? '✓' : '✗'}
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-sm font-semibold text-gray-800">
+                                                                                Attempt #{attempt.attemptNumber}
+                                                                            </p>
+                                                                            <p className="text-xs text-gray-500 flex items-center gap-1">
+                                                                                <Clock className="w-3 h-3" />
+                                                                                {new Date(attempt.attemptTime || attempt.createdAt).toLocaleString('en-US', {
+                                                                                    month: 'short',
+                                                                                    day: 'numeric',
+                                                                                    year: 'numeric',
+                                                                                    hour: '2-digit',
+                                                                                    minute: '2-digit'
+                                                                                })}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                                                        attempt.wasSuccessful 
+                                                                            ? 'bg-green-500 text-white' 
+                                                                            : 'bg-red-500 text-white'
+                                                                    }`}>
+                                                                        {attempt.wasSuccessful ? 'DELIVERED' : 'FAILED'}
+                                                                    </span>
+                                                                </div>
+                                                                
+                                                                {attempt.outcomeNotes && (
+                                                                    <div className="mt-2 pt-2 border-t border-gray-200">
+                                                                        <p className="text-xs text-gray-500 mb-1 font-medium">Notes:</p>
+                                                                        <p className="text-sm text-gray-700">{attempt.outcomeNotes}</p>
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {attempt.gpsLatitude && attempt.gpsLongitude && (
+                                                                    <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
+                                                                        <MapPin className="w-3 h-3" />
+                                                                        <span>Location: {attempt.gpsLatitude.toFixed(4)}, {attempt.gpsLongitude.toFixed(4)}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-xs text-gray-500 italic">No detailed attempt history available</p>
+                                                )}
+
+                                                {recipient.deliveredAt && (
+                                                    <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                                                        <p className="text-xs text-green-700 font-medium flex items-center gap-2">
+                                                            <CheckCircle className="w-4 h-4" />
+                                                            <span>Successfully delivered on {new Date(recipient.deliveredAt).toLocaleString('en-US', {
+                                                                month: 'long',
+                                                                day: 'numeric',
+                                                                year: 'numeric',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit'
+                                                            })}</span>
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
@@ -1008,6 +1376,77 @@ export default function OrderDetailsNew() {
                         />
                     )
                 }
+                
+                {/* Counter-Offer Modal */}
+                {showCounterModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                        onClick={() => setShowCounterModal(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"
+                        >
+                            <h3 className="text-2xl font-bold text-gray-800 mb-4">Submit Counter-Offer</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Your Counter-Offer Amount ($)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={counterAmount}
+                                        onChange={(e) => setCounterAmount(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-lg font-semibold"
+                                        placeholder="Enter your counter-offer"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Notes (Optional)
+                                    </label>
+                                    <textarea
+                                        value={counterNotes}
+                                        onChange={(e) => setCounterNotes(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                                        rows={3}
+                                        placeholder="Add any notes about your counter-offer..."
+                                    />
+                                </div>
+                                <div className="flex gap-3 mt-6">
+                                    <motion.button
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={() => handleCounterOffer(showCounterModal)}
+                                        disabled={actionLoading || !counterAmount || parseFloat(counterAmount) <= 0}
+                                        className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 transition-all"
+                                    >
+                                        {actionLoading ? 'Submitting...' : 'Submit Counter-Offer'}
+                                    </motion.button>
+                                    <motion.button
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={() => {
+                                            setShowCounterModal(null)
+                                            setCounterAmount('')
+                                            setCounterNotes('')
+                                        }}
+                                        className="px-6 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all"
+                                    >
+                                        Cancel
+                                    </motion.button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
             </AnimatePresence >
         </div >
     )
