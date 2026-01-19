@@ -142,24 +142,20 @@ export default function Dashboard() {
                     (recipient.status === 'OPEN' || recipient.status === 'BIDDING');
 
                 if (isAutomatedPending) {
-                    const rushFee = recipient.rushService ? 50 : 0;
-                    const remoteFee = recipient.remoteLocation ? 30 : 0;
-                    return sum + rushFee + remoteFee;
+                    // REMOVED PRICING: Price calculation
+                    return 0;
                 } else {
-                    const recipientTotal = parseFloat(recipient.finalAgreedPrice) || 0;
-                    return sum + recipientTotal;
+                    // REMOVED PRICING: Price calculation
+                    return 0;
                 }
             }, 0);
 
-            if (subtotal > 0) {
-                const processingFee = subtotal * 0.03;
-                return subtotal + processingFee;
-            }
+            // REMOVED PRICING: Processing fee calculation
+            return null;
         }
 
-        if (order.finalAgreedPrice) {
-            return parseFloat(order.finalAgreedPrice);
-        }
+        // REMOVED PRICING: finalAgreedPrice
+        return null;
 
         return null;
     }
@@ -311,7 +307,8 @@ export default function Dashboard() {
             const matchesJurisdiction = item.jurisdiction?.toLowerCase().includes(query)
             const matchesDocumentType = item.documentType?.toLowerCase().includes(query)
             const matchesOrderInstructions = item.specialInstructions?.toLowerCase().includes(query)
-            const matchesPrice = price?.toString().includes(query.replace('$', ''))
+            // REMOVED PRICING: Price search
+            const matchesPrice = false
             const matchesDraftName = item.draftName?.toLowerCase().includes(query)
 
             // Search recipient details
@@ -322,13 +319,15 @@ export default function Dashboard() {
                 const recipientCity = recipient.city?.toLowerCase() || ''
                 const recipientState = recipient.state?.toLowerCase() || ''
                 const recipientZip = recipient.recipientZipCode?.toLowerCase() || ''
+                const recipientOrderNumber = recipient.recipientOrderNumber?.toLowerCase() || ''
 
                 return recipientName.includes(query) ||
                     recipientAddress.includes(query) ||
                     recipientInstructions.includes(query) ||
                     recipientCity.includes(query) ||
                     recipientState.includes(query) ||
-                    recipientZip.includes(query)
+                    recipientZip.includes(query) ||
+                    recipientOrderNumber.includes(query)
             })
 
             if (!matchesOrderNumber && !matchesCaseNumber && !matchesJurisdiction &&
@@ -680,6 +679,9 @@ export default function Dashboard() {
                                                             <>
                                                                 <h3 className="font-semibold text-lg text-gray-900">
                                                                     {order.customName || order.orderNumber}
+                                                                    <span className="text-sm text-gray-500 font-normal ml-2">
+                                                                        ({order.orderNumber})
+                                                                    </span>
                                                                 </h3>
                                                                 <button
                                                                     onClick={(e) => {
@@ -702,11 +704,7 @@ export default function Dashboard() {
                                                         {order.documentType && ` • ${order.documentType.replace(/_/g, ' ')}`}
                                                     </p>
                                                 </div>
-                                                {price && (
-                                                    <div className="text-right">
-                                                        <p className="text-2xl font-bold text-green-600">${price.toFixed(2)}</p>
-                                                    </div>
-                                                )}
+                                                {/* REMOVED PRICING: Price display */}
                                             </div>
                                         </motion.div>
                                     )

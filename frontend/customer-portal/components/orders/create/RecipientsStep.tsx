@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { MapPin, Plus, Trash2, X, Search, User, Info, DollarSign, Users, UserCheck, Star, Phone, Mail, Award, Check, ChevronDown } from 'lucide-react'
+import { MapPin, Plus, Trash2, X, Search, User, Info, DollarSign, Users, UserCheck, Star, Phone, Mail, Award, Check, ChevronDown, Package, Zap, AlertTriangle } from 'lucide-react'
 import { api } from '@/lib/api'
 
 interface Recipient {
@@ -18,15 +18,12 @@ interface Recipient {
   assignmentType: 'AUTOMATED' | 'GUIDED'
   processServerId?: string
   processServerName?: string
+  status?: string
   // Per-recipient service options
   processService: boolean
   certifiedMail: boolean
   rushService: boolean
   remoteService: boolean
-  // Direct assignment pricing
-  quotedPrice?: number // Price quoted by process server for direct assignment
-  negotiatedPrice?: number // Price after customer negotiation
-  priceStatus?: 'QUOTED' | 'NEGOTIATING' | 'ACCEPTED' // Status of pricing
 }
 
 interface RecipientsStepProps {
@@ -529,12 +526,16 @@ function RecipientForm({
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">
           Street Address <span className="text-red-500">*</span>
+          {(recipient.status === 'ASSIGNED' || recipient.status === 'IN_PROGRESS') && (
+            <span className="ml-2 text-xs text-gray-500">(Cannot edit - order is assigned)</span>
+          )}
         </label>
         <input
           type="text"
           value={recipient.address}
           onChange={(e) => onChange('address', e.target.value)}
-          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+          disabled={recipient.status === 'ASSIGNED' || recipient.status === 'IN_PROGRESS'}
+          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
           placeholder="123 Main Street, Apt 4B"
           required
         />
@@ -545,11 +546,15 @@ function RecipientForm({
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
             State <span className="text-red-500">*</span>
+            {(recipient.status === 'ASSIGNED' || recipient.status === 'IN_PROGRESS') && (
+              <span className="ml-2 text-xs text-gray-500">(Cannot edit)</span>
+            )}
           </label>
           <select
             value={recipient.stateId || ''}
             onChange={(e) => handleStateChange(Number(e.target.value))}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+            disabled={recipient.status === 'ASSIGNED' || recipient.status === 'IN_PROGRESS'}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
             required
           >
             <option value="">Select State</option>
@@ -563,12 +568,16 @@ function RecipientForm({
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
             City <span className="text-red-500">*</span>
+            {(recipient.status === 'ASSIGNED' || recipient.status === 'IN_PROGRESS') && (
+              <span className="ml-2 text-xs text-gray-500">(Cannot edit)</span>
+            )}
           </label>
           <input
             type="text"
             value={recipient.city}
             onChange={(e) => onChange('city', e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+            disabled={recipient.status === 'ASSIGNED' || recipient.status === 'IN_PROGRESS'}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
             placeholder="Dallas"
             required
           />
@@ -576,12 +585,16 @@ function RecipientForm({
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
             ZIP Code <span className="text-red-500">*</span>
+            {(recipient.status === 'ASSIGNED' || recipient.status === 'IN_PROGRESS') && (
+              <span className="ml-2 text-xs text-gray-500">(Cannot edit)</span>
+            )}
           </label>
           <input
             type="text"
             value={recipient.zipCode}
             onChange={(e) => onChange('zipCode', e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+            disabled={recipient.status === 'ASSIGNED' || recipient.status === 'IN_PROGRESS'}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
             placeholder="75201"
             maxLength={10}
             required
@@ -601,6 +614,165 @@ function RecipientForm({
           placeholder="Any special instructions for this delivery (gate code, best time to visit, etc.)"
           rows={3}
         />
+      </div>
+
+      {/* Service Options */}
+      <div className="border-t pt-5">
+        <label className="block text-sm font-medium text-gray-900 mb-3">
+          Service Options <span className="text-red-500">*</span>
+        </label>
+        <p className="text-sm text-gray-600 mb-4">Select at least one service method for this recipient.</p>
+
+        <div className="space-y-3">
+          {/* Process Service */}
+          <label className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+            recipient.processService
+              ? 'border-blue-500 bg-blue-50'
+              : 'border-gray-300 hover:border-gray-400 bg-white'
+          }`}>
+            <input
+              type="checkbox"
+              checked={recipient.processService}
+              onChange={(e) => onChange('processService', e.target.checked)}
+              className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <div className={`flex-shrink-0 mt-0.5 ${recipient.processService ? 'text-blue-600' : 'text-gray-400'}`}>
+              <Package className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className={`font-medium text-sm ${recipient.processService ? 'text-gray-900' : 'text-gray-700'}`}>
+                Process Service
+              </h4>
+              <p className="text-sm text-gray-600 mt-0.5">
+                Personal delivery by a professional process server
+              </p>
+            </div>
+          </label>
+
+          {/* Certified Mail */}
+          <label className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+            recipient.certifiedMail
+              ? 'border-blue-500 bg-blue-50'
+              : 'border-gray-300 hover:border-gray-400 bg-white'
+          }`}>
+            <input
+              type="checkbox"
+              checked={recipient.certifiedMail}
+              onChange={(e) => onChange('certifiedMail', e.target.checked)}
+              className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <div className={`flex-shrink-0 mt-0.5 ${recipient.certifiedMail ? 'text-blue-600' : 'text-gray-400'}`}>
+              <Mail className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className={`font-medium text-sm ${recipient.certifiedMail ? 'text-gray-900' : 'text-gray-700'}`}>
+                Certified Mail
+              </h4>
+              <p className="text-sm text-gray-600 mt-0.5">
+                Delivery via USPS certified mail with signature confirmation
+              </p>
+            </div>
+          </label>
+
+          {/* Rush Service */}
+          <label className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+            recipient.rushService
+              ? 'border-orange-500 bg-orange-50'
+              : 'border-gray-300 hover:border-gray-400 bg-white'
+          }`}>
+            <input
+              type="checkbox"
+              checked={recipient.rushService}
+              onChange={(e) => onChange('rushService', e.target.checked)}
+              className="mt-0.5 h-4 w-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+            />
+            <div className={`flex-shrink-0 mt-0.5 ${recipient.rushService ? 'text-orange-600' : 'text-gray-400'}`}>
+              <Zap className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className={`font-medium text-sm ${recipient.rushService ? 'text-gray-900' : 'text-gray-700'}`}>
+                Rush Service
+              </h4>
+              <p className="text-sm text-gray-600 mt-0.5">
+                Priority processing and expedited delivery (within 24-48 hours)
+              </p>
+            </div>
+          </label>
+
+          {/* Remote Service */}
+          <label className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+            recipient.remoteService
+              ? 'border-blue-500 bg-blue-50'
+              : 'border-gray-300 hover:border-gray-400 bg-white'
+          }`}>
+            <input
+              type="checkbox"
+              checked={recipient.remoteService}
+              onChange={(e) => onChange('remoteService', e.target.checked)}
+              className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <div className={`flex-shrink-0 mt-0.5 ${recipient.remoteService ? 'text-blue-600' : 'text-gray-400'}`}>
+              <MapPin className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className={`font-medium text-sm ${recipient.remoteService ? 'text-gray-900' : 'text-gray-700'}`}>
+                Remote Service
+              </h4>
+              <p className="text-sm text-gray-600 mt-0.5">
+                Service in remote or hard-to-reach locations
+              </p>
+            </div>
+          </label>
+
+          {/* Warning if no service method selected */}
+          {!recipient.processService && !recipient.certifiedMail && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start space-x-2">
+              <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700">
+                Please select at least one service method (Process Service or Certified Mail).
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Service Info */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+          <p className="text-xs text-blue-700">
+            <strong>Note:</strong> You can select both Process Service AND Certified Mail for comprehensive delivery.
+            Rush service is recommended for deadlines within 72 hours.
+          </p>
+        </div>
+
+        {/* Service Options Pricing (for GUIDED assignment only) */}
+        {recipient.assignmentType === 'GUIDED' && (
+          (recipient.processService || recipient.certifiedMail || recipient.rushService || recipient.remoteService) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
+              <div className="flex items-start space-x-2">
+                <DollarSign className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-amber-900 mb-1">Service Options Fee (Estimated)</p>
+                  <div className="space-y-0.5 text-xs text-amber-800">
+                    {recipient.processService && <div>• Process Service: $50.00</div>}
+                    {recipient.certifiedMail && <div>• Certified Mail: $50.00</div>}
+                    {recipient.rushService && <div>• Rush Service: $50.00</div>}
+                    {recipient.remoteService && <div>• Remote Service: $50.00</div>}
+                    <div className="border-t border-amber-300 mt-1 pt-1 font-semibold">
+                      Total Estimated Service Options: ${[
+                        recipient.processService ? 50 : 0,
+                        recipient.certifiedMail ? 50 : 0,
+                        recipient.rushService ? 50 : 0,
+                        recipient.remoteService ? 50 : 0
+                      ].reduce((a, b) => a + b, 0).toFixed(2)}
+                    </div>
+                  </div>
+                  <p className="text-xs text-amber-700 mt-1.5 italic">
+                    * This is an estimated price for directly assigned orders. The final price may vary based on actual delivery requirements.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )
+        )}
       </div>
 
       {/* Assignment Type Selection */}

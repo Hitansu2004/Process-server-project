@@ -541,7 +541,12 @@ export default function Dashboard() {
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <div className="flex items-center gap-2">
-                                                <h3 className="font-semibold text-lg">{order.orderNumber}</h3>
+                                                <h3 className="font-semibold text-lg">
+                                                    {order.customName || order.orderNumber}
+                                                    <span className="text-sm text-gray-500 font-normal ml-2">
+                                                        ({order.orderNumber})
+                                                    </span>
+                                                </h3>
                                                 {/* Show badge for order type */}
                                                 {order.recipients?.some((d: any) => d.recipientType === 'GUIDED') ? (
                                                     <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">

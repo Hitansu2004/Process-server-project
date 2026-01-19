@@ -32,6 +32,9 @@ public class OrderRecipient {
     @Column(name = "sequence_number", nullable = false)
     private Integer sequenceNumber;
 
+    @Column(name = "recipient_order_number", length = 100)
+    private String recipientOrderNumber; // e.g., ORD-2026-039-01, ORD-2026-039-02
+
     @Column(name = "recipient_name", nullable = false)
     private String recipientName;
 
@@ -62,15 +65,6 @@ public class OrderRecipient {
     @Column(name = "process_server_name", length = 200)
     private String processServerName;
 
-    @Column(name = "final_agreed_price", precision = 10, scale = 2)
-    private BigDecimal finalAgreedPrice;
-
-    @Column(name = "quoted_price", precision = 10, scale = 2)
-    private BigDecimal quotedPrice;
-
-    @Column(name = "price_status", length = 50)
-    private String priceStatus;
-
     @Column(name = "process_service")
     private Boolean processService = false;
 
@@ -83,14 +77,8 @@ public class OrderRecipient {
     @Column(name = "remote_location")
     private Boolean remoteLocation = false;
 
-    @Column(name = "base_price", precision = 10, scale = 2)
-    private BigDecimal basePrice;
-
-    @Column(name = "rush_service_fee", precision = 10, scale = 2)
-    private BigDecimal rushServiceFee;
-
-    @Column(name = "remote_location_fee", precision = 10, scale = 2)
-    private BigDecimal remoteLocationFee;
+    @Column(name = "service_options_fee", precision = 10, scale = 2)
+    private BigDecimal serviceOptionsFee = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "recipient_type")
@@ -117,19 +105,7 @@ public class OrderRecipient {
     @JsonManagedReference("recipient-attempts")
     private List<ProcessServerAttempt> attempts = new ArrayList<>();
 
-    @OneToMany(mappedBy = "recipient", cascade = CascadeType.ALL)
-    @JsonManagedReference("recipient-negotiations")
-    private List<PriceNegotiation> negotiations = new ArrayList<>();
-
-    // Price Negotiation tracking fields
-    @Column(name = "negotiation_status", length = 50)
-    private String negotiationStatus = "NONE"; // NONE, PENDING_PROPOSAL, PENDING_COUNTER, ACCEPTED, REJECTED
-
-    @Column(name = "active_negotiation_id", length = 36)
-    private String activeNegotiationId;
-
-    @Column(name = "last_negotiation_at")
-    private LocalDateTime lastNegotiationAt;
+    // REMOVED PRICING: negotiations field, negotiationStatus, activeNegotiationId, lastNegotiationAt
 
     public enum RecipientStatus {
         OPEN, PENDING, BIDDING, ASSIGNED, IN_PROGRESS, DELIVERED, FAILED

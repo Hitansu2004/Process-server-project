@@ -69,10 +69,6 @@ public class CreateOrderRequest {
         private String recipientType; // GUIDED or AUTOMATED
         private String assignedProcessServerId;
         private String processServerName;
-        private java.math.BigDecimal finalAgreedPrice; // Payout to Process Server
-        private java.math.BigDecimal customerPrice; // Price customer pays (for Concierge)
-        private java.math.BigDecimal quotedPrice;
-        private String priceStatus;
 
         // Service options
         private Boolean processService = false;

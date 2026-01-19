@@ -5,18 +5,15 @@ import com.processserve.order.dto.RecordAttemptRequest;
 import com.processserve.order.dto.UpdateOrderRequest;
 import com.processserve.order.dto.CancelOrderRequest;
 import com.processserve.order.dto.OrderEditabilityResponse;
-import com.processserve.order.dto.ProposePriceRequest;
-import com.processserve.order.dto.CounterOfferRequest;
-import com.processserve.order.dto.AcceptNegotiationRequest;
-import com.processserve.order.dto.RejectNegotiationRequest;
+// Removed pricing-related imports: ProposePriceRequest, CounterOfferRequest, AcceptNegotiationRequest, RejectNegotiationRequest
 import com.processserve.order.dto.OrderDraftRequest;
 import com.processserve.order.entity.Order;
 import com.processserve.order.entity.OrderDraft;
 import com.processserve.order.entity.OrderDocument;
-import com.processserve.order.entity.PriceNegotiation;
+// Removed pricing-related entity import: PriceNegotiation
 import com.processserve.order.service.OrderService;
 import com.processserve.order.service.OrderHistoryService;
-import com.processserve.order.service.PriceNegotiationService;
+// Removed pricing-related service import: PriceNegotiationService
 import com.processserve.order.service.OrderDraftService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +39,7 @@ public class OrderController {
 
     private final OrderService orderService;
     private final OrderHistoryService historyService;
-    private final PriceNegotiationService negotiationService;
+    // Removed pricing-related service field: PriceNegotiationService negotiationService
     private final OrderDraftService draftService;
 
     @PostMapping
@@ -313,7 +310,6 @@ public class OrderController {
             response.put("orderId", id);
             response.put("orderNumber", order.getOrderNumber());
             response.put("customerPaymentAmount", order.getCustomerPaymentAmount());
-            response.put("finalAgreedPrice", order.getFinalAgreedPrice());
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Failed to recalculate totals for order {}: {}", id, e.getMessage());
@@ -626,152 +622,13 @@ public class OrderController {
     }
 
     // ============================================
-    // PRICE NEGOTIATION ENDPOINTS for GUIDED ORDERS
+    // PRICE NEGOTIATION ENDPOINTS - REMOVED
     // ============================================
-
-    /**
-     * Process Server proposes a price for a GUIDED order
-     */
-    @PostMapping("/recipients/{recipientId}/propose-price")
-    public ResponseEntity<?> proposePrice(
-            @PathVariable String recipientId,
-            @Valid @RequestBody ProposePriceRequest request,
-            @RequestHeader(value = "userId", required = true) String processServerId) {
-        try {
-            request.setOrderRecipientId(recipientId);
-            PriceNegotiation negotiation = negotiationService.proposePrice(request, processServerId);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Price proposed successfully");
-            response.put("negotiationId", negotiation.getId());
-            response.put("proposedAmount", negotiation.getProposedAmount());
-            response.put("status", negotiation.getStatus().toString());
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("Failed to propose price: {}", e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-        }
-    }
-
-    /**
-     * Customer submits a counter-offer
-     */
-    @PostMapping("/negotiations/{negotiationId}/counter-offer")
-    public ResponseEntity<?> counterOffer(
-            @PathVariable String negotiationId,
-            @Valid @RequestBody CounterOfferRequest request,
-            @RequestHeader(value = "userId", required = true) String customerId) {
-        try {
-            request.setNegotiationId(negotiationId);
-            PriceNegotiation negotiation = negotiationService.submitCounterOffer(request, customerId);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Counter-offer submitted successfully");
-            response.put("negotiationId", negotiation.getId());
-            response.put("counterOfferAmount", negotiation.getCounterOfferAmount());
-            response.put("status", negotiation.getStatus().toString());
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("Failed to submit counter-offer: {}", e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-        }
-    }
-
-    /**
-     * Accept current negotiation (either PS accepts customer counter or customer accepts PS proposal)
-     */
-    @PostMapping("/negotiations/{negotiationId}/accept")
-    public ResponseEntity<?> acceptNegotiation(
-            @PathVariable String negotiationId,
-            @Valid @RequestBody AcceptNegotiationRequest request,
-            @RequestHeader(value = "userId", required = true) String userId,
-            @RequestHeader(value = "userRole", required = true) String userRole) {
-        try {
-            request.setNegotiationId(negotiationId);
-            boolean isProcessServer = "PROCESS_SERVER".equals(userRole);
-            PriceNegotiation negotiation = negotiationService.acceptNegotiation(request, userId, isProcessServer);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Negotiation accepted successfully");
-            response.put("negotiationId", negotiation.getId());
-            response.put("finalAmount", negotiation.getCounterOfferAmount() != null 
-                    ? negotiation.getCounterOfferAmount() 
-                    : negotiation.getProposedAmount());
-            response.put("status", negotiation.getStatus().toString());
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("Failed to accept negotiation: {}", e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-        }
-    }
-
-    /**
-     * Reject current negotiation
-     */
-    @PostMapping("/negotiations/{negotiationId}/reject")
-    public ResponseEntity<?> rejectNegotiation(
-            @PathVariable String negotiationId,
-            @Valid @RequestBody RejectNegotiationRequest request,
-            @RequestHeader(value = "userId", required = true) String userId,
-            @RequestHeader(value = "userRole", required = true) String userRole) {
-        try {
-            request.setNegotiationId(negotiationId);
-            boolean isProcessServer = "PROCESS_SERVER".equals(userRole);
-            PriceNegotiation negotiation = negotiationService.rejectNegotiation(request, userId, isProcessServer);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Negotiation rejected successfully");
-            response.put("negotiationId", negotiation.getId());
-            response.put("status", negotiation.getStatus().toString());
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("Failed to reject negotiation: {}", e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-        }
-    }
-
-    /**
-     * Get negotiation history for a recipient
-     */
-    @GetMapping("/recipients/{recipientId}/negotiations")
-    public ResponseEntity<?> getNegotiationHistory(@PathVariable String recipientId) {
-        try {
-            List<PriceNegotiation> negotiations = negotiationService.getNegotiationHistory(recipientId);
-            return ResponseEntity.ok(negotiations);
-        } catch (Exception e) {
-            log.error("Failed to get negotiation history: {}", e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
-    }
-
-    /**
-     * Get active negotiation for a recipient
-     */
-    @GetMapping("/recipients/{recipientId}/negotiations/active")
-    public ResponseEntity<?> getActiveNegotiation(@PathVariable String recipientId) {
-        try {
-            PriceNegotiation negotiation = negotiationService.getActiveNegotiation(recipientId);
-            if (negotiation == null) {
-                Map<String, String> response = new HashMap<>();
-                response.put("message", "No active negotiation found");
-                return ResponseEntity.ok(response);
-            }
-            return ResponseEntity.ok(negotiation);
-        } catch (Exception e) {
-            log.error("Failed to get active negotiation: {}", e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
-    }
+    // All price negotiation endpoints have been removed as part of pricing feature removal:
+    // - POST /recipients/{recipientId}/propose-price
+    // - POST /negotiations/{negotiationId}/counter-offer
+    // - POST /negotiations/{negotiationId}/accept
+    // - POST /negotiations/{negotiationId}/reject
+    // - GET /recipients/{recipientId}/negotiations
+    // - GET /recipients/{recipientId}/negotiations/active
 }

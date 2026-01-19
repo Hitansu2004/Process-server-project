@@ -76,9 +76,6 @@ public class Order {
     @Column(name = "deadline")
     private LocalDateTime deadline;
 
-    @Column(name = "final_agreed_price", precision = 10, scale = 2)
-    private BigDecimal finalAgreedPrice;
-
     // Payment Breakdown Fields for Commission Distribution
     @Column(name = "customer_payment_amount", precision = 10, scale = 2)
     private BigDecimal customerPaymentAmount;

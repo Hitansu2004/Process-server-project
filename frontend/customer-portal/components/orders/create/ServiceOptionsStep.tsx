@@ -20,9 +20,6 @@ interface Recipient {
   certifiedMail: boolean
   rushService: boolean
   remoteService: boolean
-  quotedPrice?: number
-  negotiatedPrice?: number
-  priceStatus?: 'QUOTED' | 'NEGOTIATING' | 'ACCEPTED'
 }
 
 interface ServiceOptionsStepProps {
@@ -100,7 +97,6 @@ export default function ServiceOptionsStep({ recipients, deadline, onChange }: S
                 icon={<Package className="h-5 w-5" />}
                 title="Process Service"
                 description="Personal delivery by a professional process server"
-                price="$75"
                 checked={recipient.processService}
                 onChange={(checked) => handleToggle(recipient.id, 'processService', checked)}
                 recommended={!recipient.certifiedMail}
@@ -111,7 +107,6 @@ export default function ServiceOptionsStep({ recipients, deadline, onChange }: S
                 icon={<Mail className="h-5 w-5" />}
                 title="Certified Mail"
                 description="Delivery via USPS certified mail with signature confirmation"
-                price="$25"
                 checked={recipient.certifiedMail}
                 onChange={(checked) => handleToggle(recipient.id, 'certifiedMail', checked)}
               />
@@ -121,7 +116,6 @@ export default function ServiceOptionsStep({ recipients, deadline, onChange }: S
                 icon={<Zap className="h-5 w-5" />}
                 title="Rush Service"
                 description="Priority processing and expedited delivery (within 24-48 hours)"
-                price="+$50"
                 checked={recipient.rushService}
                 onChange={(checked) => handleToggle(recipient.id, 'rushService', checked)}
                 recommended={isRushNeeded()}
@@ -133,7 +127,6 @@ export default function ServiceOptionsStep({ recipients, deadline, onChange }: S
                 icon={<MapPin className="h-5 w-5" />}
                 title="Remote Service"
                 description="Service in remote or hard-to-reach locations"
-                price="+$40"
                 checked={recipient.remoteService}
                 onChange={(checked) => handleToggle(recipient.id, 'remoteService', checked)}
               />
@@ -171,7 +164,6 @@ function ServiceOption({
   icon,
   title,
   description,
-  price,
   checked,
   onChange,
   recommended = false,
@@ -180,7 +172,6 @@ function ServiceOption({
   icon: React.ReactNode
   title: string
   description: string
-  price: string
   checked: boolean
   onChange: (checked: boolean) => void
   recommended?: boolean
@@ -206,19 +197,14 @@ function ServiceOption({
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <h4 className={`font-medium text-sm ${checked ? 'text-gray-900' : 'text-gray-700'}`}>
-              {title}
-              {recommended && (
-                <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                  Recommended
-                </span>
-              )}
-            </h4>
-            <span className={`text-sm font-semibold ${checked ? 'text-blue-600' : 'text-gray-600'}`}>
-              {price}
-            </span>
-          </div>
+          <h4 className={`font-medium text-sm ${checked ? 'text-gray-900' : 'text-gray-700'}`}>
+            {title}
+            {recommended && (
+              <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                Recommended
+              </span>
+            )}
+          </h4>
           <p className="text-xs text-gray-600 mt-1">{description}</p>
         </div>
       </div>

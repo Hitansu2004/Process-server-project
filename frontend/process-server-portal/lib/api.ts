@@ -37,6 +37,36 @@ export const api = {
         return res.json()
     },
 
+    // Process server accepts customer's counter-offer
+    async acceptCustomerCounter(bidId: string, token: string) {
+        const res = await fetch(`${API_URL}/api/bids/${bidId}/accept-counter`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: 'Failed to accept counter-offer' }))
+            throw new Error(error.error || 'Failed to accept counter-offer')
+        }
+        return res.json()
+    },
+
+    // Process server rejects and counters back
+    async rejectAndCounter(bidId: string, newAmount: number, notes: string, token: string) {
+        const res = await fetch(`${API_URL}/api/bids/${bidId}/reject-counter`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ newAmount, notes }),
+        })
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: 'Failed to counter-offer' }))
+            throw new Error(error.error || 'Failed to counter-offer')
+        }
+        return res.json()
+    },
+
     async getDeliveryPersonOrders(deliveryPersonId: string, token: string) {
         const res = await fetch(`${API_URL}/api/orders/process-server/${deliveryPersonId}`, {
             headers: { 'Authorization': `Bearer ${token}` },

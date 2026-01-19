@@ -48,14 +48,24 @@ public class BidService {
         OrderRecipient recipient = recipientRepository.findById(request.getOrderRecipientId())
                 .orElseThrow(() -> new RuntimeException("Recipient not found"));
 
-        if (recipient.getStatus() != OrderRecipient.RecipientStatus.OPEN &&
-                recipient.getStatus() != OrderRecipient.RecipientStatus.PENDING &&
-                recipient.getStatus() != OrderRecipient.RecipientStatus.BIDDING) {
-            throw new RuntimeException("Recipient is not accepting bids");
-        }
-
+        // For GUIDED recipients, allow bids when ASSIGNED (for price proposals)
+        // For AUTOMATED recipients, allow bids when OPEN, PENDING, or BIDDING
         if (recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED) {
-            throw new RuntimeException("Cannot place bid on GUIDED recipient");
+            // GUIDED recipients can receive bids (price proposals) when ASSIGNED to process server
+            if (recipient.getStatus() != OrderRecipient.RecipientStatus.ASSIGNED) {
+                throw new RuntimeException("GUIDED recipient must be ASSIGNED to accept price proposals");
+            }
+            // Verify the process server placing the bid is the assigned process server
+            if (!recipient.getAssignedProcessServerId().equals(request.getProcessServerId())) {
+                throw new RuntimeException("Only the assigned process server can propose a price");
+            }
+        } else {
+            // AUTOMATED recipients can only receive bids when OPEN, PENDING, or BIDDING
+            if (recipient.getStatus() != OrderRecipient.RecipientStatus.OPEN &&
+                    recipient.getStatus() != OrderRecipient.RecipientStatus.PENDING &&
+                    recipient.getStatus() != OrderRecipient.RecipientStatus.BIDDING) {
+                throw new RuntimeException("Recipient is not accepting bids");
+            }
         }
 
         // Create bid
@@ -69,9 +79,11 @@ public class BidService {
 
         bid = bidRepository.save(bid);
 
-        // Update recipient status to BIDDING if it was PENDING or OPEN
-        if (recipient.getStatus() == OrderRecipient.RecipientStatus.PENDING ||
-                recipient.getStatus() == OrderRecipient.RecipientStatus.OPEN) {
+        // Update recipient status to BIDDING if it was PENDING or OPEN (only for AUTOMATED recipients)
+        // GUIDED recipients stay ASSIGNED when receiving price proposals
+        if (recipient.getRecipientType() != OrderRecipient.RecipientType.GUIDED &&
+                (recipient.getStatus() == OrderRecipient.RecipientStatus.PENDING ||
+                 recipient.getStatus() == OrderRecipient.RecipientStatus.OPEN)) {
             recipient.setStatus(OrderRecipient.RecipientStatus.BIDDING);
             recipientRepository.save(recipient);
 
@@ -167,26 +179,10 @@ public class BidService {
         BigDecimal processServerPayout = customerPayment.subtract(tenantCommission)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        // Update recipient with final pricing
+        // Update recipient with assignment
         recipient.setAssignedProcessServerId(bid.getProcessServerId());
-        recipient.setBasePrice(basePrice); // Set base price from bid
-        recipient.setRushServiceFee(existingRushFee); // Keep existing rush fee
-        recipient.setRemoteLocationFee(existingRemoteFee); // Keep existing remote fee
-        recipient.setFinalAgreedPrice(totalPrice); // Total = bid + all service fees
         recipient.setStatus(OrderRecipient.RecipientStatus.ASSIGNED);
         recipientRepository.save(recipient);
-
-        // Update Order totals
-        // Don't manually update customerPaymentAmount here - it will be recalculated
-        // by recalculateOrderTotalsFromRecipients() based on the new finalAgreedPrice values
-        order.setProcessServerPayout(add(order.getProcessServerPayout(), processServerPayout));
-        order.setTenantCommission(add(order.getTenantCommission(), tenantCommission));
-        order.setSuperAdminFee(add(order.getSuperAdminFee(), superAdminFee));
-        order.setTenantProfit(add(order.getTenantProfit(), tenantProfit));
-
-        // Get tenant commission rate (original logic for commissionRateApplied)
-        BigDecimal commissionRate = getTenantCommissionRate(order.getTenantId());
-        order.setCommissionRateApplied(commissionRate);
 
         // Check if all recipients are assigned
         boolean allAssigned = order.getRecipients().stream()
@@ -270,5 +266,103 @@ public class BidService {
                 .status(bid.getStatus())
                 .createdAt(bid.getCreatedAt())
                 .build();
+    }
+
+    // Customer counter-offers the process server's bid
+    @Transactional
+    public Bid customerCounterOffer(String bidId, Double counterAmount, String notes) {
+        Bid bid = bidRepository.findById(bidId)
+                .orElseThrow(() -> new RuntimeException("Bid not found"));
+
+        if (bid.getStatus() != Bid.BidStatus.PENDING) {
+            throw new RuntimeException("Can only counter-offer on pending bids");
+        }
+
+        bid.setCustomerCounterAmount(BigDecimal.valueOf(counterAmount));
+        bid.setCustomerCounterNotes(notes);
+        // Initialize to 0 if null (for existing bids)
+        Integer currentCount = bid.getCounterOfferCount();
+        bid.setCounterOfferCount(currentCount == null ? 1 : currentCount + 1);
+        bid.setLastCounterBy("CUSTOMER");
+
+        return bidRepository.save(bid);
+    }
+
+    // Process server accepts customer's counter-offer
+    @Transactional
+    public void acceptCustomerCounter(String bidId) {
+        Bid bid = bidRepository.findById(bidId)
+                .orElseThrow(() -> new RuntimeException("Bid not found"));
+
+        if (bid.getCustomerCounterAmount() == null) {
+            throw new RuntimeException("No counter-offer to accept");
+        }
+
+        if (!"CUSTOMER".equals(bid.getLastCounterBy())) {
+            throw new RuntimeException("No customer counter-offer pending");
+        }
+
+        // Update bid amount to counter amount and accept
+        bid.setBidAmount(bid.getCustomerCounterAmount());
+        bid.setStatus(Bid.BidStatus.ACCEPTED);
+
+        // Update recipient
+        OrderRecipient recipient = bid.getRecipient();
+        recipient.setStatus(OrderRecipient.RecipientStatus.IN_PROGRESS);
+        recipient.setAssignedProcessServerId(bid.getProcessServerId());
+
+        recipientRepository.save(recipient);
+        bidRepository.save(bid);
+
+        // Reject other bids for this recipient
+        List<Bid> otherBids = bidRepository.findByOrderRecipientId(recipient.getId());
+        for (Bid otherBid : otherBids) {
+            if (!otherBid.getId().equals(bidId) && otherBid.getStatus() == Bid.BidStatus.PENDING) {
+                otherBid.setStatus(Bid.BidStatus.REJECTED);
+                bidRepository.save(otherBid);
+            }
+        }
+
+        // Update order status if all recipients are assigned
+        Order order = recipient.getOrder();
+        boolean allAssigned = order.getRecipients().stream()
+                .allMatch(r -> r.getStatus() == OrderRecipient.RecipientStatus.IN_PROGRESS ||
+                              r.getStatus() == OrderRecipient.RecipientStatus.DELIVERED);
+        
+        if (allAssigned) {
+            order.setStatus(Order.OrderStatus.ASSIGNED);
+            orderRepository.save(order);
+        } else if (order.getStatus() == Order.OrderStatus.OPEN || order.getStatus() == Order.OrderStatus.BIDDING) {
+            order.setStatus(Order.OrderStatus.PARTIALLY_ASSIGNED);
+            orderRepository.save(order);
+        }
+    }
+
+    // Process server rejects customer's counter and proposes new amount
+    @Transactional
+    public Bid processServerRejectsAndCounters(String bidId, Double newAmount, String notes) {
+        Bid bid = bidRepository.findById(bidId)
+                .orElseThrow(() -> new RuntimeException("Bid not found"));
+
+        if (bid.getCustomerCounterAmount() == null) {
+            throw new RuntimeException("No counter-offer to reject");
+        }
+
+        if (!"CUSTOMER".equals(bid.getLastCounterBy())) {
+            throw new RuntimeException("No customer counter-offer to reject");
+        }
+
+        // Update bid with new amount and notes
+        bid.setBidAmount(BigDecimal.valueOf(newAmount));
+        bid.setComment(notes);
+        // Initialize to 0 if null (for existing bids)
+        Integer currentCount = bid.getCounterOfferCount();
+        bid.setCounterOfferCount(currentCount == null ? 1 : currentCount + 1);
+        bid.setLastCounterBy("PROCESS_SERVER");
+        // Clear customer counter since PS proposed new amount
+        bid.setCustomerCounterAmount(null);
+        bid.setCustomerCounterNotes(null);
+
+        return bidRepository.save(bid);
     }
 }

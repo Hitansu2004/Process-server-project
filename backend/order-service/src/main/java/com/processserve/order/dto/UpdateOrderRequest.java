@@ -60,8 +60,6 @@ public class UpdateOrderRequest {
 
         private String assignedProcessServerId; // For GUIDED type
 
-        private Double finalAgreedPrice;
-
         private Boolean rushService; // Req 2
 
         private Boolean remoteLocation; // Req 2

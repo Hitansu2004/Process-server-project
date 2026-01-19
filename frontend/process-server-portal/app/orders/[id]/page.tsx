@@ -23,12 +23,16 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
     const [attemptNotes, setAttemptNotes] = useState('')
     const [recordingAttempt, setRecordingAttempt] = useState(false)
     
-    // Negotiation states - SIMPLIFIED
-    const [negotiations, setNegotiations] = useState<Record<string, any>>({}) // recipientId -> negotiation data
+    // Price proposal states (uses bidding system)
     const [showProposeModal, setShowProposeModal] = useState<string | null>(null) // recipientId
     const [proposeAmount, setProposeAmount] = useState('')
     const [proposeNotes, setProposeNotes] = useState('')
     const [actionLoading, setActionLoading] = useState(false)
+    
+    // Counter-offer from PS side
+    const [showCounterModal, setShowCounterModal] = useState<string | null>(null) // bidId
+    const [counterAmount, setCounterAmount] = useState('')
+    const [counterNotes, setCounterNotes] = useState('')
 
     useEffect(() => {
         const token = localStorage.getItem('token')
@@ -59,33 +63,6 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
             loadOrderDetails(params.id, token)
         }
     }, [params.id, router])
-    
-    // Load negotiations for GUIDED recipients
-    const loadNegotiationsForOrder = async (orderData: any, token: string, profileId?: string) => {
-        if (!orderData.recipients) return
-        
-        const currentProfileId = profileId || profile?.id
-        if (!currentProfileId) return
-        
-        const guidedRecipients = orderData.recipients.filter((r: any) => 
-            r.recipientType === 'GUIDED' && 
-            r.status === 'ASSIGNED' &&
-            r.assignedProcessServerId === currentProfileId
-        )
-        
-        const negotiationsData: Record<string, any> = {}
-        for (const recipient of guidedRecipients) {
-            try {
-                const negotiation = await api.getActiveNegotiation(recipient.id, token)
-                if (negotiation) {
-                    negotiationsData[recipient.id] = negotiation
-                }
-            } catch (err) {
-                console.log(`No active negotiation for recipient ${recipient.id}`)
-            }
-        }
-        setNegotiations(negotiationsData)
-    }
 
     const loadOrderDetails = async (orderId: string, token: string, profileId?: string) => {
         try {
@@ -96,9 +73,6 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
 
             setOrder(orderData)
             setBids(bidsData)
-            
-            // Load negotiations for all GUIDED recipients
-            await loadNegotiationsForOrder(orderData, token, profileId)
         } catch (error) {
             console.error('Failed to load order:', error)
         } finally {
@@ -141,6 +115,91 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
             setSubmitting(false)
         }
     }
+    
+    const handleProposePrice = async (recipientId: string) => {
+        if (!proposeAmount || parseFloat(proposeAmount) <= 0) {
+            alert('Please enter a valid price amount')
+            return
+        }
+        
+        if (!profile?.id) {
+            alert('Process server profile not loaded')
+            return
+        }
+        
+        setActionLoading(true)
+        try {
+            const token = localStorage.getItem('token')
+            const processServerId = profile.id
+            
+            // Use the bidding system for GUIDED orders - place a bid on the direct assignment
+            await api.placeBid({
+                orderId: params.id,
+                processServerId,
+                bidAmount: parseFloat(proposeAmount),
+                orderRecipientId: recipientId,
+                comment: proposeNotes || 'Price proposal for direct assignment'
+            }, token!)
+            
+            alert('Price proposal submitted successfully!')
+            setShowProposeModal(null)
+            setProposeAmount('')
+            setProposeNotes('')
+            
+            // Reload order to show the new bid
+            await loadOrderDetails(params.id, token!)
+        } catch (error) {
+            console.error('Failed to submit bid:', error)
+            alert('Failed to submit price proposal. Please try again.')
+        } finally {
+            setActionLoading(false)
+        }
+    }
+
+    // PS accepts customer's counter-offer
+    const handleAcceptCustomerCounter = async (bidId: string) => {
+        if (!confirm('Accept customer counter-offer?')) return
+        
+        setActionLoading(true)
+        try {
+            const token = localStorage.getItem('token')
+            await api.acceptCustomerCounter(bidId, token!)
+            
+            alert('Counter-offer accepted! Price has been updated.')
+            await loadOrderDetails(params.id, token!)
+        } catch (error) {
+            console.error('Failed to accept:', error)
+            alert('Failed to accept counter-offer. Please try again.')
+        } finally {
+            setActionLoading(false)
+        }
+    }
+
+    // PS rejects and counters back
+    const handleRejectAndCounter = async (bidId: string) => {
+        if (!counterAmount || parseFloat(counterAmount) <= 0) {
+            alert('Please enter a valid counter-offer amount')
+            return
+        }
+        
+        setActionLoading(true)
+        try {
+            const token = localStorage.getItem('token')
+            await api.rejectAndCounter(bidId, parseFloat(counterAmount), counterNotes, token!)
+            
+            alert('Counter-offer submitted successfully!')
+            setShowCounterModal(null)
+            setCounterAmount('')
+            setCounterNotes('')
+            
+            await loadOrderDetails(params.id, token!)
+        } catch (error) {
+            console.error('Failed to counter:', error)
+            alert('Failed to submit counter-offer. Please try again.')
+        } finally {
+            setActionLoading(false)
+        }
+    }
 
     const handleRecordAttempt = async (wasSuccessful: boolean) => {
         if (!selectedRecipient) return
@@ -171,108 +230,6 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
             alert('Failed to record delivery attempt. Please try again.')
         } finally {
             setRecordingAttempt(false)
-        }
-    }
-    
-    const handleProposePrice = async (recipientId: string) => {
-        if (!proposeAmount || parseFloat(proposeAmount) <= 0) {
-            alert('Please enter a valid price amount')
-            return
-        }
-        
-        if (!profile?.id) {
-            alert('Process server profile not loaded')
-            return
-        }
-        
-        setActionLoading(true)
-        try {
-            const token = localStorage.getItem('token')
-            const processServerId = profile.id // Use process server profile ID, not user ID
-            
-            await api.proposePrice(
-                recipientId,
-                parseFloat(proposeAmount),
-                proposeNotes || 'Price proposal',
-                processServerId,
-                token!
-            )
-            
-            alert('Price proposal submitted successfully!')
-            setShowProposeModal(null)
-            setProposeAmount('')
-            setProposeNotes('')
-            
-            // Reload order
-            await loadOrderDetails(params.id, token!)
-        } catch (error) {
-            console.error('Failed to propose price:', error)
-            alert('Failed to submit price proposal. Please try again.')
-        } finally {
-            setActionLoading(false)
-        }
-    }
-    
-    const handleAcceptCounterOffer = async (negotiationId: string) => {
-        if (!confirm('Accept this counter-offer?')) return
-        
-        if (!profile?.id) {
-            alert('Process server profile not loaded')
-            return
-        }
-        
-        setActionLoading(true)
-        try {
-            const token = localStorage.getItem('token')
-            const processServerId = profile.id
-            
-            await api.acceptNegotiation(
-                negotiationId,
-                'Accepting counter-offer',
-                processServerId,
-                'PROCESS_SERVER',
-                token!
-            )
-            
-            alert('Counter-offer accepted! Price has been updated.')
-            await loadOrderDetails(params.id, token!)
-        } catch (error) {
-            console.error('Failed to accept:', error)
-            alert('Failed to accept counter-offer. Please try again.')
-        } finally {
-            setActionLoading(false)
-        }
-    }
-    
-    const handleRejectCounterOffer = async (negotiationId: string) => {
-        const reason = prompt('Please provide a reason for rejection:')
-        if (!reason) return
-        
-        if (!profile?.id) {
-            alert('Process server profile not loaded')
-            return
-        }
-        
-        setActionLoading(true)
-        try {
-            const token = localStorage.getItem('token')
-            const processServerId = profile.id
-            
-            await api.rejectNegotiation(
-                negotiationId,
-                reason,
-                processServerId,
-                'PROCESS_SERVER',
-                token!
-            )
-            
-            alert('Counter-offer rejected. You keep this assignment with the original price.')
-            await loadOrderDetails(params.id, token!)
-        } catch (error) {
-            console.error('Failed to reject:', error)
-            alert('Failed to reject counter-offer. Please try again.')
-        } finally {
-            setActionLoading(false)
         }
     }
 
@@ -347,7 +304,7 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                         <motion.button
                             whileHover={{ scale: 1.05, x: -5 }}
                             whileTap={{ scale: 0.95 }}
-                            onClick={() => router.push('/orders')}
+                            onClick={() => router.push('/dashboard')}
                             className="p-3 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all text-gray-700"
                         >
                             <ArrowLeft className="w-5 h-5" />
@@ -401,38 +358,98 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                     <p className="text-sm text-gray-500 mb-1">Jurisdiction</p>
                                     <p className="font-semibold text-gray-800">{order.jurisdiction || 'N/A'}</p>
                                 </div>
-                                {order.documentUrl && (
-                                    <div className="md:col-span-2">
-                                        <p className="text-sm text-gray-500 mb-2">Uploaded Document</p>
-                                        <motion.button
-                                            whileHover={{ scale: 1.02 }}
-                                            whileTap={{ scale: 0.98 }}
-                                            onClick={() => {
-                                                const token = localStorage.getItem('token');
-                                                fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${order.id}/document`, {
-                                                    headers: { 'Authorization': `Bearer ${token}` }
-                                                })
-                                                    .then(response => response.blob())
-                                                    .then(blob => {
-                                                        const url = window.URL.createObjectURL(blob);
-                                                        const a = document.createElement('a');
-                                                        a.href = url;
-                                                        a.download = order.documentUrl;
-                                                        document.body.appendChild(a);
-                                                        a.click();
-                                                        window.URL.revokeObjectURL(url);
-                                                        document.body.removeChild(a);
-                                                    })
-                                                    .catch(err => alert('Failed to download document'));
-                                            }}
-                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all"
-                                        >
-                                            <Download className="w-5 h-5" />
-                                            Download Document
-                                        </motion.button>
-                                    </div>
-                                )}
                             </div>
+
+                            {/* Display all documents */}
+                            {order.documents && order.documents.length > 0 && (
+                                <div className="mt-6 pt-6 border-t border-gray-200">
+                                    <p className="text-sm font-semibold text-gray-700 mb-4">Documents ({order.documents.length})</p>
+                                    <div className="space-y-3">
+                                        {order.documents.map((doc: any, index: number) => (
+                                            <motion.div
+                                                key={doc.id || index}
+                                                initial={{ opacity: 0, x: -20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
+                                                            {index + 1}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-semibold text-gray-800">{doc.fileName || `Document ${index + 1}`}</p>
+                                                            <p className="text-sm text-gray-500">{doc.pageCount} pages • {doc.documentType || 'PDF'}</p>
+                                                        </div>
+                                                    </div>
+                                                    <motion.button
+                                                        whileHover={{ scale: 1.05 }}
+                                                        whileTap={{ scale: 0.95 }}
+                                                        onClick={async () => {
+                                                            try {
+                                                                const token = localStorage.getItem('token')
+                                                                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${order.id}/documents/${doc.id}`, {
+                                                                    headers: { 'Authorization': `Bearer ${token}` }
+                                                                })
+                                                                if (!response.ok) throw new Error('Download failed')
+                                                                const blob = await response.blob()
+                                                                const url = window.URL.createObjectURL(blob)
+                                                                const a = document.createElement('a')
+                                                                a.href = url
+                                                                a.download = doc.fileName || `document-${index + 1}.pdf`
+                                                                document.body.appendChild(a)
+                                                                a.click()
+                                                                window.URL.revokeObjectURL(url)
+                                                                document.body.removeChild(a)
+                                                            } catch (err) {
+                                                                console.error('Download error:', err)
+                                                                alert('Failed to download document.')
+                                                            }
+                                                        }}
+                                                        className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+                                                    >
+                                                        <Download className="w-4 h-4" />
+                                                        Download
+                                                    </motion.button>
+                                                </div>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Fallback for old single document structure */}
+                            {!order.documents?.length && order.documentUrl && (
+                                <div className="mt-6 pt-6 border-t border-gray-200">
+                                    <p className="text-sm text-gray-500 mb-2">Uploaded Document</p>
+                                    <motion.button
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={() => {
+                                            const token = localStorage.getItem('token');
+                                            fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${order.id}/document`, {
+                                                headers: { 'Authorization': `Bearer ${token}` }
+                                            })
+                                                .then(response => response.blob())
+                                                .then(blob => {
+                                                    const url = window.URL.createObjectURL(blob);
+                                                    const a = document.createElement('a');
+                                                    a.href = url;
+                                                    a.download = order.documentUrl;
+                                                    document.body.appendChild(a);
+                                                    a.click();
+                                                    window.URL.revokeObjectURL(url);
+                                                    document.body.removeChild(a);
+                                                })
+                                                .catch(err => alert('Failed to download document'));
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all"
+                                    >
+                                        <Download className="w-5 h-5" />
+                                        Download Document
+                                    </motion.button>
+                                </div>
+                            )}
                         </motion.div>
 
                         {/* Recipients */}
@@ -467,7 +484,14 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                             className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-5 border border-gray-200"
                                         >
                                             <div className="flex justify-between items-start mb-4">
-                                                <h3 className="font-bold text-gray-800">Recipient #{index + 1}</h3>
+                                                <h3 className="font-bold text-gray-800">
+                                                    Recipient #{index + 1}
+                                                    {recipient.recipientOrderNumber && (
+                                                        <span className="text-sm font-normal text-gray-500 ml-2">
+                                                            ({recipient.recipientOrderNumber})
+                                                        </span>
+                                                    )}
+                                                </h3>
                                                 <span className={`${statusConfig.bg} ${statusConfig.text} px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1`}>
                                                     {statusConfig.icon}
                                                     {recipient.status}
@@ -515,6 +539,179 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                                         </span>
                                                     )}
                                                 </div>
+
+                                                {/* Assigned Process Server Info - Only for GUIDED recipients */}
+                                                {recipient.recipientType === 'GUIDED' && recipient.status === 'ASSIGNED' && recipient.assignedProcessServerId && (
+                                                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200 mt-4">
+                                                        <div className="flex items-start gap-2">
+                                                            <User className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                                                            <div className="flex-1">
+                                                                <h4 className="text-sm font-bold text-gray-800 mb-1">Assigned Process Server</h4>
+                                                                <p className="text-sm text-gray-700">
+                                                                    {recipient.assignedProcessServerId === profile?.id 
+                                                                        ? 'You are assigned to this recipient' 
+                                                                        : `Assigned to Process Server ID: ${recipient.assignedProcessServerId}`}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Service Options Fee - Only for GUIDED recipients */}
+                                                {recipient.recipientType === 'GUIDED' && 
+                                                 (recipient.processService || recipient.certifiedMail || recipient.rushService || recipient.remoteLocation) && (
+                                                    <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-lg p-4 border border-amber-200 mt-4">
+                                                        <div className="flex items-start gap-2 mb-2">
+                                                            <DollarSign className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                                            <div className="flex-1">
+                                                                <h4 className="text-sm font-bold text-gray-800 mb-1">Service Options Fee (Estimated)</h4>
+                                                                <div className="space-y-1">
+                                                                    {recipient.processService && (
+                                                                        <div className="flex justify-between items-center text-xs">
+                                                                            <span className="text-gray-700">• Process Service</span>
+                                                                            <span className="font-semibold text-gray-800">$50.00</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {recipient.certifiedMail && (
+                                                                        <div className="flex justify-between items-center text-xs">
+                                                                            <span className="text-gray-700">• Certified Mail</span>
+                                                                            <span className="font-semibold text-gray-800">$50.00</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {recipient.rushService && (
+                                                                        <div className="flex justify-between items-center text-xs">
+                                                                            <span className="text-gray-700">• Rush Service</span>
+                                                                            <span className="font-semibold text-gray-800">$50.00</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {recipient.remoteLocation && (
+                                                                        <div className="flex justify-between items-center text-xs">
+                                                                            <span className="text-gray-700">• Remote Location</span>
+                                                                            <span className="font-semibold text-gray-800">$50.00</span>
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="border-t border-amber-300 mt-2 pt-2 flex justify-between items-center">
+                                                                        <span className="text-xs font-bold text-gray-800">Total Service Options:</span>
+                                                                        <span className="text-lg font-bold text-amber-600">
+                                                                            ${[
+                                                                                recipient.processService ? 50 : 0,
+                                                                                recipient.certifiedMail ? 50 : 0,
+                                                                                recipient.rushService ? 50 : 0,
+                                                                                recipient.remoteLocation ? 50 : 0
+                                                                            ].reduce((a, b) => a + b, 0).toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <p className="text-xs text-amber-700 mt-2 italic">
+                                                                    * Estimated price for directly assigned orders. Final price may vary based on actual delivery requirements.
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Place Bid Button - For OPEN/BIDDING recipients */}
+                                                {(recipient.status === 'OPEN' || recipient.status === 'BIDDING') && (
+                                                    <div className="mt-4 pt-4 border-t border-gray-200">
+                                                        {showProposeModal === recipient.id ? (
+                                                            <motion.div
+                                                                initial={{ opacity: 0, height: 0 }}
+                                                                animate={{ opacity: 1, height: 'auto' }}
+                                                                className="space-y-3"
+                                                            >
+                                                                <div>
+                                                                    <label className="text-sm font-semibold text-gray-700 mb-2 block">
+                                                                        Your Bid Amount ($)
+                                                                    </label>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={proposeAmount}
+                                                                        onChange={(e) => setProposeAmount(e.target.value)}
+                                                                        placeholder="Enter your bid amount"
+                                                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all text-gray-700"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="text-sm font-semibold text-gray-700 mb-2 block">
+                                                                        Notes (Optional)
+                                                                    </label>
+                                                                    <textarea
+                                                                        value={proposeNotes}
+                                                                        onChange={(e) => setProposeNotes(e.target.value)}
+                                                                        placeholder="Add any notes about your bid..."
+                                                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all text-gray-700"
+                                                                        rows={2}
+                                                                    />
+                                                                </div>
+                                                                <div className="flex gap-2">
+                                                                    <motion.button
+                                                                        whileHover={{ scale: 1.02 }}
+                                                                        whileTap={{ scale: 0.98 }}
+                                                                        onClick={async () => {
+                                                                            if (!proposeAmount || parseFloat(proposeAmount) <= 0) {
+                                                                                alert('Please enter a valid bid amount');
+                                                                                return;
+                                                                            }
+                                                                            
+                                                                            setActionLoading(true);
+                                                                            try {
+                                                                                const token = localStorage.getItem('token');
+                                                                                await api.placeBid({
+                                                                                    orderId: order.id,
+                                                                                    orderRecipientId: recipient.id,
+                                                                                    processServerId: profile?.id || user?.userId,
+                                                                                    bidAmount: parseFloat(proposeAmount),
+                                                                                    notes: proposeNotes || undefined
+                                                                                }, token!);
+                                                                                
+                                                                                alert('Bid placed successfully!');
+                                                                                setShowProposeModal(null);
+                                                                                setProposeAmount('');
+                                                                                setProposeNotes('');
+                                                                                
+                                                                                // Reload order details
+                                                                                loadOrderDetails(params.id, token!, profile?.id);
+                                                                            } catch (error: any) {
+                                                                                alert(error.message || 'Failed to place bid');
+                                                                            } finally {
+                                                                                setActionLoading(false);
+                                                                            }
+                                                                        }}
+                                                                        disabled={actionLoading}
+                                                                        className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                                                                    >
+                                                                        <DollarSign className="w-5 h-5" />
+                                                                        {actionLoading ? 'Submitting...' : 'Submit Bid'}
+                                                                    </motion.button>
+                                                                    <motion.button
+                                                                        whileHover={{ scale: 1.02 }}
+                                                                        whileTap={{ scale: 0.98 }}
+                                                                        onClick={() => {
+                                                                            setShowProposeModal(null);
+                                                                            setProposeAmount('');
+                                                                            setProposeNotes('');
+                                                                        }}
+                                                                        className="px-4 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all"
+                                                                    >
+                                                                        Cancel
+                                                                    </motion.button>
+                                                                </div>
+                                                            </motion.div>
+                                                        ) : (
+                                                            <motion.button
+                                                                whileHover={{ scale: 1.02 }}
+                                                                whileTap={{ scale: 0.98 }}
+                                                                onClick={() => setShowProposeModal(recipient.id)}
+                                                                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                                                            >
+                                                                <TrendingUp className="w-5 h-5" />
+                                                                Place Bid for this Recipient
+                                                            </motion.button>
+                                                        )}
+                                                    </div>
+                                                )}
 
                                                 {/* Delivery History */}
                                                 {recipient.attemptCount > 0 && (
@@ -680,109 +877,138 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                                     </div>
                                                 )}
 
-                                                {/* Price Negotiation Section - Show for GUIDED recipients assigned to this PS */}
+                                                {/* Price Proposal Section - Show for GUIDED recipients assigned to this PS */}
                                                 {recipient.recipientType === 'GUIDED' && 
                                                  recipient.assignedProcessServerId === profile?.id && 
                                                  recipient.status === 'ASSIGNED' && (
                                                     <div className="mt-4 pt-4 border-t border-gray-200">
-                                                        {negotiations[recipient.id] ? (
-                                                            <motion.div
-                                                                initial={{ opacity: 0, height: 0 }}
-                                                                animate={{ opacity: 1, height: 'auto' }}
-                                                                className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200"
-                                                            >
-                                                                <div className="flex items-center gap-2 mb-3">
-                                                                    <DollarSign className="w-5 h-5 text-amber-600" />
-                                                                    <h4 className="font-bold text-gray-800">Active Price Negotiation</h4>
-                                                                </div>
-                                                                <div className="space-y-2 mb-3">
-                                                                    <div className="flex justify-between text-sm">
-                                                                        <span className="text-gray-600">Your Proposed Price:</span>
-                                                                        <span className="font-bold text-gray-800">
-                                                                            ${negotiations[recipient.id].proposedAmount?.toFixed(2) || '0.00'}
-                                                                        </span>
-                                                                    </div>
-                                                                    {negotiations[recipient.id].counterOfferAmount && (
-                                                                        <div className="flex justify-between text-sm">
-                                                                            <span className="text-gray-600">Customer Counter Offer:</span>
-                                                                            <span className="font-bold text-blue-600">
-                                                                                ${negotiations[recipient.id].counterOfferAmount?.toFixed(2)}
+                                                        {(() => {
+                                                            // Find bids for this recipient
+                                                            const recipientBids = bids.filter((bid: any) => 
+                                                                bid.orderRecipientId === recipient.id &&
+                                                                bid.processServerId === profile?.id
+                                                            ).sort((a: any, b: any) => 
+                                                                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                                                            );
+
+                                                            const acceptedBid = recipientBids.find((bid: any) => bid.status === 'ACCEPTED');
+                                                            const pendingBids = recipientBids.filter((bid: any) => bid.status === 'PENDING');
+
+                                                            if (acceptedBid) {
+                                                                return (
+                                                                    <motion.div
+                                                                        initial={{ opacity: 0, height: 0 }}
+                                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                                        className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200"
+                                                                    >
+                                                                        <div className="flex items-center gap-2 mb-2">
+                                                                            <CheckCircle className="w-5 h-5 text-green-600" />
+                                                                            <h4 className="font-bold text-gray-800">Price Accepted</h4>
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center">
+                                                                            <span className="text-sm text-gray-600">Agreed Price:</span>
+                                                                            <span className="text-xl font-bold text-green-600">
+                                                                                ${acceptedBid.bidAmount.toFixed(2)}
                                                                             </span>
                                                                         </div>
-                                                                    )}
-                                                                    <div className="flex justify-between text-sm">
-                                                                        <span className="text-gray-600">Status:</span>
-                                                                        <span className={`font-semibold ${
-                                                                            negotiations[recipient.id].status === 'PENDING' && !negotiations[recipient.id].counterOfferAmount
-                                                                                ? 'text-orange-600' 
-                                                                                : negotiations[recipient.id].status === 'PENDING' && negotiations[recipient.id].counterOfferAmount
-                                                                                ? 'text-blue-600'
-                                                                                : 'text-gray-600'
-                                                                        }`}>
-                                                                            {negotiations[recipient.id].status === 'PENDING' && !negotiations[recipient.id].counterOfferAmount
-                                                                                ? 'Waiting for Customer Response' 
-                                                                                : negotiations[recipient.id].status === 'PENDING' && negotiations[recipient.id].counterOfferAmount
-                                                                                ? 'Customer Countered - Action Required'
-                                                                                : negotiations[recipient.id].status}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                                
-                                                                {negotiations[recipient.id].status === 'PENDING' && 
-                                                                 negotiations[recipient.id].counterOfferAmount && (
-                                                                    <div className="flex gap-2 mt-3">
-                                                                        <motion.button
-                                                                            whileHover={{ scale: 1.02 }}
-                                                                            whileTap={{ scale: 0.98 }}
-                                                                            onClick={() => handleAcceptCounterOffer(negotiations[recipient.id].id)}
-                                                                            disabled={actionLoading}
-                                                                            className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-lg font-semibold shadow hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                                                                        >
-                                                                            <CheckCircle className="w-4 h-4" />
-                                                                            Accept ${negotiations[recipient.id].counterOfferAmount?.toFixed(2)}
-                                                                        </motion.button>
-                                                                        <motion.button
-                                                                            whileHover={{ scale: 1.02 }}
-                                                                            whileTap={{ scale: 0.98 }}
-                                                                            onClick={() => handleRejectCounterOffer(negotiations[recipient.id].id)}
-                                                                            disabled={actionLoading}
-                                                                            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg font-semibold shadow hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                                                                        >
-                                                                            <XCircle className="w-4 h-4" />
-                                                                            Reject
-                                                                        </motion.button>
-                                                                    </div>
-                                                                )}
-                                                            </motion.div>
-                                                        ) : recipient.finalAgreedPrice && recipient.negotiationStatus === 'ACCEPTED' ? (
-                                                            <motion.div
-                                                                initial={{ opacity: 0, height: 0 }}
-                                                                animate={{ opacity: 1, height: 'auto' }}
-                                                                className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200"
-                                                            >
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <CheckCircle className="w-5 h-5 text-green-600" />
-                                                                    <h4 className="font-bold text-gray-800">Price Agreed</h4>
-                                                                </div>
-                                                                <div className="flex justify-between items-center">
-                                                                    <span className="text-sm text-gray-600">Final Agreed Price:</span>
-                                                                    <span className="text-xl font-bold text-green-600">
-                                                                        ${recipient.finalAgreedPrice.toFixed(2)}
-                                                                    </span>
-                                                                </div>
-                                                                <p className="text-xs text-gray-500 mt-2">Negotiation completed successfully</p>
-                                                            </motion.div>
-                                                        ) : (
-                                                            <motion.button
-                                                                whileHover={{ scale: 1.02 }}
-                                                                whileTap={{ scale: 0.98 }}
-                                                                onClick={() => setShowProposeModal(recipient.id)}
-                                                                className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
-                                                            >
-                                                                <DollarSign className="w-5 h-5" />
-                                                                Propose Price
-                                                            </motion.button>
-                                                        )}
+                                                                        <p className="text-xs text-gray-500 mt-2">Customer accepted your proposal</p>
+                                                                    </motion.div>
+                                                                );
+                                                            } else if (pendingBids.length > 0) {
+                                                                return (
+                                                                    <motion.div
+                                                                        initial={{ opacity: 0, height: 0 }}
+                                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                                        className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200"
+                                                                    >
+                                                                        <div className="flex items-center gap-2 mb-3">
+                                                                            <Clock className="w-5 h-5 text-amber-600" />
+                                                                            <h4 className="font-bold text-gray-800">Price Negotiation</h4>
+                                                                        </div>
+                                                                        {pendingBids.map((bid: any) => (
+                                                                            <div key={bid.id} className="mb-3 pb-3 border-b border-amber-200 last:border-0">
+                                                                                <div className="space-y-2">
+                                                                                    <div className="flex justify-between text-sm">
+                                                                                        <span className="text-gray-600">Your Proposed Price:</span>
+                                                                                        <span className="font-bold text-gray-800">
+                                                                                            ${bid.bidAmount.toFixed(2)}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    
+                                                                                    {/* Show customer counter-offer if exists */}
+                                                                                    {bid.customerCounterAmount && (
+                                                                                        <div className="bg-purple-50 rounded p-2 border border-purple-200 mt-2">
+                                                                                            <div className="flex justify-between items-center">
+                                                                                                <span className="text-xs font-semibold text-purple-700">Customer Counter:</span>
+                                                                                                <span className="text-lg font-bold text-purple-600">
+                                                                                                    ${bid.customerCounterAmount.toFixed(2)}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {bid.customerCounterNotes && (
+                                                                                                <p className="text-xs text-gray-600 mt-1 italic">"{bid.customerCounterNotes}"</p>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <span className="text-xs font-semibold text-gray-600">Status:</span>
+                                                                                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">
+                                                                                            {bid.customerCounterAmount 
+                                                                                                ? (bid.lastCounterBy === 'CUSTOMER' ? 'Customer Countered' : 'Waiting for Customer')
+                                                                                                : 'Waiting for Customer'}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    
+                                                                                    {bid.counterOfferCount > 0 && (
+                                                                                        <p className="text-xs text-gray-500">
+                                                                                            Round {bid.counterOfferCount} of negotiation
+                                                                                        </p>
+                                                                                    )}
+                                                                                    
+                                                                                    {/* Action buttons when customer has countered */}
+                                                                                    {bid.customerCounterAmount && bid.lastCounterBy === 'CUSTOMER' && (
+                                                                                        <div className="flex gap-2 mt-2">
+                                                                                            <motion.button
+                                                                                                whileHover={{ scale: 1.02 }}
+                                                                                                whileTap={{ scale: 0.98 }}
+                                                                                                onClick={() => handleAcceptCustomerCounter(bid.id)}
+                                                                                                disabled={actionLoading}
+                                                                                                className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-1"
+                                                                                            >
+                                                                                                <CheckCircle className="w-4 h-4" />
+                                                                                                Accept ${bid.customerCounterAmount.toFixed(2)}
+                                                                                            </motion.button>
+                                                                                            <motion.button
+                                                                                                whileHover={{ scale: 1.02 }}
+                                                                                                whileTap={{ scale: 0.98 }}
+                                                                                                onClick={() => setShowCounterModal(bid.id)}
+                                                                                                disabled={actionLoading}
+                                                                                                className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-1"
+                                                                                            >
+                                                                                                <DollarSign className="w-4 h-4" />
+                                                                                                Counter Back
+                                                                                            </motion.button>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </motion.div>
+                                                                );
+                                                            } else {
+                                                                return (
+                                                                    <motion.button
+                                                                        whileHover={{ scale: 1.02 }}
+                                                                        whileTap={{ scale: 0.98 }}
+                                                                        onClick={() => setShowProposeModal(recipient.id)}
+                                                                        className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                                                                    >
+                                                                        <DollarSign className="w-5 h-5" />
+                                                                        Propose Price
+                                                                    </motion.button>
+                                                                );
+                                                            }
+                                                        })()}
                                                     </div>
                                                 )}
                                             </div>
@@ -824,67 +1050,41 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                     </div>
                                     <div className="space-y-3">
                                         {(() => {
-                                            const myRecipients = order.recipients?.filter((d: any) =>
-                                                d.assignedProcessServerId === profile?.id
-                                            ) || [];
+                                            // Find my accepted bid
+                                            const myBid = bids.find((bid: any) => 
+                                                bid.processServerId === (user?.processServerProfileId || user?.userId) && 
+                                                bid.status === 'ACCEPTED'
+                                            );
 
-                                            let basePrice = 0;
-                                            let rushFee = 0;
-                                            let remoteFee = 0;
+                                            if (myBid) {
+                                                const bidAmount = myBid.bidAmount;
+                                                const platformFee = bidAmount * 0.15;
+                                                const earnings = bidAmount - platformFee;
 
-                                            myRecipients.forEach((recipient: any) => {
-                                                const agreedPrice = parseFloat(recipient.finalAgreedPrice) || 0;
-                                                const rush = recipient.rushService ? (parseFloat(recipient.rushServiceFee) || 50) : 0;
-                                                const remote = recipient.remoteLocation ? (parseFloat(recipient.remoteLocationFee) || 40) : 0;
-                                                
-                                                basePrice += agreedPrice - rush - remote;
-                                                rushFee += rush;
-                                                remoteFee += remote;
-                                            });
-
-                                            const subtotal = basePrice + rushFee + remoteFee;
-                                            const platformFee = subtotal * 0.15;
-                                            const earnings = subtotal - platformFee;
-
+                                                return (
+                                                    <>
+                                                        <div className="space-y-2 pb-3 border-b border-gray-200">
+                                                            <div className="flex justify-between text-sm">
+                                                                <span className="text-gray-600">Accepted Bid Amount</span>
+                                                                <span className="font-semibold text-gray-800">${bidAmount.toFixed(2)}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex justify-between text-sm py-2">
+                                                            <span className="text-red-600 font-semibold">Platform Fee (15%)</span>
+                                                            <span className="font-bold text-red-600">-${platformFee.toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg p-3 border-2 border-green-300">
+                                                            <span className="text-green-700 font-bold text-lg">Your Earnings</span>
+                                                            <span className="font-bold text-green-700 text-xl">${earnings.toFixed(2)}</span>
+                                                        </div>
+                                                    </>
+                                                );
+                                            }
+                                            
                                             return (
-                                                <>
-                                                    <div className="space-y-2 pb-3 border-b border-gray-200">
-                                                        <div className="flex justify-between text-sm">
-                                                            <span className="text-gray-600">Service Fee</span>
-                                                            <span className="font-semibold text-gray-800">${basePrice.toFixed(2)}</span>
-                                                        </div>
-                                                        {rushFee > 0 && (
-                                                            <div className="flex justify-between text-sm">
-                                                                <span className="text-gray-600 flex items-center gap-1">
-                                                                    <Zap className="w-3 h-3 text-red-500" />
-                                                                    Rush Service
-                                                                </span>
-                                                                <span className="font-semibold text-gray-800">${rushFee.toFixed(2)}</span>
-                                                            </div>
-                                                        )}
-                                                        {remoteFee > 0 && (
-                                                            <div className="flex justify-between text-sm">
-                                                                <span className="text-gray-600 flex items-center gap-1">
-                                                                    <Building className="w-3 h-3 text-purple-500" />
-                                                                    Remote Location
-                                                                </span>
-                                                                <span className="font-semibold text-gray-800">${remoteFee.toFixed(2)}</span>
-                                                            </div>
-                                                        )}
-                                                        <div className="flex justify-between text-sm font-semibold pt-2">
-                                                            <span className="text-gray-700">Subtotal</span>
-                                                            <span className="text-gray-800">${subtotal.toFixed(2)}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex justify-between text-sm py-2">
-                                                        <span className="text-red-600 font-semibold">Platform Fee (15%)</span>
-                                                        <span className="font-bold text-red-600">-${platformFee.toFixed(2)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg p-3 border-2 border-green-300">
-                                                        <span className="text-green-700 font-bold text-lg">Your Earnings</span>
-                                                        <span className="font-bold text-green-700 text-xl">${earnings.toFixed(2)}</span>
-                                                    </div>
-                                                </>
+                                                <div className="text-center py-4 text-gray-500">
+                                                    <p className="text-sm">No bid accepted yet</p>
+                                                </div>
                                             );
                                         })()}
                                     </div>
@@ -940,51 +1140,7 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                             </motion.div>
                         )}
 
-                        {/* Place Bid */}
-                        {(() => {
-                            const hasAvailableRecipients = order.recipients?.some((d: any) =>
-                                d.status === 'OPEN' || d.status === 'BIDDING'
-                            );
-                            const canBid = !isMyOrder &&
-                                !bids.find((b: any) => b.processServerId === (user?.processServerProfileId || user?.userId)) &&
-                                ((order.status === 'OPEN' || order.status === 'BIDDING' || order.status === 'PARTIALLY_ASSIGNED') && hasAvailableRecipients);
-
-                            return canBid ? (
-                                <motion.div
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: 0.3 }}
-                                    className="bg-white rounded-2xl p-6 shadow-lg"
-                                >
-                                    <h2 className="text-xl font-bold text-gray-800 mb-4">Place Your Bid</h2>
-                                    <form onSubmit={handlePlaceBid} className="space-y-4">
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                                Bid Amount ($)
-                                            </label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={bidAmount}
-                                                onChange={(e) => setBidAmount(e.target.value)}
-                                                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-gray-700 font-semibold"
-                                                placeholder="Enter your bid"
-                                                required
-                                            />
-                                        </div>
-                                        <motion.button
-                                            whileHover={{ scale: 1.02 }}
-                                            whileTap={{ scale: 0.98 }}
-                                            type="submit"
-                                            disabled={submitting}
-                                            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:shadow-xl disabled:opacity-50 transition-all"
-                                        >
-                                            {submitting ? 'Submitting...' : 'Submit Bid'}
-                                        </motion.button>
-                                    </form>
-                                </motion.div>
-                            ) : null;
-                        })()}
+                        {/* Note: Individual recipient bidding moved to each recipient card */}
                     </div>
                 </div>
 
@@ -1053,6 +1209,82 @@ export default function OrderDetails({ params }: { params: { id: string } }) {
                                             setShowProposeModal(null);
                                             setProposeAmount('');
                                             setProposeNotes('');
+                                        }}
+                                        className="px-6 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all"
+                                    >
+                                        Cancel
+                                    </motion.button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+                
+                {/* Counter-Offer Modal for PS */}
+                {showCounterModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        onClick={() => setShowCounterModal(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center gap-2 mb-4">
+                                <DollarSign className="w-6 h-6 text-purple-600" />
+                                <h3 className="text-xl font-bold text-gray-800">Counter Customer's Offer</h3>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Your Counter Amount ($)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={counterAmount}
+                                        onChange={(e) => setCounterAmount(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-gray-700 font-semibold"
+                                        placeholder="Enter counter amount"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Notes (Optional)
+                                    </label>
+                                    <textarea
+                                        value={counterNotes}
+                                        onChange={(e) => setCounterNotes(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-gray-700"
+                                        rows={3}
+                                        placeholder="Explain your counter-offer..."
+                                    />
+                                </div>
+                                <div className="flex gap-3 mt-6">
+                                    <motion.button
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={() => handleRejectAndCounter(showCounterModal)}
+                                        disabled={actionLoading || !counterAmount || parseFloat(counterAmount) <= 0}
+                                        className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 transition-all"
+                                    >
+                                        {actionLoading ? 'Submitting...' : 'Submit Counter'}
+                                    </motion.button>
+                                    <motion.button
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={() => {
+                                            setShowCounterModal(null);
+                                            setCounterAmount('');
+                                            setCounterNotes('');
                                         }}
                                         className="px-6 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all"
                                     >

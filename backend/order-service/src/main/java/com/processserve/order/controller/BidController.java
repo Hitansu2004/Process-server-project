@@ -62,4 +62,58 @@ public class BidController {
         List<com.processserve.order.dto.BidDTO> bids = bidService.getBidsByProcessServerId(processServerId);
         return ResponseEntity.ok(bids);
     }
+
+    // Counter-offer from customer
+    @PostMapping("/{bidId}/counter-offer")
+    public ResponseEntity<?> customerCounterOffer(
+            @PathVariable String bidId,
+            @RequestBody Map<String, Object> request) {
+        try {
+            Double counterAmount = Double.parseDouble(request.get("counterAmount").toString());
+            String notes = request.getOrDefault("notes", "").toString();
+            
+            Bid bid = bidService.customerCounterOffer(bidId, counterAmount, notes);
+            return ResponseEntity.ok(bid);
+        } catch (Exception e) {
+            log.error("Failed to submit counter-offer: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    // Process server accepts customer's counter-offer
+    @PostMapping("/{bidId}/accept-counter")
+    public ResponseEntity<?> acceptCustomerCounter(@PathVariable String bidId) {
+        try {
+            bidService.acceptCustomerCounter(bidId);
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Counter-offer accepted successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to accept counter-offer: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    // Process server rejects customer's counter-offer and proposes new amount
+    @PostMapping("/{bidId}/reject-counter")
+    public ResponseEntity<?> rejectAndCounterOffer(
+            @PathVariable String bidId,
+            @RequestBody Map<String, Object> request) {
+        try {
+            Double newAmount = Double.parseDouble(request.get("newAmount").toString());
+            String notes = request.getOrDefault("notes", "").toString();
+            
+            Bid bid = bidService.processServerRejectsAndCounters(bidId, newAmount, notes);
+            return ResponseEntity.ok(bid);
+        } catch (Exception e) {
+            log.error("Failed to reject and counter: {}", e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
 }

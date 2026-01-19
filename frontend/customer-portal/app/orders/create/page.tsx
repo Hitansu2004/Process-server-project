@@ -7,7 +7,6 @@ import { ChevronLeft, ChevronRight, Check, FileText, MapPin, Package, Eye, Credi
 import StepIndicator from '@/components/orders/create/StepIndicator'
 import DocumentStepMultiple from '@/components/orders/create/DocumentStepMultiple'
 import RecipientsStep from '@/components/orders/create/RecipientsStep'
-import ServiceOptionsStep from '@/components/orders/create/ServiceOptionsStep'
 import ReviewStep from '@/components/orders/create/ReviewStep'
 import PaymentStep from '@/components/orders/create/PaymentStep'
 import { api } from '@/lib/api'
@@ -29,9 +28,6 @@ interface Recipient {
     certifiedMail: boolean
     rushService: boolean
     remoteService: boolean
-    quotedPrice?: number
-    negotiatedPrice?: number
-    priceStatus?: 'QUOTED' | 'NEGOTIATING' | 'ACCEPTED'
 }
 
 export default function CreateOrderWizard() {
@@ -364,10 +360,9 @@ export default function CreateOrderWizard() {
 
     const steps = [
         { number: 1, title: 'Document Details', icon: FileText, description: 'Case information & documents' },
-        { number: 2, title: 'Recipients', icon: MapPin, description: 'Delivery destinations' },
-        { number: 3, title: 'Service Options', icon: Package, description: 'Type & urgency' },
-        { number: 4, title: 'Review', icon: Eye, description: 'Verify your order' },
-        { number: 5, title: 'Payment', icon: CreditCard, description: 'Complete your order' },
+        { number: 2, title: 'Recipients', icon: MapPin, description: 'Delivery destinations & service options' },
+        { number: 3, title: 'Review', icon: Eye, description: 'Verify your order' },
+        { number: 4, title: 'Payment', icon: CreditCard, description: 'Complete your order' },
     ]
 
     const validateStep = (step: number): boolean => {
@@ -378,9 +373,8 @@ export default function CreateOrderWizard() {
                     documentData.documents && documentData.documents.length > 0)
             case 2:
                 return recipients.length > 0 && recipients.every(r =>
-                    r.firstName && r.lastName && r.address && r.city && r.state && r.zipCode)
-            case 3:
-                return recipients.every(r => r.processService || r.certifiedMail)
+                    r.firstName && r.lastName && r.address && r.city && r.state && r.zipCode &&
+                    (r.processService || r.certifiedMail))
             default:
                 return true
         }
@@ -388,7 +382,7 @@ export default function CreateOrderWizard() {
 
     const handleNext = () => {
         if (validateStep(currentStep)) {
-            if (currentStep < 5) {
+            if (currentStep < 4) {
                 setCurrentStep(currentStep + 1)
                 window.scrollTo({ top: 0, behavior: 'smooth' })
             }
@@ -482,31 +476,7 @@ export default function CreateOrderWizard() {
                     rushService: r.rushService,
                     remoteLocation: r.remoteService,
                     assignedProcessServerId: r.processServerId,
-                    processServerName: r.processServerName,
-                    finalAgreedPrice: (() => {
-                        if (r.assignmentType === 'GUIDED' && !r.negotiatedPrice && !r.quotedPrice) {
-                            let price = 0
-                            if (r.processService) price += 75
-                            if (r.certifiedMail) price += 25
-                            if (r.rushService) price += 50
-                            if (r.remoteService) price += 40
-                            return price
-                        }
-                        return r.negotiatedPrice || r.quotedPrice
-                    })(),
-                    customerPrice: (() => {
-                        if (r.assignmentType === 'GUIDED' && !r.negotiatedPrice && !r.quotedPrice) {
-                            let price = 0
-                            if (r.processService) price += 75
-                            if (r.certifiedMail) price += 25
-                            if (r.rushService) price += 50
-                            if (r.remoteService) price += 40
-                            return price
-                        }
-                        return r.negotiatedPrice || r.quotedPrice
-                    })(),
-                    quotedPrice: r.quotedPrice,
-                    priceStatus: r.priceStatus,
+                    processServerName: r.processServerName
                 }))
             }
 
@@ -557,9 +527,9 @@ export default function CreateOrderWizard() {
             // Show success modal
             setShowSuccessModal(true)
 
-            // Redirect after animation
+            // Redirect to order details after animation
             setTimeout(() => {
-                router.push('/dashboard')
+                router.push(`/orders/${createdOrder.id}`)
             }, 2500)
 
         } catch (error: any) {
@@ -632,20 +602,13 @@ export default function CreateOrderWizard() {
                             />
                         )}
                         {currentStep === 3 && (
-                            <ServiceOptionsStep
-                                recipients={recipients}
-                                onChange={setRecipients}
-                                deadline={documentData.deadline}
-                            />
-                        )}
-                        {currentStep === 4 && (
                             <ReviewStep
                                 documentData={documentData}
                                 recipients={recipients}
                                 onEditStep={(step: number) => setCurrentStep(step + 1)}
                             />
                         )}
-                        {currentStep === 5 && (
+                        {currentStep === 4 && (
                             <PaymentStep
                                 documentData={documentData}
                                 recipients={recipients}
@@ -674,7 +637,7 @@ export default function CreateOrderWizard() {
                         </button>
 
                         {/* Save Draft Button */}
-                        {!isEditMode && currentStep < 5 && (
+                        {!isEditMode && currentStep < 4 && (
                             <button
                                 onClick={saveDraftToBackend}
                                 disabled={isSavingDraft}
@@ -686,7 +649,7 @@ export default function CreateOrderWizard() {
                         )}
                     </div>
 
-                    {currentStep < 5 ? (
+                    {currentStep < 4 ? (
                         <motion.button
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
@@ -721,7 +684,7 @@ export default function CreateOrderWizard() {
 
                 {/* Step Progress Text */}
                 <div className="text-center mt-6 text-sm text-gray-500">
-                    Step {currentStep} of 5 • {steps[currentStep - 1].title}
+                    Step {currentStep} of 4 • {steps[currentStep - 1].title}
                 </div>
             </div>
 

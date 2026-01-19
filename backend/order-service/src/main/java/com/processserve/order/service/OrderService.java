@@ -132,14 +132,9 @@ public class OrderService {
         order.setSuperAdminFee(BigDecimal.ZERO);
         order.setTenantProfit(BigDecimal.ZERO);
 
-        // Use custom name as order number as requested by user
-        if (request.getCustomName() != null && !request.getCustomName().isEmpty()) {
-            order.setOrderNumber(request.getCustomName());
-        } else {
-            // Fallback to case number or UUID if no custom name provided
-            order.setOrderNumber(
-                    request.getCaseNumber() != null ? request.getCaseNumber() : UUID.randomUUID().toString());
-        }
+        // Generate unique order number
+        String orderNumber = generateUniqueOrderNumber();
+        order.setOrderNumber(orderNumber);
 
         order = orderRepository.saveAndFlush(order);
 
@@ -152,7 +147,12 @@ public class OrderService {
             OrderRecipient recipient = new OrderRecipient();
             recipient.setId(UUID.randomUUID().toString());
             recipient.setOrder(order);
-            recipient.setSequenceNumber(sequence++);
+            recipient.setSequenceNumber(sequence);
+            
+            // Set recipient order number in format: ORD-2026-039-01
+            recipient.setRecipientOrderNumber(String.format("%s-%02d", orderNumber, sequence));
+            sequence++;
+            
             recipient.setRecipientName(recipientReq.getRecipientName());
             recipient.setRecipientAddress(recipientReq.getRecipientAddress());
             recipient.setRecipientZipCode(recipientReq.getRecipientZipCode());
@@ -162,8 +162,8 @@ public class OrderService {
             recipient.setNotes(recipientReq.getNotes());
             recipient.setSpecialInstructions(recipientReq.getSpecialInstructions());
             recipient.setProcessServerName(recipientReq.getProcessServerName());
-            recipient.setQuotedPrice(recipientReq.getQuotedPrice());
-            recipient.setPriceStatus(recipientReq.getPriceStatus());
+            // REMOVED PRICING: recipient.setQuotedPrice(recipientReq.getQuotedPrice());
+            // REMOVED PRICING: recipient.setPriceStatus(recipientReq.getPriceStatus());
             recipient.setProcessService(recipientReq.getProcessService());
             recipient.setCertifiedMail(recipientReq.getCertifiedMail());
             recipient.setAttemptCount(0);
@@ -181,93 +181,38 @@ public class OrderService {
                 recipient.setServiceType(OrderRecipient.ServiceType.PROCESS_SERVICE);
             }
 
-            // Handle Pricing Logic based on Recipient Type
-            // AUTOMATED: Base price is 0, fees only apply after bid is accepted
-            // GUIDED: Base price is 75, plus rush and remote fees
-            BigDecimal basePrice;
-            BigDecimal rushFee;
-            BigDecimal remoteFee;
-
-            BigDecimal finalAgreedPrice; // Declare finalAgreedPrice variable
-
             // Handle Recipient Type
             if ("GUIDED".equalsIgnoreCase(recipientReq.getRecipientType())) {
-                // GUIDED: finalAgreedPrice from frontend is the base service cost (process
-                // service + certified mail)
-                // Rush and remote fees are ALREADY INCLUDED in the finalAgreedPrice from
-                // frontend
-                rushFee = recipientReq.getRushService() != null && recipientReq.getRushService()
-                        ? new BigDecimal("50.00")
-                        : BigDecimal.ZERO;
-                remoteFee = recipientReq.getRemoteLocation() != null && recipientReq.getRemoteLocation()
-                        ? new BigDecimal("40.00")
-                        : BigDecimal.ZERO;
-
-                // finalAgreedPrice from frontend already includes base + rush + remote
-                if (recipientReq.getFinalAgreedPrice() != null) {
-                    finalAgreedPrice = recipientReq.getFinalAgreedPrice(); // Total price from frontend
-                    // Calculate base price by subtracting fees
-                    basePrice = finalAgreedPrice.subtract(rushFee).subtract(remoteFee);
-                } else {
-                    // If no price specified, default to fees only (base = 0)
-                    basePrice = BigDecimal.ZERO;
-                    finalAgreedPrice = rushFee.add(remoteFee);
-                }
-
                 recipient.setRecipientType(OrderRecipient.RecipientType.GUIDED);
                 recipient.setAssignedProcessServerId(recipientReq.getAssignedProcessServerId());
-                recipient.setBasePrice(basePrice); // Store the base service cost (process + certified mail)
                 recipient.setRushService(recipientReq.getRushService());
-                recipient.setRushServiceFee(rushFee);
                 recipient.setRemoteLocation(recipientReq.getRemoteLocation());
-                recipient.setRemoteLocationFee(remoteFee);
-                recipient.setFinalAgreedPrice(finalAgreedPrice);
                 recipient.setStatus(OrderRecipient.RecipientStatus.ASSIGNED);
-                anyAssigned = true;
-
-                // Update Order totals for guided recipients
-                order.setProcessServerPayout(order.getProcessServerPayout().add(recipient.getFinalAgreedPrice()));
-
-                if (recipientReq.getCustomerPrice() != null) {
-                    // Concierge Service logic...
-                    order.setCustomerPaymentAmount(
-                            order.getCustomerPaymentAmount().add(recipientReq.getCustomerPrice()));
-                    BigDecimal profit = recipientReq.getCustomerPrice().subtract(recipient.getFinalAgreedPrice());
-                    order.setTenantProfit(order.getTenantProfit().add(profit));
-                } else {
-                    // Regular Guided: Calculate commissions
-                    BigDecimal payout = recipient.getFinalAgreedPrice();
-                    BigDecimal commission = payout.multiply(new BigDecimal("0.15"));
-                    BigDecimal totalCustomerPay = payout.add(commission);
-                    BigDecimal superAdminFee = commission.multiply(new BigDecimal("0.05"));
-                    BigDecimal tenantProfit = commission.subtract(superAdminFee);
-
-                    order.setSuperAdminFee(order.getSuperAdminFee().add(superAdminFee));
-                    order.setTenantCommission(order.getTenantCommission().add(commission));
-                    order.setTenantProfit(order.getTenantProfit().add(tenantProfit));
-                    order.setCustomerPaymentAmount(order.getCustomerPaymentAmount().add(totalCustomerPay));
+                
+                // Calculate service options fee for GUIDED orders: $50 per selected option
+                BigDecimal serviceOptionsFee = BigDecimal.ZERO;
+                if (Boolean.TRUE.equals(recipientReq.getProcessService())) {
+                    serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
                 }
-
+                if (Boolean.TRUE.equals(recipientReq.getCertifiedMail())) {
+                    serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
+                }
+                if (Boolean.TRUE.equals(recipientReq.getRushService())) {
+                    serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
+                }
+                if (Boolean.TRUE.equals(recipientReq.getRemoteLocation())) {
+                    serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
+                }
+                recipient.setServiceOptionsFee(serviceOptionsFee);
+                
+                anyAssigned = true;
             } else {
-                // AUTOMATED (Open Bid): Base service price is determined by bids
-                // But rush and remote fees are calculated upfront and shown to customer
-                rushFee = recipientReq.getRushService() != null && recipientReq.getRushService()
-                        ? new BigDecimal("50.00")
-                        : BigDecimal.ZERO;
-                remoteFee = recipientReq.getRemoteLocation() != null && recipientReq.getRemoteLocation()
-                        ? new BigDecimal("40.00")
-                        : BigDecimal.ZERO;
-
-                basePrice = BigDecimal.ZERO; // Will be set when bid is accepted
-
-                recipient.setBasePrice(basePrice);
+                // AUTOMATED (Open Bid) - No service options fee
                 recipient.setRushService(recipientReq.getRushService());
-                recipient.setRushServiceFee(rushFee); // Calculate fees upfront
                 recipient.setRemoteLocation(recipientReq.getRemoteLocation());
-                recipient.setRemoteLocationFee(remoteFee); // Calculate fees upfront
                 recipient.setRecipientType(OrderRecipient.RecipientType.AUTOMATED);
-                recipient.setFinalAgreedPrice(rushFee.add(remoteFee)); // Show fees to customer upfront
                 recipient.setStatus(OrderRecipient.RecipientStatus.OPEN);
+                recipient.setServiceOptionsFee(BigDecimal.ZERO); // Free for automated
                 anyBidding = true;
             }
 
@@ -581,7 +526,6 @@ public class OrderService {
      * - Validates order exists and is editable
      * - Logs modification to audit trail
      * - Updates order fields and recipients
-     * - Recalculates pricing if needed
      */
     @Transactional
     public Order updateOrder(String orderId, UpdateOrderRequest request, String userId) {
@@ -801,57 +745,57 @@ public class OrderService {
         if ("GUIDED".equals(recipientData.getRecipientType())) {
             recipient.setRecipientType(OrderRecipient.RecipientType.GUIDED);
             recipient.setAssignedProcessServerId(recipientData.getAssignedProcessServerId());
-            if (recipientData.getFinalAgreedPrice() != null) {
-                recipient.setFinalAgreedPrice(BigDecimal.valueOf(recipientData.getFinalAgreedPrice()));
-            }
+            // REMOVED PRICING: if (recipientData.getFinalAgreedPrice() != null) {
+            //     recipient.setFinalAgreedPrice(BigDecimal.valueOf(recipientData.getFinalAgreedPrice()));
+            // }
         } else {
             recipient.setRecipientType(OrderRecipient.RecipientType.AUTOMATED);
         }
 
-        // Set pricing options
+        // REMOVED PRICING: Set pricing options
         boolean isRush = recipientData.getRushService() != null ? recipientData.getRushService() : false;
         boolean isRemote = recipientData.getRemoteLocation() != null ? recipientData.getRemoteLocation() : false;
 
         recipient.setRushService(isRush);
         recipient.setRemoteLocation(isRemote);
 
-        BigDecimal basePrice;
-        BigDecimal rushFee;
-        BigDecimal remoteFee;
-        BigDecimal calculatedPrice;
+        // REMOVED PRICING: BigDecimal basePrice;
+        // REMOVED PRICING: BigDecimal rushFee;
+        // REMOVED PRICING: BigDecimal remoteFee;
+        // REMOVED PRICING: BigDecimal calculatedPrice;
 
-        // Differentiate pricing based on recipient type
-        if ("GUIDED".equalsIgnoreCase(recipientData.getRecipientType())) {
-            // GUIDED: Customer specifies total price, we calculate base from it
-            rushFee = isRush ? new BigDecimal("50.00") : BigDecimal.ZERO;
-            remoteFee = isRemote ? new BigDecimal("40.00") : BigDecimal.ZERO;
-
-            if (recipientData.getFinalAgreedPrice() != null) {
-                // Customer specified the final price
-                calculatedPrice = BigDecimal.valueOf(recipientData.getFinalAgreedPrice());
-                basePrice = calculatedPrice.subtract(rushFee).subtract(remoteFee);
-            } else {
-                // No price specified, default to fees only
-                basePrice = BigDecimal.ZERO;
-                calculatedPrice = rushFee.add(remoteFee);
-            }
-
-            recipient.setBasePrice(basePrice);
-            recipient.setRushServiceFee(rushFee);
-            recipient.setRemoteLocationFee(remoteFee);
-            recipient.setFinalAgreedPrice(calculatedPrice);
-        } else {
-            // AUTOMATED: All prices start at 0 until bid accepted
-            basePrice = BigDecimal.ZERO;
-            rushFee = BigDecimal.ZERO;
-            remoteFee = BigDecimal.ZERO;
-            calculatedPrice = BigDecimal.ZERO;
-
-            recipient.setBasePrice(basePrice);
-            recipient.setRushServiceFee(rushFee);
-            recipient.setRemoteLocationFee(remoteFee);
-            recipient.setFinalAgreedPrice(calculatedPrice);
-        }
+        // REMOVED PRICING: Differentiate pricing based on recipient type
+        // REMOVED PRICING: if ("GUIDED".equalsIgnoreCase(recipientData.getRecipientType())) {
+        //     // GUIDED: Customer specifies total price, we calculate base from it
+        //     rushFee = isRush ? new BigDecimal("50.00") : BigDecimal.ZERO;
+        //     remoteFee = isRemote ? new BigDecimal("40.00") : BigDecimal.ZERO;
+        //
+        //     if (recipientData.getFinalAgreedPrice() != null) {
+        //         // Customer specified the final price
+        //         calculatedPrice = BigDecimal.valueOf(recipientData.getFinalAgreedPrice());
+        //         basePrice = calculatedPrice.subtract(rushFee).subtract(remoteFee);
+        //     } else {
+        //         // No price specified, default to fees only
+        //         basePrice = BigDecimal.ZERO;
+        //         calculatedPrice = rushFee.add(remoteFee);
+        //     }
+        //
+        //     recipient.setBasePrice(basePrice);
+        //     recipient.setRushServiceFee(rushFee);
+        //     recipient.setRemoteLocationFee(remoteFee);
+        //     recipient.setFinalAgreedPrice(calculatedPrice);
+        // } else {
+        //     // AUTOMATED: All prices start at 0 until bid accepted
+        //     basePrice = BigDecimal.ZERO;
+        //     rushFee = BigDecimal.ZERO;
+        //     remoteFee = BigDecimal.ZERO;
+        //     calculatedPrice = BigDecimal.ZERO;
+        //
+        //     recipient.setBasePrice(basePrice);
+        //     recipient.setRushServiceFee(rushFee);
+        //     recipient.setRemoteLocationFee(remoteFee);
+        //     recipient.setFinalAgreedPrice(calculatedPrice);
+        // }
 
         recipient.setStatus(OrderRecipient.RecipientStatus.PENDING);
         order.getRecipients().add(recipient);
@@ -955,27 +899,27 @@ public class OrderService {
                     new String[] { recipient.getAssignedProcessServerId(), update.getAssignedProcessServerId() });
             recipient.setAssignedProcessServerId(update.getAssignedProcessServerId());
         }
-        if (update.getFinalAgreedPrice() != null) {
-            BigDecimal newVal = BigDecimal.valueOf(update.getFinalAgreedPrice());
-            if (recipient.getFinalAgreedPrice() == null || newVal.compareTo(recipient.getFinalAgreedPrice()) != 0) {
-                changes.put("finalAgreedPrice",
-                        new String[] { String.valueOf(recipient.getFinalAgreedPrice()), String.valueOf(newVal) });
-                recipient.setFinalAgreedPrice(newVal);
-            }
-        }
+        // REMOVED PRICING: if (update.getFinalAgreedPrice() != null) {
+        //     BigDecimal newVal = BigDecimal.valueOf(update.getFinalAgreedPrice());
+        //     if (recipient.getFinalAgreedPrice() == null || newVal.compareTo(recipient.getFinalAgreedPrice()) != 0) {
+        //         changes.put("finalAgreedPrice",
+        //                 new String[] { String.valueOf(recipient.getFinalAgreedPrice()), String.valueOf(newVal) });
+        //         recipient.setFinalAgreedPrice(newVal);
+        //     }
+        // }
 
         // Booleans
         if (update.getRushService() != null && !update.getRushService().equals(recipient.getRushService())) {
             changes.put("rushService", new String[] { String.valueOf(recipient.getRushService()),
                     String.valueOf(update.getRushService()) });
             recipient.setRushService(update.getRushService());
-            recipient.setRushServiceFee(update.getRushService() ? new BigDecimal("50.00") : BigDecimal.ZERO);
+            // REMOVED PRICING: recipient.setRushServiceFee(update.getRushService() ? new BigDecimal("50.00") : BigDecimal.ZERO);
         }
         if (update.getRemoteLocation() != null && !update.getRemoteLocation().equals(recipient.getRemoteLocation())) {
             changes.put("remoteLocation", new String[] { String.valueOf(recipient.getRemoteLocation()),
                     String.valueOf(update.getRemoteLocation()) });
             recipient.setRemoteLocation(update.getRemoteLocation());
-            recipient.setRemoteLocationFee(update.getRemoteLocation() ? new BigDecimal("40.00") : BigDecimal.ZERO);
+            // REMOVED PRICING: recipient.setRemoteLocationFee(update.getRemoteLocation() ? new BigDecimal("40.00") : BigDecimal.ZERO);
         }
 
         // Handle Service Type from booleans first
@@ -1002,6 +946,32 @@ public class OrderService {
             } else if (recipient.getCertifiedMail()) {
                 recipient.setServiceType(OrderRecipient.ServiceType.CERTIFIED_MAIL);
             }
+        }
+
+        // Recalculate service options fee for GUIDED assignments
+        if (recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED) {
+            BigDecimal newServiceOptionsFee = BigDecimal.ZERO;
+            if (Boolean.TRUE.equals(recipient.getProcessService())) {
+                newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
+            }
+            if (Boolean.TRUE.equals(recipient.getCertifiedMail())) {
+                newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
+            }
+            if (Boolean.TRUE.equals(recipient.getRushService())) {
+                newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
+            }
+            if (Boolean.TRUE.equals(recipient.getRemoteLocation())) {
+                newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
+            }
+            
+            if (recipient.getServiceOptionsFee() == null || newServiceOptionsFee.compareTo(recipient.getServiceOptionsFee()) != 0) {
+                changes.put("serviceOptionsFee",
+                        new String[] { String.valueOf(recipient.getServiceOptionsFee()), String.valueOf(newServiceOptionsFee) });
+                recipient.setServiceOptionsFee(newServiceOptionsFee);
+            }
+        } else {
+            // AUTOMATED orders have free service options
+            recipient.setServiceOptionsFee(BigDecimal.ZERO);
         }
 
         // Handle Service Type from enum
@@ -1032,41 +1002,41 @@ public class OrderService {
             }
         }
 
-        // Recalculate price if fees changed AND recipient is GUIDED type
-        if (recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED) {
-            boolean serviceChanged = (update.getProcessService() != null || update.getCertifiedMail() != null
-                    || update.getServiceType() != null);
-
-            if (serviceChanged) {
-                BigDecimal newBase = BigDecimal.ZERO;
-                if (Boolean.TRUE.equals(recipient.getProcessService())) {
-                    newBase = newBase.add(new BigDecimal("75.00"));
-                }
-                if (Boolean.TRUE.equals(recipient.getCertifiedMail())) {
-                    newBase = newBase.add(new BigDecimal("25.00"));
-                }
-                recipient.setBasePrice(newBase);
-            }
-
-            if (update.getFinalAgreedPrice() != null) {
-                // Customer updated the final price - recalculate base
-                recipient.setFinalAgreedPrice(BigDecimal.valueOf(update.getFinalAgreedPrice()));
-                BigDecimal rush = recipient.getRushServiceFee() != null ? recipient.getRushServiceFee()
-                        : BigDecimal.ZERO;
-                BigDecimal remote = recipient.getRemoteLocationFee() != null ? recipient.getRemoteLocationFee()
-                        : BigDecimal.ZERO;
-                BigDecimal newBase = recipient.getFinalAgreedPrice().subtract(rush).subtract(remote);
-                recipient.setBasePrice(newBase);
-            } else if (update.getRushService() != null || update.getRemoteLocation() != null || serviceChanged) {
-                // Fees changed but price not updated - recalculate final from base + new fees
-                BigDecimal base = recipient.getBasePrice() != null ? recipient.getBasePrice() : BigDecimal.ZERO;
-                BigDecimal rush = recipient.getRushServiceFee() != null ? recipient.getRushServiceFee()
-                        : BigDecimal.ZERO;
-                BigDecimal remote = recipient.getRemoteLocationFee() != null ? recipient.getRemoteLocationFee()
-                        : BigDecimal.ZERO;
-                recipient.setFinalAgreedPrice(base.add(rush).add(remote));
-            }
-        }
+        // REMOVED PRICING: Recalculate price if fees changed AND recipient is GUIDED type
+        // REMOVED PRICING: if (recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED) {
+        //     boolean serviceChanged = (update.getProcessService() != null || update.getCertifiedMail() != null
+        //             || update.getServiceType() != null);
+        //
+        //     if (serviceChanged) {
+        //         BigDecimal newBase = BigDecimal.ZERO;
+        //         if (Boolean.TRUE.equals(recipient.getProcessService())) {
+        //             newBase = newBase.add(new BigDecimal("75.00"));
+        //         }
+        //         if (Boolean.TRUE.equals(recipient.getCertifiedMail())) {
+        //             newBase = newBase.add(new BigDecimal("25.00"));
+        //         }
+        //         recipient.setBasePrice(newBase);
+        //     }
+        //
+        //     if (update.getFinalAgreedPrice() != null) {
+        //         // Customer updated the final price - recalculate base
+        //         recipient.setFinalAgreedPrice(BigDecimal.valueOf(update.getFinalAgreedPrice()));
+        //         BigDecimal rush = recipient.getRushServiceFee() != null ? recipient.getRushServiceFee()
+        //                 : BigDecimal.ZERO;
+        //         BigDecimal remote = recipient.getRemoteLocationFee() != null ? recipient.getRemoteLocationFee()
+        //                 : BigDecimal.ZERO;
+        //         BigDecimal newBase = recipient.getFinalAgreedPrice().subtract(rush).subtract(remote);
+        //         recipient.setBasePrice(newBase);
+        //     } else if (update.getRushService() != null || update.getRemoteLocation() != null || serviceChanged) {
+        //         // Fees changed but price not updated - recalculate final from base + new fees
+        //         BigDecimal base = recipient.getBasePrice() != null ? recipient.getBasePrice() : BigDecimal.ZERO;
+        //         BigDecimal rush = recipient.getRushServiceFee() != null ? recipient.getRushServiceFee()
+        //                 : BigDecimal.ZERO;
+        //         BigDecimal remote = recipient.getRemoteLocationFee() != null ? recipient.getRemoteLocationFee()
+        //                 : BigDecimal.ZERO;
+        //         recipient.setFinalAgreedPrice(base.add(rush).add(remote));
+        //     }
+        // }
 
         recipient.setLastEditedAt(LocalDateTime.now());
         recipient.setLastEditedBy(userId);
@@ -1125,11 +1095,11 @@ public class OrderService {
      * This handles both GUIDED and AUTOMATED orders
      */
     private void ensurePaymentCalculated(Order order) {
-        // If payment is already calculated, skip
-        if (order.getFinalAgreedPrice() != null && order.getFinalAgreedPrice().compareTo(BigDecimal.ZERO) > 0) {
-            log.debug("Payment already calculated for order {}", order.getOrderNumber());
-            return;
-        }
+        // REMOVED PRICING: If payment is already calculated, skip
+        // REMOVED PRICING: if (order.getFinalAgreedPrice() != null && order.getFinalAgreedPrice().compareTo(BigDecimal.ZERO) > 0) {
+        //     log.debug("Payment already calculated for order {}", order.getOrderNumber());
+        //     return;
+        // }
 
         log.info("Calculating payment for completed order {}", order.getOrderNumber());
 
@@ -1143,43 +1113,43 @@ public class OrderService {
         BigDecimal totalTenantProfit = BigDecimal.ZERO;
         BigDecimal totalCustomerPayment = BigDecimal.ZERO;
 
-        for (OrderRecipient recipient : recipients) {
-            BigDecimal recipientPrice = recipient.getFinalAgreedPrice();
+        // REMOVED PRICING: for (OrderRecipient recipient : recipients) {
+        //     BigDecimal recipientPrice = recipient.getFinalAgreedPrice();
+        //
+        //     // If recipient doesn't have a price, use a default based on distance or $150
+        //     if (recipientPrice == null || recipientPrice.compareTo(BigDecimal.ZERO) == 0) {
+        //         recipientPrice = new BigDecimal("150.00");
+        //         recipient.setFinalAgreedPrice(recipientPrice);
+        //         recipientRepository.save(recipient);
+        //         log.info("Set default price $150 for recipient {} in order {}",
+        //                 recipient.getId(), order.getOrderNumber());
+        //     }
+        //
+        //     // Calculate commission breakdown (15% commission rate)
+        //     BigDecimal commissionRate = new BigDecimal("0.15");
+        //     BigDecimal commission = recipientPrice.multiply(commissionRate).setScale(2, java.math.RoundingMode.HALF_UP);
+        //
+        //     // Super admin fee is 5% of commission
+        //     BigDecimal superAdminFee = commission.multiply(new BigDecimal("0.05")).setScale(2,
+        //             java.math.RoundingMode.HALF_UP);
+        //
+        //     // Tenant profit is commission minus super admin fee
+        //     BigDecimal tenantProfit = commission.subtract(superAdminFee);
+        //
+        //     // Customer pays: recipient price + commission
+        //     BigDecimal customerPayment = recipientPrice.add(commission);
+        //
+        //     // Accumulate totals
+        //     totalAgreedPrice = totalAgreedPrice.add(recipientPrice);
+        //     totalPayout = totalPayout.add(recipientPrice);
+        //     totalCommission = totalCommission.add(commission);
+        //     totalSuperAdminFee = totalSuperAdminFee.add(superAdminFee);
+        //     totalTenantProfit = totalTenantProfit.add(tenantProfit);
+        //     totalCustomerPayment = totalCustomerPayment.add(customerPayment);
+        // }
 
-            // If recipient doesn't have a price, use a default based on distance or $150
-            if (recipientPrice == null || recipientPrice.compareTo(BigDecimal.ZERO) == 0) {
-                recipientPrice = new BigDecimal("150.00");
-                recipient.setFinalAgreedPrice(recipientPrice);
-                recipientRepository.save(recipient);
-                log.info("Set default price $150 for recipient {} in order {}",
-                        recipient.getId(), order.getOrderNumber());
-            }
-
-            // Calculate commission breakdown (15% commission rate)
-            BigDecimal commissionRate = new BigDecimal("0.15");
-            BigDecimal commission = recipientPrice.multiply(commissionRate).setScale(2, java.math.RoundingMode.HALF_UP);
-
-            // Super admin fee is 5% of commission
-            BigDecimal superAdminFee = commission.multiply(new BigDecimal("0.05")).setScale(2,
-                    java.math.RoundingMode.HALF_UP);
-
-            // Tenant profit is commission minus super admin fee
-            BigDecimal tenantProfit = commission.subtract(superAdminFee);
-
-            // Customer pays: recipient price + commission
-            BigDecimal customerPayment = recipientPrice.add(commission);
-
-            // Accumulate totals
-            totalAgreedPrice = totalAgreedPrice.add(recipientPrice);
-            totalPayout = totalPayout.add(recipientPrice);
-            totalCommission = totalCommission.add(commission);
-            totalSuperAdminFee = totalSuperAdminFee.add(superAdminFee);
-            totalTenantProfit = totalTenantProfit.add(tenantProfit);
-            totalCustomerPayment = totalCustomerPayment.add(customerPayment);
-        }
-
-        // Update order with calculated values
-        order.setFinalAgreedPrice(totalAgreedPrice);
+        // REMOVED PRICING: Update order with calculated values
+        // REMOVED PRICING: order.setFinalAgreedPrice(totalAgreedPrice);
         order.setProcessServerPayout(totalPayout);
         order.setTenantCommission(totalCommission);
         order.setSuperAdminFee(totalSuperAdminFee);
@@ -1205,46 +1175,48 @@ public class OrderService {
             return;
         }
 
-        // Calculate subtotal from all recipients
-        // Match frontend logic: calculate from service flags for AUTOMATED/OPEN
-        // recipients
-        BigDecimal subtotal = order.getRecipients().stream()
-                .map(recipient -> {
-                    // Check if this is an AUTOMATED recipient that's OPEN or BIDDING
-                    boolean isAutomatedPending = recipient.getRecipientType() == OrderRecipient.RecipientType.AUTOMATED
-                            &&
-                            (recipient.getStatus() == OrderRecipient.RecipientStatus.OPEN ||
-                                    recipient.getStatus() == OrderRecipient.RecipientStatus.BIDDING);
+        // REMOVED PRICING: Calculate subtotal from all recipients
+        // REMOVED PRICING: Match frontend logic: calculate from service flags for AUTOMATED/OPEN
+        // REMOVED PRICING: recipients
+        // REMOVED PRICING: BigDecimal subtotal = order.getRecipients().stream()
+        //         .map(recipient -> {
+        //             // Check if this is an AUTOMATED recipient that's OPEN or BIDDING
+        //             boolean isAutomatedPending = recipient.getRecipientType() == OrderRecipient.RecipientType.AUTOMATED
+        //                     &&
+        //                     (recipient.getStatus() == OrderRecipient.RecipientStatus.OPEN ||
+        //                             recipient.getStatus() == OrderRecipient.RecipientStatus.BIDDING);
+        //
+        //             // Check if this is a GUIDED recipient without quoted/negotiated price
+        //             boolean isDirectStandard = recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED &&
+        //                     recipient.getQuotedPrice() == null &&
+        //                     (recipient.getFinalAgreedPrice() == null
+        //                             || recipient.getFinalAgreedPrice().compareTo(BigDecimal.ZERO) == 0);
+        //
+        //             if (isAutomatedPending || isDirectStandard) {
+        //                 // Calculate from service options (matching frontend logic)
+        //                 BigDecimal price = BigDecimal.ZERO;
+        //                 if (Boolean.TRUE.equals(recipient.getProcessService())) {
+        //                     price = price.add(new BigDecimal("75"));
+        //                 }
+        //                 if (Boolean.TRUE.equals(recipient.getCertifiedMail())) {
+        //                     price = price.add(new BigDecimal("25"));
+        //                 }
+        //                 if (Boolean.TRUE.equals(recipient.getRushService())) {
+        //                     price = price.add(new BigDecimal("50"));
+        //                 }
+        //                 if (Boolean.TRUE.equals(recipient.getRemoteLocation())) {
+        //                     price = price.add(new BigDecimal("40"));
+        //                 }
+        //                 return price;
+        //             } else {
+        //                 // Use stored finalAgreedPrice for assigned/completed recipients
+        //                 return recipient.getFinalAgreedPrice() != null ? recipient.getFinalAgreedPrice()
+        //                         : BigDecimal.ZERO;
+        //             }
+        //         })
+        //         .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-                    // Check if this is a GUIDED recipient without quoted/negotiated price
-                    boolean isDirectStandard = recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED &&
-                            recipient.getQuotedPrice() == null &&
-                            (recipient.getFinalAgreedPrice() == null
-                                    || recipient.getFinalAgreedPrice().compareTo(BigDecimal.ZERO) == 0);
-
-                    if (isAutomatedPending || isDirectStandard) {
-                        // Calculate from service options (matching frontend logic)
-                        BigDecimal price = BigDecimal.ZERO;
-                        if (Boolean.TRUE.equals(recipient.getProcessService())) {
-                            price = price.add(new BigDecimal("75"));
-                        }
-                        if (Boolean.TRUE.equals(recipient.getCertifiedMail())) {
-                            price = price.add(new BigDecimal("25"));
-                        }
-                        if (Boolean.TRUE.equals(recipient.getRushService())) {
-                            price = price.add(new BigDecimal("50"));
-                        }
-                        if (Boolean.TRUE.equals(recipient.getRemoteLocation())) {
-                            price = price.add(new BigDecimal("40"));
-                        }
-                        return price;
-                    } else {
-                        // Use stored finalAgreedPrice for assigned/completed recipients
-                        return recipient.getFinalAgreedPrice() != null ? recipient.getFinalAgreedPrice()
-                                : BigDecimal.ZERO;
-                    }
-                })
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal subtotal = BigDecimal.ZERO;
 
         // Calculate processing fee (3% of subtotal)
         BigDecimal processingFeeRate = new BigDecimal("0.03");
@@ -1259,7 +1231,7 @@ public class OrderService {
         if (order.getCustomerPaymentAmount() == null ||
                 order.getCustomerPaymentAmount().compareTo(totalAmount) != 0) {
             order.setCustomerPaymentAmount(totalAmount);
-            order.setFinalAgreedPrice(subtotal);
+            // REMOVED PRICING: order.setFinalAgreedPrice(subtotal);
 
             log.info("Recalculated totals for order {}: Subtotal=${}, ProcessingFee=${}, Total=${}",
                     order.getOrderNumber(), subtotal, processingFee, totalAmount);
@@ -1748,5 +1720,18 @@ public class OrderService {
         OrderDocument document = orderDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new RuntimeException("Document not found: " + documentId));
         return document.getOriginalFileName();
+    }
+
+    /**
+     * Generate unique order number in format ORD-YYYY-XXX
+     */
+    private String generateUniqueOrderNumber() {
+        int year = java.time.Year.now().getValue();
+        
+        // Count total orders created this year to get sequential number
+        long orderCount = orderRepository.count() + 1;
+        
+        // Format: ORD-2026-001, ORD-2026-002, etc.
+        return String.format("ORD-%d-%03d", year, orderCount);
     }
 }

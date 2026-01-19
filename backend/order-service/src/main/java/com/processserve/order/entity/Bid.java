@@ -39,6 +39,19 @@ public class Bid {
     @Column(columnDefinition = "TEXT")
     private String comment;
 
+    // Counter-offer fields for negotiation
+    @Column(name = "customer_counter_amount", precision = 10, scale = 2)
+    private BigDecimal customerCounterAmount;
+
+    @Column(name = "customer_counter_notes", columnDefinition = "TEXT")
+    private String customerCounterNotes;
+
+    @Column(name = "counter_offer_count")
+    private Integer counterOfferCount = 0;
+
+    @Column(name = "last_counter_by")
+    private String lastCounterBy; // "CUSTOMER" or "PROCESS_SERVER"
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BidStatus status;

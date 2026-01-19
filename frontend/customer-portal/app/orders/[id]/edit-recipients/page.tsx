@@ -60,6 +60,7 @@ export default function EditRecipients() {
             address: recipient.recipientAddress || recipient.address || '',
             city: recipient.city || '',
             state: recipient.state || '',
+            stateId: recipient.stateId,
             zipCode: recipient.recipientZipCode || recipient.zipCode || '',
             notes: recipient.specialInstructions || recipient.notes || '',
             assignmentType: recipient.recipientType || 'AUTOMATED',
@@ -67,7 +68,8 @@ export default function EditRecipients() {
             processService: recipient.processService || false,
             certifiedMail: recipient.certifiedMail || false,
             rushService: recipient.rushService || false,
-            remoteService: recipient.remoteLocation || false
+            remoteService: recipient.remoteLocation || false,
+            status: recipient.status || 'OPEN'
           };
         })
         setRecipients(recipientsData)
@@ -83,9 +85,10 @@ export default function EditRecipients() {
 
   const handleSubmit = async () => {
     if (recipients.length === 0 || !recipients.every(r =>
-      r.firstName && r.lastName && r.address && r.city && r.state && r.zipCode
+      r.firstName && r.lastName && r.address && r.city && r.state && r.zipCode &&
+      (r.processService || r.certifiedMail)
     )) {
-      alert('Please complete all recipient information')
+      alert('Please complete all recipient information and select at least one service method')
       return
     }
 
@@ -93,9 +96,6 @@ export default function EditRecipients() {
 
     try {
       const token = sessionStorage.getItem('token')
-
-      // Get current service options from first recipient
-      const currentRecipient = order.recipients[0]
 
       const recipientsData = recipients.map(recipient => ({
         recipientId: recipient.id, // Required for update
@@ -106,17 +106,23 @@ export default function EditRecipients() {
         recipientZipCode: recipient.zipCode,
         city: recipient.city,
         state: recipient.state,
+        stateId: recipient.stateId,
         specialInstructions: recipient.notes,
-        serviceType: currentRecipient?.serviceType || 'PROCESS_SERVICE',
-        rushService: currentRecipient?.rushService || false,
-        remoteLocation: currentRecipient?.remoteLocation || false
+        // Service options from the recipient
+        processService: recipient.processService || false,
+        certifiedMail: recipient.certifiedMail || false,
+        rushService: recipient.rushService || false,
+        remoteLocation: recipient.remoteService || false
       }))
 
       const updatePayload = {
+        orderId: params.id, // Required field
         recipientUpdates: recipientsData
       }
 
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${params.id}`, {
+      console.log('Updating recipients with payload:', updatePayload)
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${params.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -125,8 +131,19 @@ export default function EditRecipients() {
         body: JSON.stringify(updatePayload)
       })
 
-      alert('Recipients updated successfully!')
-      router.push(`/orders/${params.id}`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Update failed:', errorText)
+        throw new Error(`Failed to update: ${response.status}`)
+      }
+
+      const result = await response.json()
+      console.log('Update successful:', result)
+
+      alert('Recipients and service options updated successfully!')
+      
+      // Force reload the order page to show fresh data
+      router.push(`/orders/${params.id}?t=${Date.now()}`)
     } catch (error) {
       console.error('Failed to update recipients:', error)
       alert('Failed to update recipients. Please try again.')

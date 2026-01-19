@@ -26,8 +26,7 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
         rushService: recipient.rushService || false,
         remoteLocation: recipient.remoteLocation || false,
         processService: recipient.serviceType === 'PROCESS_SERVICE' || recipient.processService || true,
-        certifiedMail: recipient.serviceType === 'CERTIFIED_MAIL' || recipient.certifiedMail || false,
-        finalAgreedPrice: recipient.finalAgreedPrice || 0
+        certifiedMail: recipient.serviceType === 'CERTIFIED_MAIL' || recipient.certifiedMail || false
     })
 
     const [states, setStates] = useState<any[]>([])
@@ -35,11 +34,6 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
     const [contacts, setContacts] = useState<any[]>([])
     const [isSelectorOpen, setIsSelectorOpen] = useState(false)
     const [selectedServerName, setSelectedServerName] = useState('')
-
-    // Price constants
-    const BASE_PRICE = 75.00
-    const RUSH_FEE = 50.00
-    const REMOTE_FEE = 30.00
 
     useEffect(() => {
         loadStates()
@@ -108,21 +102,6 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
         setFormData({ ...formData, stateId: stateId })
     }
 
-    const calculateTotal = () => {
-        // finalAgreedPrice from backend is already base + rush + remote
-        // We need to extract the original base price by subtracting the ORIGINAL fees
-        const originalRushFee = recipient.rushServiceFee ? parseFloat(recipient.rushServiceFee) : 0
-        const originalRemoteFee = recipient.remoteLocationFee ? parseFloat(recipient.remoteLocationFee) : 0
-        const originalTotal = parseFloat(recipient.finalAgreedPrice) || 0
-        const basePrice = originalTotal - originalRushFee - originalRemoteFee
-
-        // Now calculate new total with current form selections
-        let total = basePrice
-        if (formData.rushService) total += RUSH_FEE
-        if (formData.remoteLocation) total += REMOTE_FEE
-        return total
-    }
-
     const handleSubmit = async () => {
         setLoading(true)
         try {
@@ -132,17 +111,9 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
             // Determine service type string for backend compatibility
             let serviceType = 'PROCESS_SERVICE'
             if (formData.certifiedMail && !formData.processService) serviceType = 'CERTIFIED_MAIL'
-            // If both, backend might default to PROCESS_SERVICE or need adjustment. 
-            // Assuming backend takes one 'serviceType' field, but we want to support both flags if possible.
-            // The UpdateOrderRequest.RecipientUpdate has 'serviceType' string.
-            // We'll prioritize PROCESS_SERVICE if both are checked, or send what's selected.
-
-            // Don't send finalAgreedPrice - the backend calculates it automatically
-            // based on rushService and remoteLocation flags
-            const { finalAgreedPrice, ...updateData } = formData
 
             await api.updateRecipient(recipient.id, {
-                ...updateData,
+                ...formData,
                 serviceType
             }, token!, userData.userId)
 
@@ -162,62 +133,6 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
         if (formData.recipientZipCode !== recipient.recipientZipCode) changes.push({ label: 'ZIP Code', old: recipient.recipientZipCode, new: formData.recipientZipCode })
         if (formData.rushService !== recipient.rushService) changes.push({ label: 'Rush Service', old: recipient.rushService ? 'Yes' : 'No', new: formData.rushService ? 'Yes' : 'No' })
         if (formData.remoteLocation !== recipient.remoteLocation) changes.push({ label: 'Remote Location', old: recipient.remoteLocation ? 'Yes' : 'No', new: formData.remoteLocation ? 'Yes' : 'No' })
-
-        // Price Impact - For AUTOMATED pending orders, show fee changes only
-        const isAutomatedPending = recipient.recipientType === 'AUTOMATED' &&
-            (recipient.status === 'OPEN' || recipient.status === 'BIDDING');
-
-        let oldRecipientPrice, newRecipientPrice, priceDiff;
-
-        if (isAutomatedPending) {
-            // For AUTOMATED pending, compare estimated fees only
-            const oldRushFee = recipient.rushService ? 50 : 0;
-            const oldRemoteFee = recipient.remoteLocation ? 30 : 0;
-            const newRushFee = formData.rushService ? 50 : 0;
-            const newRemoteFee = formData.remoteLocation ? 30 : 0;
-
-            oldRecipientPrice = oldRushFee + oldRemoteFee;
-            newRecipientPrice = newRushFee + newRemoteFee;
-            priceDiff = newRecipientPrice - oldRecipientPrice;
-        } else {
-            // For GUIDED or assigned AUTOMATED, use actual prices
-            const originalRushFee = recipient.rushServiceFee ? parseFloat(recipient.rushServiceFee) : 0;
-            const originalRemoteFee = recipient.remoteLocationFee ? parseFloat(recipient.remoteLocationFee) : 0;
-            oldRecipientPrice = parseFloat(recipient.finalAgreedPrice) || 0;
-            newRecipientPrice = calculateTotal();
-            priceDiff = newRecipientPrice - oldRecipientPrice;
-        }
-
-        // Calculate order totals (current and new)
-        let currentOrderTotal = 0;
-        let newOrderTotal = 0;
-
-        if (order && order.recipients) {
-            order.recipients.forEach((r: any) => {
-                if (r.id === recipient.id) {
-                    // This is the recipient being edited
-                    currentOrderTotal += oldRecipientPrice;
-                    newOrderTotal += newRecipientPrice;
-                } else {
-                    // Other recipients - add their current price
-                    const isOtherAutomatedPending = r.recipientType === 'AUTOMATED' &&
-                        (r.status === 'OPEN' || r.status === 'BIDDING');
-
-                    if (isOtherAutomatedPending) {
-                        // Add estimated fees for other AUTOMATED pending recipients
-                        const rushFee = r.rushService ? 50 : 0;
-                        const remoteFee = r.remoteLocation ? 30 : 0;
-                        currentOrderTotal += rushFee + remoteFee;
-                        newOrderTotal += rushFee + remoteFee;
-                    } else {
-                        // Add actual price for assigned/completed recipients
-                        const price = parseFloat(r.finalAgreedPrice) || 0;
-                        currentOrderTotal += price;
-                        newOrderTotal += price;
-                    }
-                }
-            });
-        }
 
         return (
             <div className="space-y-6">
@@ -242,38 +157,6 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
                         </div>
                     )}
                 </div>
-
-                {priceDiff !== 0 && (
-                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-gray-600">
-                                {isAutomatedPending ? 'New Estimated Fees' : 'New Order Total'}
-                            </span>
-                            <span className="text-2xl font-bold text-gray-900">
-                                ${isAutomatedPending ? newRecipientPrice.toFixed(2) : newOrderTotal.toFixed(2)}
-                            </span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm mb-1">
-                            <span className="text-gray-500">
-                                {isAutomatedPending ? 'Fee Change' : 'Price Impact'}
-                            </span>
-                            <span className={`font-medium ${priceDiff > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                {priceDiff > 0 ? '+' : ''}{priceDiff.toFixed(2)}
-                            </span>
-                        </div>
-                        {!isAutomatedPending && (
-                            <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-200">
-                                <span>Current Total</span>
-                                <span>${currentOrderTotal.toFixed(2)}</span>
-                            </div>
-                        )}
-                        {isAutomatedPending && (
-                            <p className="text-xs text-gray-500 mt-2 italic">
-                                * Fees will be added to accepted bid amount
-                            </p>
-                        )}
-                    </div>
-                )}
             </div>
         )
     }
@@ -448,7 +331,7 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
                                 />
                                 <div className="ml-3">
                                     <div className="font-bold text-gray-900">Rush Service</div>
-                                    <div className="text-xs text-gray-500">Expedited (+${RUSH_FEE})</div>
+                                    <div className="text-xs text-gray-500">Expedited delivery</div>
                                 </div>
                             </label>
 
@@ -461,7 +344,7 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
                                 />
                                 <div className="ml-3">
                                     <div className="font-bold text-gray-900">Remote Location</div>
-                                    <div className="text-xs text-gray-500">Hard to reach (+${REMOTE_FEE})</div>
+                                    <div className="text-xs text-gray-500">Hard to reach area</div>
                                 </div>
                             </label>
                         </div>

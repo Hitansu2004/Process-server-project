@@ -374,6 +374,23 @@ export const api = {
         return response.json()
     },
 
+    // Customer counter-offers a bid
+    async counterOfferBid(bidId: string, counterAmount: number, notes: string, token: string) {
+        const response = await fetch(`${API_URL}/api/bids/${bidId}/counter-offer`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ counterAmount, notes }),
+        })
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Failed to submit counter-offer' }))
+            throw new Error(error.error || 'Failed to submit counter-offer')
+        }
+        return response.json()
+    },
+
     async addRating(ratingData: any, token: string) {
         const response = await fetch(`${API_URL}/api/process-servers/ratings`, {
             method: 'POST',
