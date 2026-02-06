@@ -63,6 +63,45 @@ public class Order {
     @Column(name = "page_count")
     private Integer pageCount;
 
+    // Initiator/Attorney Information
+    @Enumerated(EnumType.STRING)
+    @Column(name = "initiator_type", length = 30)
+    private InitiatorType initiatorType;
+
+    @Column(name = "initiator_first_name", length = 100)
+    private String initiatorFirstName;
+
+    @Column(name = "initiator_middle_name", length = 100)
+    private String initiatorMiddleName;
+
+    @Column(name = "initiator_last_name", length = 100)
+    private String initiatorLastName;
+
+    @Column(name = "initiator_address", length = 255)
+    private String initiatorAddress;
+
+    @Column(name = "initiator_city", length = 100)
+    private String initiatorCity;
+
+    @Column(name = "initiator_state", length = 50)
+    private String initiatorState;
+
+    @Column(name = "initiator_zip_code", length = 20)
+    private String initiatorZipCode;
+
+    @Column(name = "initiator_phone", length = 20)
+    private String initiatorPhone;
+
+    // Document Service Dates
+    @Column(name = "hearing_date")
+    private LocalDateTime hearingDate;
+
+    @Column(name = "personal_service_date")
+    private LocalDateTime personalServiceDate;
+
+    @Column(name = "final_agreed_price", precision = 10, scale = 2)
+    private BigDecimal finalAgreedPrice;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private OrderStatus status;
@@ -164,6 +203,11 @@ public class Order {
         SMALL_CLAIMS,
         BANKRUPTCY,
         OTHER
+    }
+
+    public enum InitiatorType {
+        SELF_REPRESENTED,
+        ATTORNEY
     }
 
     // Requirement 8: Check if order can be edited based on status

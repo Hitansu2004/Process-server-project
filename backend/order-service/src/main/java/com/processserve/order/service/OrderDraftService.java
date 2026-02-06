@@ -119,6 +119,19 @@ public class OrderDraftService {
     }
 
     /**
+     * Delete all drafts for a customer
+     */
+    @Transactional
+    public int deleteAllCustomerDrafts(String customerId) {
+        log.info("Deleting all drafts for customer: {}", customerId);
+        List<OrderDraft> drafts = draftRepository.findByCustomerIdOrderByUpdatedAtDesc(customerId);
+        int count = drafts.size();
+        draftRepository.deleteAll(drafts);
+        log.info("Deleted {} drafts for customer: {}", count, customerId);
+        return count;
+    }
+
+    /**
      * Get draft count for customer
      */
     public long getDraftCount(String customerId) {

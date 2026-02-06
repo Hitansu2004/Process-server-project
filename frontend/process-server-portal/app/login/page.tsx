@@ -54,6 +54,14 @@ export default function LoginPage() {
                 }
             } else {
                 // Email already verified, proceed with login
+                // Check if user has PROCESS_SERVER role
+                const hasProcessServerRole = response.roles?.some((role: any) => role.role === 'PROCESS_SERVER')
+                if (!hasProcessServerRole) {
+                    setError('Access denied. This portal is for process servers only. Please use the customer portal if you are a customer.')
+                    setLoading(false)
+                    return
+                }
+                
                 localStorage.setItem('token', response.token)
                 localStorage.setItem('user', JSON.stringify(response))
 
@@ -92,6 +100,14 @@ export default function LoginPage() {
 
             if (response.ok) {
                 // OTP verified successfully, now complete the login
+                // Check if user has PROCESS_SERVER role
+                const hasProcessServerRole = pendingUserData.roles?.some((role: any) => role.role === 'PROCESS_SERVER')
+                if (!hasProcessServerRole) {
+                    setError('Access denied. This portal is for process servers only. Please use the customer portal if you are a customer.')
+                    setShowOTPModal(false)
+                    return false
+                }
+                
                 localStorage.setItem('token', pendingToken)
                 localStorage.setItem('user', JSON.stringify({ ...pendingUserData, emailVerified: true }))
 

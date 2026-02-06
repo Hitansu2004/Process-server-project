@@ -381,6 +381,14 @@ export default function Dashboard() {
                         <motion.button
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
+                            onClick={() => router.push('/pricing')}
+                            className="px-6 py-3 rounded-lg glass hover:bg-blue-500/20 transition shadow-md"
+                        >
+                            Pricing
+                        </motion.button>
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => setShowLogoutModal(true)}
                             className="px-6 py-3 rounded-lg glass hover:bg-red-500/20 transition shadow-md"
                         >

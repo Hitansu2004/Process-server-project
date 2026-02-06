@@ -704,6 +704,14 @@ export const api = {
         if (!response.ok) throw new Error('Failed to delete draft')
     },
 
+    async deleteAllDrafts(customerId: string, token: string) {
+        const response = await fetch(`${API_URL}/api/drafts/customer/${customerId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!response.ok) throw new Error('Failed to delete all drafts')
+    },
+
     async convertDraftToOrder(draftId: string, token: string) {
         const response = await fetch(`${API_URL}/api/drafts/${draftId}/convert`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -780,6 +788,30 @@ export const api = {
             headers: { 'Authorization': `Bearer ${token}` },
         })
         if (!response.ok) return []
+        return response.json()
+    },
+
+    async calculateProcessServerPricing(processServerId: string, zipCode: string, serviceOptions: {
+        processService: boolean
+        certifiedMail: boolean
+        rush: boolean
+        remote: boolean
+    }, token: string) {
+        const response = await fetch(`${API_URL}/api/process-servers/pricing/${processServerId}/calculate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                zipCode,
+                ...serviceOptions
+            }),
+        })
+        if (!response.ok) {
+            console.error('Failed to calculate pricing:', response.status)
+            return null
+        }
         return response.json()
     },
 }

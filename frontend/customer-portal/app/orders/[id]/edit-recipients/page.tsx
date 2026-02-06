@@ -16,6 +16,7 @@ export default function EditRecipients() {
   const [order, setOrder] = useState<any>(null)
   const [editability, setEditability] = useState<any>(null)
   const [recipients, setRecipients] = useState<any[]>([])
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
 
   useEffect(() => {
     loadOrderDetails()
@@ -43,6 +44,7 @@ export default function EditRecipients() {
       // Convert recipients to recipients
       if (orderData.recipients && orderData.recipients.length > 0) {
         const recipientsData = orderData.recipients.map((recipient: any) => {
+          
           // Split name if firstName/lastName not provided
           let firstName = recipient.firstName || '';
           let lastName = recipient.lastName || '';
@@ -55,8 +57,14 @@ export default function EditRecipients() {
 
           return {
             id: recipient.id || Date.now().toString(),
+            recipientEntityType: recipient.recipientEntityType || 'INDIVIDUAL',
+            organizationName: recipient.organizationName || '',
+            authorizedAgent: recipient.authorizedAgent || '',
             firstName: firstName,
             lastName: lastName,
+            middleName: recipient.middleName || '',
+            email: recipient.email || '',
+            phone: recipient.phone || '',
             address: recipient.recipientAddress || recipient.address || '',
             city: recipient.city || '',
             state: recipient.state || '',
@@ -65,6 +73,7 @@ export default function EditRecipients() {
             notes: recipient.specialInstructions || recipient.notes || '',
             assignmentType: recipient.recipientType || 'AUTOMATED',
             processServerId: recipient.assignedProcessServerId,
+            processServerName: recipient.processServerName || '',
             processService: recipient.processService || false,
             certifiedMail: recipient.certifiedMail || false,
             rushService: recipient.rushService || false,
@@ -72,6 +81,7 @@ export default function EditRecipients() {
             status: recipient.status || 'OPEN'
           };
         })
+        
         setRecipients(recipientsData)
       }
 
@@ -84,10 +94,23 @@ export default function EditRecipients() {
   }
 
   const handleSubmit = async () => {
-    if (recipients.length === 0 || !recipients.every(r =>
-      r.firstName && r.lastName && r.address && r.city && r.state && r.zipCode &&
-      (r.processService || r.certifiedMail)
-    )) {
+    // Validate each recipient based on entity type
+    const invalidRecipient = recipients.find(r => {
+      // Check entity-specific name fields
+      const hasValidName = r.recipientEntityType === 'ORGANIZATION'
+        ? !!(r.organizationName)
+        : !!(r.firstName && r.lastName)
+      
+      // Check required address fields
+      const hasAddress = !!(r.address && r.city && r.state && r.zipCode)
+      
+      // Check service options
+      const hasServiceOption = !!(r.processService || r.certifiedMail)
+      
+      return !hasValidName || !hasAddress || !hasServiceOption
+    })
+
+    if (recipients.length === 0 || invalidRecipient) {
       alert('Please complete all recipient information and select at least one service method')
       return
     }
@@ -97,30 +120,44 @@ export default function EditRecipients() {
     try {
       const token = sessionStorage.getItem('token')
 
-      const recipientsData = recipients.map(recipient => ({
-        recipientId: recipient.id, // Required for update
-        firstName: recipient.firstName,
-        lastName: recipient.lastName,
-        recipientName: `${recipient.firstName} ${recipient.lastName}`.trim(),
-        recipientAddress: recipient.address,
-        recipientZipCode: recipient.zipCode,
-        city: recipient.city,
-        state: recipient.state,
-        stateId: recipient.stateId,
-        specialInstructions: recipient.notes,
-        // Service options from the recipient
-        processService: recipient.processService || false,
-        certifiedMail: recipient.certifiedMail || false,
-        rushService: recipient.rushService || false,
-        remoteLocation: recipient.remoteService || false
-      }))
+      const recipientsData = recipients.map(recipient => {
+        // Check if this is a new recipient (ID is a timestamp)
+        const isNewRecipient = !recipient.id.includes('-') && recipient.id.length > 10
+        
+        return {
+          recipientId: isNewRecipient ? null : recipient.id,
+          isNew: isNewRecipient,
+          recipientEntityType: recipient.recipientEntityType || 'INDIVIDUAL',
+          organizationName: recipient.organizationName || null,
+          authorizedAgent: recipient.authorizedAgent || null,
+          firstName: recipient.firstName || null,
+          lastName: recipient.lastName || null,
+          middleName: recipient.middleName || null,
+          email: recipient.email || null,
+          phone: recipient.phone || null,
+          recipientName: recipient.recipientEntityType === 'ORGANIZATION'
+            ? (recipient.organizationName || '')
+            : `${recipient.firstName || ''} ${recipient.lastName || ''}`.trim(),
+          recipientAddress: recipient.address,
+          recipientZipCode: recipient.zipCode,
+          city: recipient.city,
+          state: recipient.state,
+          stateId: recipient.stateId,
+          specialInstructions: recipient.notes,
+          recipientType: recipient.assignmentType || 'AUTOMATED',
+          assignedProcessServerId: recipient.processServerId || null,
+          // Service options from the recipient
+          processService: recipient.processService || false,
+          certifiedMail: recipient.certifiedMail || false,
+          rushService: recipient.rushService || false,
+          remoteLocation: recipient.remoteService || false
+        }
+      })
 
       const updatePayload = {
         orderId: params.id, // Required field
         recipientUpdates: recipientsData
       }
-
-      console.log('Updating recipients with payload:', updatePayload)
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${params.id}`, {
         method: 'PUT',
@@ -140,10 +177,12 @@ export default function EditRecipients() {
       const result = await response.json()
       console.log('Update successful:', result)
 
-      alert('Recipients and service options updated successfully!')
+      setShowSuccessModal(true)
       
-      // Force reload the order page to show fresh data
-      router.push(`/orders/${params.id}?t=${Date.now()}`)
+      // Redirect after showing modal for 2 seconds
+      setTimeout(() => {
+        router.push(`/orders/${params.id}?t=${Date.now()}`)
+      }, 2000)
     } catch (error) {
       console.error('Failed to update recipients:', error)
       alert('Failed to update recipients. Please try again.')
@@ -235,6 +274,46 @@ export default function EditRecipients() {
             )}
           </motion.button>
         </motion.div>
+
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-2xl p-8 max-w-md mx-4 shadow-2xl"
+            >
+              <div className="text-center">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                  className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"
+                >
+                  <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                </motion.div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Success!</h3>
+                <p className="text-gray-600 mb-6">
+                  Recipients and service options updated successfully!
+                </p>
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <motion.div
+                    initial={{ width: "0%" }}
+                    animate={{ width: "100%" }}
+                    transition={{ duration: 2 }}
+                    className="h-full bg-gradient-to-r from-green-500 to-emerald-600"
+                  />
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </div>
     </div>
   )

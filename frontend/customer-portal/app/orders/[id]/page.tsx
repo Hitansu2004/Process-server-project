@@ -372,8 +372,13 @@ export default function OrderDetailsNew() {
                         <div className="flex-1">
                             <div className="flex items-center gap-4 flex-wrap">
                                 <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                                    {order.orderNumber}
+                                    {order.customName || order.orderNumber}
                                 </h1>
+                                {order.customName && (
+                                    <span className="text-lg text-gray-500 font-medium">
+                                        ({order.orderNumber})
+                                    </span>
+                                )}
                                 <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${statusConfig.bg} ${statusConfig.text} font-semibold`}>
                                     {statusConfig.icon}
                                     <span>{order.status.replace(/_/g, ' ')}</span>
@@ -456,32 +461,102 @@ export default function OrderDetailsNew() {
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <p className="text-sm text-gray-500 font-medium">Document Type</p>
-                                    <p className="text-lg font-semibold text-gray-800">
-                                        {order.documentType === 'OTHER' ? order.otherDocumentType : order.documentType?.replace(/_/g, ' ')}
-                                    </p>
-                                </div>
-                                <div className="space-y-2">
-                                    <p className="text-sm text-gray-500 font-medium">Case Number</p>
-                                    <p className="text-lg font-semibold text-gray-800">{order.caseNumber || 'N/A'}</p>
-                                </div>
-                                <div className="space-y-2 md:col-span-2">
-                                    <p className="text-sm text-gray-500 font-medium">Jurisdiction</p>
-                                    <p className="text-lg font-semibold text-gray-800">{order.jurisdiction || 'N/A'}</p>
-                                </div>
-                                {order.specialInstructions && (
-                                    <div className="space-y-2 md:col-span-2">
-                                        <p className="text-sm text-gray-500 font-medium">Special Instructions</p>
-                                        <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{order.specialInstructions}</p>
+                            {/* Single Box Layout - Like Recipients */}
+                            <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-5 border-2 border-gray-200 hover:border-blue-300 transition-all">
+                                <div className="space-y-4">
+                                    {/* Document Type */}
+                                    <div>
+                                        <p className="text-xs font-medium text-gray-500 mb-1">Document Type</p>
+                                        <p className="text-base font-semibold text-gray-800">
+                                            {order.documentType === 'OTHER' ? order.otherDocumentType : order.documentType?.replace(/_/g, ' ')}
+                                        </p>
                                     </div>
-                                )}
-                                {/* Documents List */}
-                                {order.documents && order.documents.length > 0 ? (
-                                    <div className="md:col-span-2">
-                                        <p className="text-sm text-gray-500 font-medium mb-3">Documents ({order.documents.length})</p>
-                                        <div className="space-y-2">
+                                    
+                                    {/* Case Number */}
+                                    <div>
+                                        <p className="text-xs font-medium text-gray-500 mb-1">Case Number</p>
+                                        <p className="text-base font-semibold text-gray-800">{order.caseNumber || 'N/A'}</p>
+                                    </div>
+                                    
+                                    {/* Jurisdiction */}
+                                    <div>
+                                        <p className="text-xs font-medium text-gray-500 mb-1">Jurisdiction</p>
+                                        <p className="text-base font-semibold text-gray-800">{order.jurisdiction || 'N/A'}</p>
+                                    </div>
+                                    
+                                    {/* Initiator/Filed By Information */}
+                                    {order.initiatorType && (
+                                        <>
+                                            {/* Filed By Section Header */}
+                                            <div className="pt-4 border-t-2 border-gray-200">
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <div className="p-2 bg-white rounded-lg shadow-sm">
+                                                        <User className="w-5 h-5 text-blue-600" />
+                                                    </div>
+                                                    <h3 className="text-lg font-semibold text-gray-800">Filed By</h3>
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Who are you */}
+                                            <div>
+                                                <p className="text-xs font-medium text-gray-500 mb-1">Who are you</p>
+                                                <p className="text-base font-semibold text-gray-800">
+                                                    {order.initiatorType === 'SELF_REPRESENTED' ? 'Self-Represented' :
+                                                     order.initiatorType === 'ATTORNEY' ? 'Attorney' :
+                                                     order.initiatorType === 'LAW_FIRM' ? 'Law Firm' :
+                                                     order.initiatorType === 'OTHER' ? 'Other' : order.initiatorType?.replace(/_/g, ' ')}
+                                                </p>
+                                            </div>
+                                            
+                                            {/* Name */}
+                                            {(order.initiatorFirstName || order.initiatorLastName) && (
+                                                <div>
+                                                    <p className="text-xs font-medium text-gray-500 mb-1">Name</p>
+                                                    <p className="text-base font-semibold text-gray-800">
+                                                        {[order.initiatorFirstName, order.initiatorMiddleName, order.initiatorLastName].filter(Boolean).join(' ')}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            
+                                            {/* Phone */}
+                                            {order.initiatorPhone && (
+                                                <div>
+                                                    <p className="text-xs font-medium text-gray-500 mb-1">Phone</p>
+                                                    <p className="text-base font-semibold text-gray-800 flex items-center">
+                                                        <Phone className="w-4 h-4 mr-2 text-gray-400" />
+                                                        {order.initiatorPhone}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            
+                                            {/* Address */}
+                                            {order.initiatorAddress && (
+                                                <div>
+                                                    <p className="text-xs font-medium text-gray-500 mb-1">Address</p>
+                                                    <p className="text-base font-semibold text-gray-800 flex items-center">
+                                                        <MapPin className="w-4 h-4 mr-2 text-gray-400" />
+                                                        {[order.initiatorAddress, order.initiatorCity, order.initiatorState, order.initiatorZipCode].filter(Boolean).join(', ')}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                    
+                                    {/* Special Instructions */}
+                                    {order.specialInstructions && (
+                                        <div className="pt-4 border-t-2 border-gray-200">
+                                            <p className="text-xs font-medium text-gray-500 mb-1">Special Instructions</p>
+                                            <p className="text-base font-semibold text-gray-800">{order.specialInstructions}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {/* Documents List - Outside the single box */}
+                            {order.documents && order.documents.length > 0 ? (
+                                <div className="mt-6">
+                                    <p className="text-sm text-gray-500 font-medium mb-3">Documents ({order.documents.length})</p>
+                                    <div className="space-y-2">
                                             {order.documents.map((doc: any, index: number) => (
                                                 <motion.button
                                                     key={doc.id || index}
@@ -523,10 +598,10 @@ export default function OrderDetailsNew() {
                                                 </motion.button>
                                             ))}
                                         </div>
-                                    </div>
-                                ) : order.documentUrl && (
-                                    <div className="md:col-span-2">
-                                        <motion.button
+                                </div>
+                            ) : order.documentUrl && (
+                                <div className="mt-6">
+                                    <motion.button
                                             whileHover={{ scale: 1.02 }}
                                             whileTap={{ scale: 0.98 }}
                                             onClick={async () => {
@@ -559,7 +634,6 @@ export default function OrderDetailsNew() {
                                         </motion.button>
                                     </div>
                                 )}
-                            </div>
                         </motion.div>
 
                         {/* Recipients Card */}
@@ -593,7 +667,7 @@ export default function OrderDetailsNew() {
                             </div>
 
                             <div className="space-y-4">
-                                {order.recipients?.map((recipient: any, index: number) => (
+                                {order.recipients?.sort((a: any, b: any) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0)).map((recipient: any, index: number) => (
                                     <motion.div
                                         key={recipient.id}
                                         initial={{ opacity: 0, x: -20 }}
@@ -607,33 +681,51 @@ export default function OrderDetailsNew() {
                                                     <div className="p-2 bg-white rounded-lg shadow-sm">
                                                         <User className="w-5 h-5 text-blue-600" />
                                                     </div>
-                                                    <div>
-                                                        <h3 className="font-bold text-gray-800">
-                                                            Recipient {index + 1}
-                                                            {recipient.recipientOrderNumber && (
-                                                                <span className="text-sm font-normal text-gray-500 ml-2">
-                                                                    ({recipient.recipientOrderNumber})
-                                                                </span>
-                                                            )}
-                                                        </h3>
-                                                        <p className="text-sm text-gray-600">{recipient.recipientName}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="ml-11 space-y-1">
-                                                    <p className="text-sm text-gray-700">{recipient.recipientAddress}</p>
-                                                    <p className="text-sm text-gray-600">ZIP: {recipient.recipientZipCode}</p>
-                                                </div>
-                                            </div>
-                                            <span className={`px-3 py-1 rounded-lg text-xs font-bold ${recipient.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                                                recipient.status === 'ASSIGNED' ? 'bg-purple-100 text-purple-700' :
-                                                    recipient.status === 'BIDDING' ? 'bg-yellow-100 text-yellow-700' :
-                                                        'bg-blue-100 text-blue-700'
+                                    <div>
+                                        <h3 className="font-bold text-gray-800">
+                                            Recipient {recipient.sequenceNumber || (index + 1)}
+                                            {recipient.recipientOrderNumber && (
+                                                <span className="text-sm font-normal text-gray-500 ml-2">
+                                                    ({recipient.recipientOrderNumber})
+                                                </span>
+                                            )}
+                                        </h3>
+                                        <p className="text-sm text-gray-600">{recipient.recipientName}</p>
+                                        {/* Entity Type and Assignment Type Badges */}
+                                        <div className="flex items-center gap-2 mt-2">
+                                            {recipient.recipientEntityType && (
+                                                <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${
+                                                    recipient.recipientEntityType === 'ORGANIZATION' 
+                                                    ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' 
+                                                    : 'bg-gray-100 text-gray-700 border border-gray-200'
                                                 }`}>
-                                                {recipient.status}
+                                                    {recipient.recipientEntityType === 'ORGANIZATION' ? 'Organization' : 'Individual'}
+                                                </span>
+                                            )}
+                                            <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${
+                                                recipient.recipientType === 'GUIDED' 
+                                                ? 'bg-green-100 text-green-700 border border-green-200' 
+                                                : 'bg-blue-100 text-blue-700 border border-blue-200'
+                                            }`}>
+                                                {recipient.recipientType === 'GUIDED' ? 'Direct Assignment' : 'Open Bidding'}
                                             </span>
                                         </div>
-
-                                        {/* Service Options Badges */}
+                                    </div>
+                                </div>
+                                <div className="ml-11 space-y-1">
+                                    <p className="text-sm text-gray-700">{recipient.recipientAddress}</p>
+                                    <p className="text-sm text-gray-600">ZIP: {recipient.recipientZipCode}</p>
+                                </div>
+                            </div>
+                            <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                                recipient.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                                recipient.status === 'ASSIGNED' || (recipient.recipientType === 'GUIDED' && recipient.assignedProcessServerId) ? 'bg-purple-100 text-purple-700' :
+                                recipient.status === 'BIDDING' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-blue-100 text-blue-700'
+                            }`}>
+                                {recipient.status === 'ASSIGNED' || (recipient.recipientType === 'GUIDED' && recipient.assignedProcessServerId) ? 'ASSIGNED' : recipient.status}
+                            </span>
+                        </div>                                        {/* Service Options Badges */}
                                         <div className="flex flex-wrap gap-2 mb-4">
                                             {recipient.processService && (
                                                 <span className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200">
@@ -663,56 +755,78 @@ export default function OrderDetailsNew() {
 
                                         {/* Service Options Fee - For GUIDED (Directly Assigned) Recipients Only */}
                                         {recipient.recipientType === 'GUIDED' && 
-                                         (recipient.processService || recipient.certifiedMail || recipient.rushService || recipient.remoteLocation) && (
-                                            <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-lg p-4 border border-amber-200 mb-4">
-                                                <div className="flex items-start gap-2 mb-2">
-                                                    <DollarSign className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                                                    <div className="flex-1">
-                                                        <h4 className="text-sm font-bold text-gray-800 mb-1">Service Options Fee (Estimated)</h4>
-                                                        <div className="space-y-1">
-                                                            {recipient.processService && (
-                                                                <div className="flex justify-between items-center text-xs">
-                                                                    <span className="text-gray-700">• Process Service</span>
-                                                                    <span className="font-semibold text-gray-800">$50.00</span>
+                                         (recipient.processService || recipient.certifiedMail || recipient.rushService || recipient.remoteLocation) && (() => {
+                                            // Calculate total fee
+                                            const totalFee = recipient.serviceOptionsFee || 
+                                                ((recipient.processServiceFee || 0) +
+                                                (recipient.certifiedMailFee || 0) +
+                                                (recipient.rushServiceFee || 0) +
+                                                (recipient.remoteServiceFee || 0));
+                                            
+                                            // If we have total but not individual fees, estimate equal distribution
+                                            const servicesCount = [
+                                                recipient.processService,
+                                                recipient.certifiedMail,
+                                                recipient.rushService,
+                                                recipient.remoteLocation
+                                            ].filter(Boolean).length;
+                                            
+                                            const estimatedPerService = servicesCount > 0 ? totalFee / servicesCount : 0;
+                                            
+                                            return (
+                                                <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-lg p-4 border border-amber-200 mb-4">
+                                                    <div className="flex items-start gap-2 mb-2">
+                                                        <DollarSign className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                                        <div className="flex-1">
+                                                            <h4 className="text-sm font-bold text-gray-800 mb-1">Service Options Fee (Estimated)</h4>
+                                                            <div className="space-y-1">
+                                                                {recipient.processService && (
+                                                                    <div className="flex justify-between items-center text-xs">
+                                                                        <span className="text-gray-700">• Process Service</span>
+                                                                        <span className="font-semibold text-gray-800">
+                                                                            ${(recipient.processServiceFee || estimatedPerService).toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {recipient.certifiedMail && (
+                                                                    <div className="flex justify-between items-center text-xs">
+                                                                        <span className="text-gray-700">• Certified Mail</span>
+                                                                        <span className="font-semibold text-gray-800">
+                                                                            ${(recipient.certifiedMailFee || estimatedPerService).toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {recipient.rushService && (
+                                                                    <div className="flex justify-between items-center text-xs">
+                                                                        <span className="text-gray-700">• Rush Service</span>
+                                                                        <span className="font-semibold text-gray-800">
+                                                                            ${(recipient.rushServiceFee || estimatedPerService).toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {recipient.remoteLocation && (
+                                                                    <div className="flex justify-between items-center text-xs">
+                                                                        <span className="text-gray-700">• Remote Service</span>
+                                                                        <span className="font-semibold text-gray-800">
+                                                                            ${(recipient.remoteServiceFee || estimatedPerService).toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                <div className="border-t border-amber-300 mt-2 pt-2 flex justify-between items-center">
+                                                                    <span className="text-xs font-bold text-gray-800">Total Service Options:</span>
+                                                                    <span className="text-lg font-bold text-amber-600">
+                                                                        ${totalFee.toFixed(2)}
+                                                                    </span>
                                                                 </div>
-                                                            )}
-                                                            {recipient.certifiedMail && (
-                                                                <div className="flex justify-between items-center text-xs">
-                                                                    <span className="text-gray-700">• Certified Mail</span>
-                                                                    <span className="font-semibold text-gray-800">$50.00</span>
-                                                                </div>
-                                                            )}
-                                                            {recipient.rushService && (
-                                                                <div className="flex justify-between items-center text-xs">
-                                                                    <span className="text-gray-700">• Rush Service</span>
-                                                                    <span className="font-semibold text-gray-800">$50.00</span>
-                                                                </div>
-                                                            )}
-                                                            {recipient.remoteLocation && (
-                                                                <div className="flex justify-between items-center text-xs">
-                                                                    <span className="text-gray-700">• Remote Service</span>
-                                                                    <span className="font-semibold text-gray-800">$50.00</span>
-                                                                </div>
-                                                            )}
-                                                            <div className="border-t border-amber-300 mt-2 pt-2 flex justify-between items-center">
-                                                                <span className="text-xs font-bold text-gray-800">Total Service Options:</span>
-                                                                <span className="text-lg font-bold text-amber-600">
-                                                                    ${[
-                                                                        recipient.processService ? 50 : 0,
-                                                                        recipient.certifiedMail ? 50 : 0,
-                                                                        recipient.rushService ? 50 : 0,
-                                                                        recipient.remoteLocation ? 50 : 0
-                                                                    ].reduce((a, b) => a + b, 0).toFixed(2)}
-                                                                </span>
                                                             </div>
+                                                            <p className="text-xs text-amber-700 mt-2 italic">
+                                                                * Estimated price for directly assigned orders. Final price may vary based on actual delivery requirements.
+                                                            </p>
                                                         </div>
-                                                        <p className="text-xs text-amber-700 mt-2 italic">
-                                                            * Estimated price for directly assigned orders. Final price may vary based on actual delivery requirements.
-                                                        </p>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        )}
+                                            );
+                                        })()}
 
                                         {/* REMOVED PRICING: Price display */}
 
@@ -1065,7 +1179,7 @@ export default function OrderDetailsNew() {
                             </div>
 
                             <div className="space-y-4">
-                                {order.recipients?.map((recipient: any, index: number) => {
+                                {order.recipients?.sort((a: any, b: any) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0)).map((recipient: any, index: number) => {
                                     const isAutomatedPending = recipient.recipientType === 'AUTOMATED' &&
                                         (recipient.status === 'OPEN' || recipient.status === 'BIDDING')
                                     
@@ -1074,10 +1188,17 @@ export default function OrderDetailsNew() {
                                         bid.orderRecipientId === recipient.id && bid.status === 'ACCEPTED'
                                     )
 
+                                    // Calculate estimated price for directly assigned recipients
+                                    const estimatedPrice = recipient.serviceOptionsFee || 
+                                        ((recipient.processServiceFee || 0) +
+                                        (recipient.certifiedMailFee || 0) +
+                                        (recipient.rushServiceFee || 0) +
+                                        (recipient.remoteServiceFee || 0))
+
                                     return (
                                         <div key={recipient.id} className="pb-4 border-b border-gray-200 last:border-b-0">
                                             <p className="font-medium text-gray-700 mb-2">
-                                                Recipient {index + 1}
+                                                Recipient {recipient.sequenceNumber || (index + 1)}
                                                 {recipient.recipientOrderNumber && (
                                                     <span className="text-sm font-normal text-gray-500 ml-2">
                                                         ({recipient.recipientOrderNumber})
@@ -1106,6 +1227,18 @@ export default function OrderDetailsNew() {
                                                         <span className="text-sm text-green-700 font-medium">Agreed Price:</span>
                                                         <span className="text-xl font-bold text-green-600">${acceptedBid.bidAmount.toFixed(2)}</span>
                                                     </div>
+                                                </div>
+                                            ) : recipient.recipientType === 'GUIDED' && estimatedPrice > 0 ? (
+                                                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <CheckCircle className="w-5 h-5 text-blue-600" />
+                                                        <span className="text-sm font-semibold text-blue-800">Process Server Assigned</span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-blue-200">
+                                                        <span className="text-sm text-blue-700 font-medium">Estimated Price:</span>
+                                                        <span className="text-xl font-bold text-blue-600">${estimatedPrice.toFixed(2)}</span>
+                                                    </div>
+                                                    <p className="text-xs text-blue-600 mt-2">* Estimated based on service options</p>
                                                 </div>
                                             ) : (
                                                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">

@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { api } from '@/lib/api'
 import { ArrowLeft, Save, FileText, Download } from 'lucide-react'
-import DocumentStep from '@/components/orders/create/DocumentStep'
+import DocumentStepMultiple from '@/components/orders/create/DocumentStepMultiple'
 
 export default function EditDocument() {
   const router = useRouter()
@@ -20,10 +20,22 @@ export default function EditDocument() {
     jurisdiction: '',
     documentType: '',
     deadline: '',
-    document: null as File | null,
+    documents: [] as any[], // Changed to array for DocumentStepMultiple
     existingDocumentName: undefined as string | undefined,
     existingDocumentUrl: undefined as string | undefined,
-    filePageCount: 0
+    filePageCount: 0,
+    // Initiator fields
+    initiatorType: '',
+    initiatorFirstName: '',
+    initiatorMiddleName: '',
+    initiatorLastName: '',
+    initiatorAddress: '',
+    initiatorCity: '',
+    initiatorState: '',
+    initiatorZipCode: '',
+    initiatorPhone: '',
+    hearingDate: '',
+    personalServiceDate: ''
   })
 
   useEffect(() => {
@@ -66,15 +78,38 @@ export default function EditDocument() {
         documents: orderData.documents
       })
 
+      // Prepare documents array from existing documents
+      const existingDocs = orderData.documents?.map((doc: any) => ({
+        id: doc.id || `doc-${Date.now()}-${Math.random()}`,
+        file: null,
+        uploadedUrl: `${process.env.NEXT_PUBLIC_API_URL}/api/orders/${params.id}/documents/${doc.id}`,
+        originalFileName: doc.fileName,
+        fileSize: doc.fileSize || 0,
+        pageCount: doc.pageCount || 0,
+        documentType: doc.documentType || orderData.documentType
+      })) || []
+
       setDocumentData({
         caseNumber: orderData.caseNumber || '',
         jurisdiction: orderData.jurisdiction || '',
         documentType: orderData.documentType || '',
         deadline: orderData.deadline ? new Date(orderData.deadline).toISOString().slice(0, 16) : '',
-        document: null,
+        documents: existingDocs,
         existingDocumentName: existingDocName,
         existingDocumentUrl: existingDocUrl,
-        filePageCount: orderData.pageCount || 0
+        filePageCount: orderData.pageCount || 0,
+        // Load initiator fields
+        initiatorType: orderData.initiatorType || '',
+        initiatorFirstName: orderData.initiatorFirstName || '',
+        initiatorMiddleName: orderData.initiatorMiddleName || '',
+        initiatorLastName: orderData.initiatorLastName || '',
+        initiatorAddress: orderData.initiatorAddress || '',
+        initiatorCity: orderData.initiatorCity || '',
+        initiatorState: orderData.initiatorState || '',
+        initiatorZipCode: orderData.initiatorZipCode || '',
+        initiatorPhone: orderData.initiatorPhone || '',
+        hearingDate: orderData.hearingDate ? new Date(orderData.hearingDate).toISOString().slice(0, 16) : '',
+        personalServiceDate: orderData.personalServiceDate ? new Date(orderData.personalServiceDate).toISOString().slice(0, 16) : ''
       })
 
       setLoading(false)
@@ -104,7 +139,19 @@ export default function EditDocument() {
         caseNumber: documentData.caseNumber,
         jurisdiction: documentData.jurisdiction,
         documentType: documentData.documentType.toUpperCase(),
-        deadline: new Date(documentData.deadline).toISOString()
+        deadline: new Date(documentData.deadline).toISOString(),
+        // Include initiator fields
+        initiatorType: documentData.initiatorType || null,
+        initiatorFirstName: documentData.initiatorFirstName || null,
+        initiatorMiddleName: documentData.initiatorMiddleName || null,
+        initiatorLastName: documentData.initiatorLastName || null,
+        initiatorAddress: documentData.initiatorAddress || null,
+        initiatorCity: documentData.initiatorCity || null,
+        initiatorState: documentData.initiatorState || null,
+        initiatorZipCode: documentData.initiatorZipCode || null,
+        initiatorPhone: documentData.initiatorPhone || null,
+        hearingDate: documentData.hearingDate ? new Date(documentData.hearingDate).toISOString() : null,
+        personalServiceDate: documentData.personalServiceDate ? new Date(documentData.personalServiceDate).toISOString() : null
       }
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${params.id}`, {
@@ -120,21 +167,24 @@ export default function EditDocument() {
         throw new Error('Failed to update order')
       }
 
-      // If new document was uploaded, update it separately
-      if (documentData.document) {
-        const formData = new FormData()
-        formData.append('file', documentData.document)
+      // If new documents were uploaded, upload them
+      const newDocs = documentData.documents.filter((doc: any) => doc.file && !doc.uploadedUrl)
+      if (newDocs.length > 0) {
+        for (const doc of newDocs) {
+          const formData = new FormData()
+          formData.append('file', doc.file)
 
-        const uploadResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${params.id}/document`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          body: formData
-        })
+          const uploadResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${params.id}/document`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formData
+          })
 
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload document')
+          if (!uploadResponse.ok) {
+            throw new Error('Failed to upload document')
+          }
         }
       }
 
@@ -183,132 +233,60 @@ export default function EditDocument() {
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
             Edit Document Details
           </h1>
-          <p className="text-gray-600">
-            Order: <span className="font-semibold">{order?.orderNumber}</span>
+          <p className="text-lg text-gray-700">
+            Order: <span className="font-bold text-blue-600">{order?.orderNumber || params.id}</span>
           </p>
         </motion.div>
 
+        {/* Main Content Card - Matching Create Order Style */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-6"
+          className="bg-white rounded-3xl shadow-2xl overflow-hidden mb-6"
         >
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Document Details</h3>
-          <DocumentStep
-            data={documentData}
-            onChange={setDocumentData}
-          />
-
-          {/* Show all documents in Upload section if multiple documents exist */}
-          {order?.documents && order.documents.length > 0 && (
-            <div className="mt-8 pt-8 border-t border-gray-200">
-              <h4 className="text-md font-bold text-gray-700 mb-4">All Documents ({order.documents.length})</h4>
-              <div className="space-y-3">
-                {order.documents.map((doc: any, index: number) => (
-                  <div key={doc.id || index} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <FileText className="w-5 h-5 text-blue-600" />
-                        <div>
-                          <p className="font-semibold text-gray-800">{doc.fileName || `Document ${index + 1}`}</p>
-                          <p className="text-sm text-gray-500">{doc.pageCount} pages</p>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-3">Previously uploaded document</p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={async () => {
-                          try {
-                            const token = sessionStorage.getItem('token')
-                            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${order.id}/documents/${doc.id}`, {
-                              headers: { 'Authorization': `Bearer ${token}` }
-                            })
-                            if (!response.ok) throw new Error('View failed')
-                            const blob = await response.blob()
-                            const url = window.URL.createObjectURL(blob)
-                            window.open(url, '_blank')
-                          } catch (err) {
-                            console.error('View error:', err)
-                            alert('Failed to view document.')
-                          }
-                        }}
-                        className="px-4 py-2 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                      >
-                        View
-                      </button>
-                      <button
-                        onClick={async () => {
-                          try {
-                            const token = sessionStorage.getItem('token')
-                            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${order.id}/documents/${doc.id}`, {
-                              headers: { 'Authorization': `Bearer ${token}` }
-                            })
-                            if (!response.ok) throw new Error('Download failed')
-                            const blob = await response.blob()
-                            const url = window.URL.createObjectURL(blob)
-                            const a = document.createElement('a')
-                            a.href = url
-                            a.download = doc.fileName || `document-${index + 1}.pdf`
-                            document.body.appendChild(a)
-                            a.click()
-                            window.URL.revokeObjectURL(url)
-                            document.body.removeChild(a)
-                          } catch (err) {
-                            console.error('Download error:', err)
-                            alert('Failed to download document.')
-                          }
-                        }}
-                        className="px-4 py-2 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
-                      >
-                        Download
-                      </button>
-                      <label className="px-4 py-2 text-sm bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors cursor-pointer">
-                        Replace Document
-                        <input
-                          type="file"
-                          accept=".pdf,.doc,.docx"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) {
-                              const confirmReplace = confirm(`Replace "${doc.fileName}" with "${file.name}"?`)
-                              if (confirmReplace) {
-                                setDocumentData({
-                                  ...documentData,
-                                  document: file
-                                })
-                              }
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                ))}
+          {/* Header Section */}
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
+                <FileText className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white">Document Details</h2>
+                <p className="text-blue-100 text-sm">Case information & documents</p>
               </div>
             </div>
-          )}
+          </div>
+
+          {/* Content Section */}
+          <div className="p-8">
+            <DocumentStepMultiple
+              data={documentData}
+              onChange={setDocumentData}
+            />
+          </div>
         </motion.div>
 
+        {/* Action Buttons */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex justify-between items-center gap-4"
         >
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => router.push(`/orders/${params.id}`)}
-            className="px-6 py-3 bg-white text-gray-700 rounded-xl font-medium hover:bg-gray-50 shadow-md hover:shadow-lg transition-all"
+            className="px-8 py-3 bg-white text-gray-700 rounded-xl font-semibold hover:bg-gray-50 shadow-lg hover:shadow-xl transition-all border-2 border-gray-200"
           >
             Cancel
-          </button>
+          </motion.button>
 
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleSubmit}
             disabled={saving}
-            className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? (
               <>

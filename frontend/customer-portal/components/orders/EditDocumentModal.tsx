@@ -18,7 +18,20 @@ export default function EditDocumentModal({ order, onClose, onUpdate }: EditDocu
         caseNumber: order.caseNumber || '',
         jurisdiction: order.jurisdiction || '',
         deadline: order.deadline ? new Date(order.deadline).toISOString().slice(0, 16) : '',
-        specialInstructions: order.specialInstructions || ''
+        specialInstructions: order.specialInstructions || '',
+        // Initiator fields
+        initiatorType: order.initiatorType || 'SELF_REPRESENTED',
+        initiatorFirstName: order.initiatorFirstName || '',
+        initiatorMiddleName: order.initiatorMiddleName || '',
+        initiatorLastName: order.initiatorLastName || '',
+        initiatorAddress: order.initiatorAddress || '',
+        initiatorCity: order.initiatorCity || '',
+        initiatorState: order.initiatorState || '',
+        initiatorZipCode: order.initiatorZipCode || '',
+        initiatorPhone: order.initiatorPhone || '',
+        // Date fields
+        hearingDate: order.hearingDate ? new Date(order.hearingDate).toISOString().slice(0, 16) : '',
+        personalServiceDate: order.personalServiceDate ? new Date(order.personalServiceDate).toISOString().slice(0, 16) : ''
     })
 
     const handleSubmit = async () => {
@@ -53,6 +66,26 @@ export default function EditDocumentModal({ order, onClose, onUpdate }: EditDocu
         if (oldDeadline !== newDeadline) changes.push({ label: 'Deadline', old: oldDeadline, new: newDeadline })
 
         if (formData.specialInstructions !== order.specialInstructions) changes.push({ label: 'Instructions', old: order.specialInstructions || 'None', new: formData.specialInstructions || 'None' })
+
+        // Initiator changes
+        if (formData.initiatorType !== order.initiatorType) changes.push({ label: 'Initiator Type', old: order.initiatorType || 'None', new: formData.initiatorType })
+        if (formData.initiatorFirstName !== order.initiatorFirstName) changes.push({ label: 'Initiator First Name', old: order.initiatorFirstName || 'None', new: formData.initiatorFirstName || 'None' })
+        if (formData.initiatorMiddleName !== order.initiatorMiddleName) changes.push({ label: 'Initiator Middle Name', old: order.initiatorMiddleName || 'None', new: formData.initiatorMiddleName || 'None' })
+        if (formData.initiatorLastName !== order.initiatorLastName) changes.push({ label: 'Initiator Last Name', old: order.initiatorLastName || 'None', new: formData.initiatorLastName || 'None' })
+        if (formData.initiatorAddress !== order.initiatorAddress) changes.push({ label: 'Initiator Address', old: order.initiatorAddress || 'None', new: formData.initiatorAddress || 'None' })
+        if (formData.initiatorCity !== order.initiatorCity) changes.push({ label: 'Initiator City', old: order.initiatorCity || 'None', new: formData.initiatorCity || 'None' })
+        if (formData.initiatorState !== order.initiatorState) changes.push({ label: 'Initiator State', old: order.initiatorState || 'None', new: formData.initiatorState || 'None' })
+        if (formData.initiatorZipCode !== order.initiatorZipCode) changes.push({ label: 'Initiator Zip Code', old: order.initiatorZipCode || 'None', new: formData.initiatorZipCode || 'None' })
+        if (formData.initiatorPhone !== order.initiatorPhone) changes.push({ label: 'Initiator Phone', old: order.initiatorPhone || 'None', new: formData.initiatorPhone || 'None' })
+
+        // Date changes
+        const oldHearingDate = order.hearingDate ? new Date(order.hearingDate).toLocaleString() : 'None'
+        const newHearingDate = formData.hearingDate ? new Date(formData.hearingDate).toLocaleString() : 'None'
+        if (oldHearingDate !== newHearingDate) changes.push({ label: 'Hearing Date', old: oldHearingDate, new: newHearingDate })
+
+        const oldPersonalServiceDate = order.personalServiceDate ? new Date(order.personalServiceDate).toLocaleString() : 'None'
+        const newPersonalServiceDate = formData.personalServiceDate ? new Date(formData.personalServiceDate).toLocaleString() : 'None'
+        if (oldPersonalServiceDate !== newPersonalServiceDate) changes.push({ label: 'Personal Service Date', old: oldPersonalServiceDate, new: newPersonalServiceDate })
 
         return (
             <div className="space-y-6">
@@ -174,6 +207,141 @@ export default function EditDocumentModal({ order, onClose, onUpdate }: EditDocu
                                 />
                             </div>
 
+                            {/* Hearing Date */}
+                            <div>
+                                <label className="block text-sm font-medium mb-2 text-gray-700">Hearing Date (Optional)</label>
+                                <input
+                                    type="datetime-local"
+                                    value={formData.hearingDate || ''}
+                                    onChange={(e) => setFormData({ ...formData, hearingDate: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                            </div>
+
+                            {/* Personal Service Date */}
+                            <div>
+                                <label className="block text-sm font-medium mb-2 text-gray-700">Personal Service Date (Optional)</label>
+                                <input
+                                    type="datetime-local"
+                                    value={formData.personalServiceDate || ''}
+                                    onChange={(e) => setFormData({ ...formData, personalServiceDate: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Initiator Section */}
+                        <div className="border-t pt-6">
+                            <h4 className="text-lg font-bold text-gray-900 mb-4">Who Are You?</h4>
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, initiatorType: 'SELF_REPRESENTED' })}
+                                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                                        formData.initiatorType === 'SELF_REPRESENTED'
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                                >
+                                    <div className="font-bold text-gray-900">Self-Represented</div>
+                                    <div className="text-xs text-gray-500 mt-1">Filing on your own behalf</div>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, initiatorType: 'ATTORNEY' })}
+                                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                                        formData.initiatorType === 'ATTORNEY'
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                                >
+                                    <div className="font-bold text-gray-900">Attorney</div>
+                                    <div className="text-xs text-gray-500 mt-1">Representing a client</div>
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">First Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorFirstName}
+                                        onChange={(e) => setFormData({ ...formData, initiatorFirstName: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">Middle Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorMiddleName}
+                                        onChange={(e) => setFormData({ ...formData, initiatorMiddleName: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">Last Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorLastName}
+                                        onChange={(e) => setFormData({ ...formData, initiatorLastName: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">Address</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorAddress}
+                                        onChange={(e) => setFormData({ ...formData, initiatorAddress: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">City</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorCity}
+                                        onChange={(e) => setFormData({ ...formData, initiatorCity: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">State</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorState}
+                                        onChange={(e) => setFormData({ ...formData, initiatorState: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="e.g., CA"
+                                        maxLength={2}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">Zip Code</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorZipCode}
+                                        onChange={(e) => setFormData({ ...formData, initiatorZipCode: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">Phone</label>
+                                    <input
+                                        type="tel"
+                                        value={formData.initiatorPhone}
+                                        onChange={(e) => setFormData({ ...formData, initiatorPhone: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="md:col-span-2">
                             {/* Special Instructions */}
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium mb-2 text-gray-700">Special Instructions</label>

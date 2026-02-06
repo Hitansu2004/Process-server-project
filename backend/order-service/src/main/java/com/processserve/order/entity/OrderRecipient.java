@@ -35,6 +35,36 @@ public class OrderRecipient {
     @Column(name = "recipient_order_number", length = 100)
     private String recipientOrderNumber; // e.g., ORD-2026-039-01, ORD-2026-039-02
 
+    // Recipient Entity Type (Individual or Organization)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "recipient_entity_type")
+    private RecipientEntityType recipientEntityType = RecipientEntityType.INDIVIDUAL;
+
+    // Individual recipient fields
+    @Column(name = "first_name", length = 100)
+    private String firstName;
+
+    @Column(name = "middle_name", length = 100)
+    private String middleName;
+
+    @Column(name = "last_name", length = 100)
+    private String lastName;
+
+    // Organization recipient fields
+    @Column(name = "organization_name", length = 255)
+    private String organizationName;
+
+    @Column(name = "authorized_agent", length = 255)
+    private String authorizedAgent;
+
+    // Contact information
+    @Column(name = "email", length = 255)
+    private String email;
+
+    @Column(name = "phone", length = 20)
+    private String phone;
+
+    // Legacy field for backward compatibility
     @Column(name = "recipient_name", nullable = false)
     private String recipientName;
 
@@ -115,6 +145,10 @@ public class OrderRecipient {
         GUIDED, AUTOMATED
     }
 
+    public enum RecipientEntityType {
+        INDIVIDUAL, ORGANIZATION
+    }
+
     public enum ServiceType {
         PROCESS_SERVICE, CERTIFIED_MAIL
     }
@@ -138,4 +172,18 @@ public class OrderRecipient {
 
     @Column(name = "last_edited_by", length = 100)
     private String lastEditedBy;
+
+    // Pricing fields for recipients
+    @Column(name = "base_price", precision = 10, scale = 2)
+    private BigDecimal basePrice;
+
+    @Column(name = "final_agreed_price", precision = 10, scale = 2)
+    private BigDecimal finalAgreedPrice;
+
+    @Column(name = "remote_location_fee", precision = 10, scale = 2)
+    private BigDecimal remoteLocationFee;
+
+    @Column(name = "rush_service_fee", precision = 10, scale = 2)
+    private BigDecimal rushServiceFee;
 }
+

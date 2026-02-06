@@ -39,6 +39,24 @@ public class CreateOrderRequest {
     private String caseNumber;
     private String jurisdiction;
 
+    // Initiator/Attorney Information ("Who Are You" section)
+    private String initiatorType; // SELF_REPRESENTED or ATTORNEY
+    private String initiatorFirstName;
+    private String initiatorMiddleName;
+    private String initiatorLastName;
+    private String initiatorAddress;
+    private String initiatorCity;
+    private String initiatorState;
+    private String initiatorZipCode;
+    private String initiatorPhone;
+
+    // Document Service Dates
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime hearingDate;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime personalServiceDate;
+
     private String status; // OPEN, BIDDING, etc.
 
     @NotNull(message = "At least one recipient is required")
@@ -48,6 +66,23 @@ public class CreateOrderRequest {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class RecipientRequest {
+        // Recipient Entity Type
+        private String recipientEntityType; // INDIVIDUAL or ORGANIZATION
+
+        // Individual recipient fields
+        private String firstName;
+        private String middleName;
+        private String lastName;
+
+        // Organization recipient fields
+        private String organizationName;
+        private String authorizedAgent;
+
+        // Contact information
+        private String email;
+        private String phone;
+
+        // Legacy field for backward compatibility
         @NotBlank(message = "Recipient name is required")
         private String recipientName;
 

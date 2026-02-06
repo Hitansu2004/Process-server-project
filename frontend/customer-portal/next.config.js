@@ -5,6 +5,10 @@ const nextConfig = {
     poweredByHeader: false,
     reactStrictMode: true,
     swcMinify: true,
+    generateBuildId: async () => {
+        // Force new build ID to bust cache
+        return 'build-' + Date.now()
+    },
 
     images: {
         formats: ['image/avif', 'image/webp'],

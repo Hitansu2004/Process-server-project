@@ -65,6 +65,14 @@ export default function LoginPage() {
                 }
             } else {
                 // Email already verified, proceed with login
+                // Check if user has CUSTOMER role
+                const hasCustomerRole = response.roles?.some((role: any) => role.role === 'CUSTOMER')
+                if (!hasCustomerRole) {
+                    setError('Access denied. This portal is for customers only. Please use the correct portal for your role.')
+                    setLoading(false)
+                    return
+                }
+                
                 sessionStorage.setItem('token', response.token)
                 sessionStorage.setItem('user', JSON.stringify(response))
                 sessionStorage.setItem('selectedTenant', tenantId)
@@ -91,6 +99,14 @@ export default function LoginPage() {
 
             if (response.ok) {
                 // OTP verified successfully, now complete the login
+                // Check if user has CUSTOMER role
+                const hasCustomerRole = pendingUserData.roles?.some((role: any) => role.role === 'CUSTOMER')
+                if (!hasCustomerRole) {
+                    setError('Access denied. This portal is for customers only. Please use the correct portal for your role.')
+                    setShowOTPModal(false)
+                    return false
+                }
+                
                 sessionStorage.setItem('token', pendingToken)
                 sessionStorage.setItem('user', JSON.stringify({ ...pendingUserData, emailVerified: true }))
                 sessionStorage.setItem('selectedTenant', tenantId)

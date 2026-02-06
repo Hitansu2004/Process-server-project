@@ -13,14 +13,8 @@ import { api } from '@/lib/api'
 
 interface Recipient {
     id: string
-    recipientEntityType?: 'INDIVIDUAL' | 'ORGANIZATION'
-    organizationName?: string
-    authorizedAgent?: string
     firstName: string
     lastName: string
-    middleName?: string
-    email?: string
-    phone?: string
     address: string
     city: string
     state: string
@@ -105,13 +99,10 @@ export default function CreateOrderWizard() {
                     documentType: doc.documentType
                 }))
 
-            const draftName = customName || `Draft - ${new Date().toLocaleDateString()}`
-            console.log('💾 Saving draft with name:', draftName, '| customName:', customName, '| currentDraftId:', currentDraftId)
-
             const draftData = {
                 tenantId: tenantId,
                 customerId: customerId,
-                draftName: draftName,
+                draftName: customName || `Draft - ${new Date().toLocaleDateString()}`,
                 currentStep: currentStep,
                 documentData: JSON.stringify({
                     caseNumber: documentData.caseNumber,
@@ -183,101 +174,42 @@ export default function CreateOrderWizard() {
 
             // Parse and load document data
             if (draft.documentData) {
-                try {
-                    const docData = JSON.parse(draft.documentData)
-                    
-                    // Load uploaded documents from documentsData
-                    let loadedDocuments: any[] = []
-                    if (draft.documentsData) {
-                        try {
-                            const documentsArray = JSON.parse(draft.documentsData)
-                            loadedDocuments = documentsArray.map((doc: any) => ({
-                                ...doc,
-                                uploadedUrl: doc.url || doc.uploadedUrl,
-                                isUploaded: true
-                            }))
-                            console.log('✅ Loaded documents from draft:', loadedDocuments)
-                        } catch (err) {
-                            console.warn('Failed to parse documentsData:', err)
-                        }
+                const docData = JSON.parse(draft.documentData)
+                
+                // Load uploaded documents from documentsData
+                let loadedDocuments: any[] = []
+                if (draft.documentsData) {
+                    try {
+                        const documentsArray = JSON.parse(draft.documentsData)
+                        loadedDocuments = documentsArray.map((doc: any) => ({
+                            ...doc,
+                            uploadedUrl: doc.url || doc.uploadedUrl,
+                            // Keep track if this was already uploaded
+                            isUploaded: true
+                        }))
+                        console.log('✅ Loaded documents from draft:', loadedDocuments)
+                    } catch (err) {
+                        console.warn('Failed to parse documentsData:', err)
                     }
-
-                    setDocumentData({
-                        ...docData,
-                        documents: loadedDocuments
-                    })
-                    console.log('✅ Set document data with', loadedDocuments.length, 'documents')
-                } catch (err) {
-                    console.error('Error parsing documentData:', err)
                 }
+
+                setDocumentData({
+                    ...docData,
+                    documents: loadedDocuments
+                })
+                console.log('✅ Set document data with', loadedDocuments.length, 'documents')
             }
 
             // Load recipients data
             if (draft.recipientsData) {
-                try {
-                    const recipientsData = JSON.parse(draft.recipientsData)
-                    // Ensure each recipient has proper structure with ALL required fields
-                    const safeRecipients = Array.isArray(recipientsData) ? recipientsData.map((r: any, index: number) => {
-                        // Handle old format where recipientName might exist
-                        let firstName = r.firstName || ''
-                        let lastName = r.lastName || ''
-                        
-                        // If recipientName exists (old format), parse it safely - DOUBLE CHECK
-                        if (r.recipientName && typeof r.recipientName === 'string' && r.recipientName.trim() && !firstName) {
-                            try {
-                                const nameParts = r.recipientName.split(' ')
-                                firstName = nameParts[0] || ''
-                                lastName = nameParts.slice(1).join(' ') || ''
-                            } catch (err) {
-                                console.error('Error parsing recipientName:', err)
-                                // Keep empty defaults
-                            }
-                        }
-                        
-                        return {
-                            id: r.id || `recipient-${index}`,
-                            recipientEntityType: r.recipientEntityType || 'INDIVIDUAL',
-                            firstName: firstName,
-                            middleName: r.middleName || '',
-                            lastName: lastName,
-                            organizationName: r.organizationName || '',
-                            authorizedAgent: r.authorizedAgent || '',
-                            address: r.address || '',
-                            city: r.city || '',
-                            state: r.state || '',
-                            zipCode: r.zipCode || '',
-                            email: r.email || '',
-                            phone: r.phone || '',
-                            notes: r.notes || '',
-                            stateId: r.stateId || undefined,
-                            assignmentType: r.assignmentType || 'AUTOMATED',
-                            processServerId: r.processServerId || '',
-                            processServerName: r.processServerName || '',
-                            processService: r.processService !== undefined ? r.processService : false,
-                            certifiedMail: r.certifiedMail !== undefined ? r.certifiedMail : false,
-                            rushService: r.rushService !== undefined ? r.rushService : false,
-                            remoteService: r.remoteService !== undefined ? r.remoteService : false,
-                        }
-                    }) : []
-                    setRecipients(safeRecipients)
-                    console.log('✅ Loaded recipients from draft:', safeRecipients)
-                } catch (err) {
-                    console.error('Error parsing recipientsData:', err)
-                    setRecipients([])
-                }
+                const recipientsData = JSON.parse(draft.recipientsData)
+                setRecipients(recipientsData)
             }
 
-            // Load service options data and restore custom name
+            // Load service options data
             if (draft.serviceOptionsData) {
-                try {
-                    const serviceData = JSON.parse(draft.serviceOptionsData)
-                    if (serviceData.customName) {
-                        setCustomName(serviceData.customName)
-                        console.log('✅ Restored custom name from draft:', serviceData.customName)
-                    }
-                } catch (err) {
-                    console.error('Error parsing serviceOptionsData:', err)
-                }
+                const serviceData = JSON.parse(draft.serviceOptionsData)
+                // Handle service options if needed
             }
         } catch (error) {
             console.error('Failed to load draft:', error)
@@ -342,40 +274,12 @@ export default function CreateOrderWizard() {
 
             // Set custom order name if provided
             if (orderName) {
-                const decodedName = decodeURIComponent(orderName)
-                setCustomName(decodedName)
-                console.log('✅ Set custom name from URL:', decodedName)
+                setCustomName(decodeURIComponent(orderName))
             }
 
             if (isNewOrder) {
-                console.log('🆕 New order requested - starting fresh')
-                // Clear any existing draft ID to ensure we create a NEW draft
-                setCurrentDraftId(null)
+                console.log('🆕 New order requested')
                 window.history.replaceState({}, '', window.location.pathname)
-                
-                // If we have a custom name, immediately create a draft with that name
-                // This prevents race conditions where auto-save might trigger with empty customName
-                if (orderName) {
-                    const decodedName = decodeURIComponent(orderName)
-                    const initialDraftData = {
-                        tenantId: user.roles?.[0]?.tenantId,
-                        customerId: customerId,
-                        draftName: decodedName,
-                        currentStep: 1,
-                        documentData: JSON.stringify({}),
-                        recipientsData: JSON.stringify([]),
-                        serviceOptionsData: JSON.stringify({ customName: decodedName }),
-                        isComplete: false
-                    }
-                    try {
-                        const response = await api.saveDraft(initialDraftData, token)
-                        setCurrentDraftId(response.id)
-                        console.log('✅ Created new draft with custom name:', decodedName, '| draftId:', response.id)
-                    } catch (error) {
-                        console.error('Failed to create initial draft:', error)
-                    }
-                }
-                
                 return
             }
 
@@ -394,12 +298,8 @@ export default function CreateOrderWizard() {
             // Try to load latest draft automatically
             try {
                 const latestDraft = await api.getLatestDraft(customerId, token)
-
-                console.log('📋 Latest draft found:', latestDraft)
-                
                 if (latestDraft && !latestDraft.isComplete) {
-                    // Always show dialog to let user decide
-                    console.log('📋 Showing draft dialog for:', latestDraft.draftName)
+                    // Show custom modal for draft
                     setShowDraftDialog({
                         show: true,
                         draft: latestDraft
@@ -407,6 +307,85 @@ export default function CreateOrderWizard() {
                 }
             } catch (error) {
                 console.log('No previous draft found, starting fresh')
+            }
+        }
+
+        const loadDraftData = async (id: string, token: string) => {
+            try {
+                const draft = await api.getDraft(id, token)
+                console.log('✅ Loaded draft data:', draft)
+
+                setCurrentDraftId(draft.id)
+                setCurrentStep(draft.currentStep || 1)
+
+                // Parse and load document data
+                if (draft.documentData) {
+                    const docData = JSON.parse(draft.documentData)
+                    
+                    // Load uploaded documents from documentsData
+                    let loadedDocuments: any[] = []
+                    if (draft.documentsData) {
+                        try {
+                            const documentsArray = JSON.parse(draft.documentsData)
+                            if (Array.isArray(documentsArray)) {
+                                loadedDocuments = documentsArray.map((doc: any) => ({
+                                    id: `loaded-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                    file: null,
+                                    uploadedUrl: doc.url,
+                                    originalFileName: doc.filename,
+                                    fileSize: doc.fileSize || 0,
+                                    pageCount: doc.pageCount || 0,
+                                    documentType: doc.documentType
+                                }))
+                                console.log('✅ Loaded', loadedDocuments.length, 'documents from draft')
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse documentsData:', e)
+                        }
+                    }
+                    
+                    setDocumentData({
+                        caseNumber: docData.caseNumber || '',
+                        jurisdiction: docData.jurisdiction || '',
+                        documentType: docData.documentType || '',
+                        deadline: docData.deadline || '',
+                        documents: loadedDocuments,
+                        filePageCount: docData.filePageCount || 0,
+                        // Initiator fields
+                        initiatorType: docData.initiatorType || '',
+                        initiatorFirstName: docData.initiatorFirstName || '',
+                        initiatorMiddleName: docData.initiatorMiddleName || '',
+                        initiatorLastName: docData.initiatorLastName || '',
+                        initiatorAddress: docData.initiatorAddress || '',
+                        initiatorCity: docData.initiatorCity || '',
+                        initiatorState: docData.initiatorState || '',
+                        initiatorZipCode: docData.initiatorZipCode || '',
+                        initiatorPhone: docData.initiatorPhone || '',
+                        hearingDate: docData.hearingDate || '',
+                        personalServiceDate: docData.personalServiceDate || '',
+                    })
+                }
+
+                // Parse and load recipients data
+                if (draft.recipientsData) {
+                    const recipientsData = JSON.parse(draft.recipientsData)
+                    if (Array.isArray(recipientsData)) {
+                        setRecipients(recipientsData)
+                    }
+                }
+
+                // Parse and load service options
+                if (draft.serviceOptionsData) {
+                    const serviceData = JSON.parse(draft.serviceOptionsData)
+                    if (serviceData.customName) {
+                        setCustomName(serviceData.customName)
+                    }
+                }
+
+                setLastSaved(new Date(draft.updatedAt))
+            } catch (error: any) {
+                console.error('❌ Failed to load draft:', error)
+                alert('Failed to load draft. Starting with a new order.')
             }
         }
 
@@ -441,12 +420,10 @@ export default function CreateOrderWizard() {
 
                 // Load recipients data
                 if (order.recipients && Array.isArray(order.recipients)) {
-                    const loadedRecipients = order.recipients.map((recipient: any, index: number) => {
-                        const nameParts = recipient.recipientName ? recipient.recipientName.split(' ') : []
-                        return {
+                    const loadedRecipients = order.recipients.map((recipient: any, index: number) => ({
                         id: recipient.id || `recipient-${index}`,
-                        firstName: nameParts[0] || recipient.firstName || '',
-                        lastName: nameParts.slice(1).join(' ') || recipient.lastName || '',
+                        firstName: recipient.recipientName?.split(' ')[0] || '',
+                        lastName: recipient.recipientName?.split(' ').slice(1).join(' ') || '',
                         address: recipient.recipientAddress || '',
                         city: recipient.city || '',
                         state: recipient.state || '',
@@ -463,8 +440,7 @@ export default function CreateOrderWizard() {
                         quotedPrice: recipient.quotedPrice,
                         negotiatedPrice: recipient.negotiatedPrice,
                         priceStatus: recipient.priceStatus,
-                    }
-                    })
+                    }))
                     setRecipients(loadedRecipients)
                     console.log('✅ Loaded recipients from database:', loadedRecipients)
                 }
@@ -497,20 +473,9 @@ export default function CreateOrderWizard() {
                     documentData.documentType && documentData.deadline && 
                     documentData.documents && documentData.documents.length > 0)
             case 2:
-                return recipients.length > 0 && recipients.every(r => {
-                    // Check basic fields based on entity type
-                    const hasBasicInfo = r.recipientEntityType === 'ORGANIZATION'
-                        ? !!(r.organizationName && r.address && r.city && r.state && r.zipCode)
-                        : !!(r.firstName && r.lastName && r.address && r.city && r.state && r.zipCode)
-                    
-                    // Must have at least one service option
-                    const hasServiceOption = r.processService || r.certifiedMail
-                    
-                    // If GUIDED assignment, must have process server selected
-                    const hasProcessServer = r.assignmentType === 'GUIDED' ? !!r.processServerId : true
-                    
-                    return hasBasicInfo && hasServiceOption && hasProcessServer
-                })
+                return recipients.length > 0 && recipients.every(r =>
+                    r.firstName && r.lastName && r.address && r.city && r.state && r.zipCode &&
+                    (r.processService || r.certifiedMail))
             default:
                 return true
         }
@@ -702,12 +667,6 @@ export default function CreateOrderWizard() {
                     <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
                         {isEditMode ? 'Edit Order' : 'Create New Order'}
                     </h1>
-                    {/* Order Name Display */}
-                    {customName && (
-                        <p className="text-xl font-medium text-gray-700 mt-3">
-                            {customName}
-                        </p>
-                    )}
                     <p className="text-gray-600">
                         {isEditMode ? 'Update your order details' : 'Complete the steps below to submit your request'}
                     </p>
@@ -979,66 +938,35 @@ export default function CreateOrderWizard() {
                             {/* Content */}
                             <div className="p-6">
                                 <div className="space-y-4">
-                                    {/* Draft Name */}
-                                    {showDraftDialog.draft?.draftName && (
-                                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
-                                                <p className="font-semibold text-gray-900">Draft Name</p>
                                             </div>
-                                            <p className="text-lg font-bold text-blue-600">{showDraftDialog.draft.draftName}</p>
-                                        </div>
-                                    )}
-
-                                    {/* Last Edited Time */}
-                                    {showDraftDialog.draft?.updatedAt && (
-                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                            <div className="flex items-start gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
-                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                </div>
-                                                <div className="flex-1">
-                                                    <p className="font-semibold text-gray-900 mb-1">Last edited</p>
-                                                    <p className="text-sm text-gray-700">
-                                                        {new Date(showDraftDialog.draft.updatedAt).toLocaleDateString('en-US', {
-                                                            weekday: 'long',
-                                                            year: 'numeric',
-                                                            month: 'long',
-                                                            day: 'numeric'
-                                                        })}
-                                                    </p>
-                                                    <p className="text-sm text-gray-600 mt-0.5">
-                                                        at {new Date(showDraftDialog.draft.updatedAt).toLocaleTimeString('en-US', {
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                        })}
-                                                    </p>
-                                                </div>
+                                            <div className="flex-1">
+                                                <p className="font-semibold text-gray-900 mb-1">Draft saved on</p>
+                                                <p className="text-sm text-gray-700">
+                                                    {new Date(showDraftDialog.draft.updatedAt).toLocaleDateString('en-US', {
+                                                        weekday: 'long',
+                                                        year: 'numeric',
+                                                        month: 'long',
+                                                        day: 'numeric'
+                                                    })}
+                                                </p>
+                                                <p className="text-sm text-gray-600 mt-0.5">
+                                                    at {new Date(showDraftDialog.draft.updatedAt).toLocaleTimeString('en-US', {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })}
+                                                </p>
                                             </div>
                                         </div>
-                                    )}
-
-                                    {/* Draft Progress */}
-                                    {showDraftDialog.draft?.currentStep && (
-                                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                <p className="font-semibold text-gray-900">Progress</p>
-                                            </div>
-                                            <p className="text-sm text-gray-700">
-                                                Step {showDraftDialog.draft.currentStep} of 4 completed
-                                            </p>
-                                        </div>
-                                    )}
+                                    </div>
 
                                     <p className="text-gray-600 text-sm leading-relaxed">
-                                        Would you like to continue where you left off, or start fresh with a new order?
+                                        We found a saved draft from your previous session. Would you like to continue where you left off, or start fresh with a new order?
                                     </p>
                                 </div>
 

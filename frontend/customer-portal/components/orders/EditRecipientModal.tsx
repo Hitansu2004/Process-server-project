@@ -16,11 +16,23 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState('')
     const [formData, setFormData] = useState({
-        recipientName: recipient.recipientName,
+        // Name fields (replacing recipientName)
+        firstName: recipient.firstName || '',
+        middleName: recipient.middleName || '',
+        lastName: recipient.lastName || '',
+        // Entity type and organization fields
+        recipientEntityType: recipient.recipientEntityType || 'INDIVIDUAL',
+        organizationName: recipient.organizationName || '',
+        authorizedAgent: recipient.authorizedAgent || '',
+        // Contact fields
+        email: recipient.email || '',
+        phone: recipient.phone || '',
+        // Address fields
         recipientAddress: recipient.recipientAddress,
         city: recipient.city || recipient.cityName || '',
         stateId: recipient.stateId || '',
         recipientZipCode: recipient.recipientZipCode,
+        // Assignment and service options
         recipientType: recipient.recipientType || 'AUTOMATED',
         assignedProcessServerId: recipient.assignedProcessServerId || '',
         rushService: recipient.rushService || false,
@@ -128,9 +140,21 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
 
     const renderReviewChanges = () => {
         const changes = []
-        if (formData.recipientName !== recipient.recipientName) changes.push({ label: 'Recipient Name', old: recipient.recipientName, new: formData.recipientName })
+        // Name changes
+        if (formData.firstName !== recipient.firstName) changes.push({ label: 'First Name', old: recipient.firstName || 'None', new: formData.firstName || 'None' })
+        if (formData.middleName !== recipient.middleName) changes.push({ label: 'Middle Name', old: recipient.middleName || 'None', new: formData.middleName || 'None' })
+        if (formData.lastName !== recipient.lastName) changes.push({ label: 'Last Name', old: recipient.lastName || 'None', new: formData.lastName || 'None' })
+        // Entity type and organization changes
+        if (formData.recipientEntityType !== recipient.recipientEntityType) changes.push({ label: 'Recipient Type', old: recipient.recipientEntityType || 'None', new: formData.recipientEntityType })
+        if (formData.organizationName !== recipient.organizationName) changes.push({ label: 'Organization Name', old: recipient.organizationName || 'None', new: formData.organizationName || 'None' })
+        if (formData.authorizedAgent !== recipient.authorizedAgent) changes.push({ label: 'Authorized Agent', old: recipient.authorizedAgent || 'None', new: formData.authorizedAgent || 'None' })
+        // Contact changes
+        if (formData.email !== recipient.email) changes.push({ label: 'Email', old: recipient.email || 'None', new: formData.email || 'None' })
+        if (formData.phone !== recipient.phone) changes.push({ label: 'Phone', old: recipient.phone || 'None', new: formData.phone || 'None' })
+        // Address changes
         if (formData.recipientAddress !== recipient.recipientAddress) changes.push({ label: 'Address', old: recipient.recipientAddress, new: formData.recipientAddress })
         if (formData.recipientZipCode !== recipient.recipientZipCode) changes.push({ label: 'ZIP Code', old: recipient.recipientZipCode, new: formData.recipientZipCode })
+        // Service option changes
         if (formData.rushService !== recipient.rushService) changes.push({ label: 'Rush Service', old: recipient.rushService ? 'Yes' : 'No', new: formData.rushService ? 'Yes' : 'No' })
         if (formData.remoteLocation !== recipient.remoteLocation) changes.push({ label: 'Remote Location', old: recipient.remoteLocation ? 'Yes' : 'No', new: formData.remoteLocation ? 'Yes' : 'No' })
 
@@ -182,17 +206,122 @@ export default function EditRecipientModal({ recipient, order, onClose, onUpdate
 
                 {step === 1 ? (
                     <div className="space-y-6">
-                        {/* Recipient & Address */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Recipient Entity Type Selector */}
+                        <div>
+                            <label className="block text-sm font-medium mb-2 text-gray-700">Recipient Type</label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, recipientEntityType: 'INDIVIDUAL' })}
+                                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                                        formData.recipientEntityType === 'INDIVIDUAL'
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                                >
+                                    <div className="font-bold text-gray-900">Individual</div>
+                                    <div className="text-xs text-gray-500 mt-1">Person being served</div>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, recipientEntityType: 'ORGANIZATION' })}
+                                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                                        formData.recipientEntityType === 'ORGANIZATION'
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                                >
+                                    <div className="font-bold text-gray-900">Organization</div>
+                                    <div className="text-xs text-gray-500 mt-1">Company or entity</div>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Individual Name Fields */}
+                        {formData.recipientEntityType === 'INDIVIDUAL' && (
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">First Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.firstName}
+                                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary focus:outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Middle Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.middleName}
+                                        onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
+                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary focus:outline-none"
+                                        placeholder="Optional"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Last Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.lastName}
+                                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary focus:outline-none"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Organization Fields */}
+                        {formData.recipientEntityType === 'ORGANIZATION' && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Organization Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.organizationName}
+                                        onChange={(e) => setFormData({ ...formData, organizationName: e.target.value })}
+                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary focus:outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Authorized Agent</label>
+                                    <input
+                                        type="text"
+                                        value={formData.authorizedAgent}
+                                        onChange={(e) => setFormData({ ...formData, authorizedAgent: e.target.value })}
+                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary focus:outline-none"
+                                        placeholder="Contact person"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Contact Information */}
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium mb-1 text-gray-700">Recipient Name</label>
+                                <label className="block text-sm font-medium mb-1 text-gray-700">Email</label>
                                 <input
-                                    type="text"
-                                    value={formData.recipientName}
-                                    onChange={(e) => setFormData({ ...formData, recipientName: e.target.value })}
+                                    type="email"
+                                    value={formData.email}
+                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                     className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary focus:outline-none"
+                                    placeholder="recipient@example.com"
                                 />
                             </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1 text-gray-700">Phone</label>
+                                <input
+                                    type="tel"
+                                    value={formData.phone}
+                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary focus:outline-none"
+                                    placeholder="(555) 123-4567"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Recipient Address */}
+                        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                             <div>
                                 <label className="block text-sm font-medium mb-1 text-gray-700">Address</label>
                                 <input

@@ -1,8 +1,8 @@
 package com.processserve.order.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -32,6 +32,21 @@ public class UpdateOrderRequest {
 
     private String jurisdiction;
 
+    // Initiator/Attorney Information
+    private String initiatorType;
+    private String initiatorFirstName;
+    private String initiatorMiddleName;
+    private String initiatorLastName;
+    private String initiatorAddress;
+    private String initiatorCity;
+    private String initiatorState;
+    private String initiatorZipCode;
+    private String initiatorPhone;
+
+    // Document Service Dates
+    private LocalDateTime hearingDate;
+    private LocalDateTime personalServiceDate;
+
     @Valid
     private List<RecipientUpdate> recipientUpdates;
 
@@ -43,6 +58,23 @@ public class UpdateOrderRequest {
     public static class RecipientUpdate {
         private String recipientId; // If updating existing recipient
 
+        // Recipient Entity Type
+        private String recipientEntityType; // INDIVIDUAL or ORGANIZATION
+
+        // Individual recipient fields
+        private String firstName;
+        private String middleName;
+        private String lastName;
+
+        // Organization recipient fields
+        private String organizationName;
+        private String authorizedAgent;
+
+        // Contact information
+        private String email;
+        private String phone;
+
+        // Legacy field
         @NotBlank(message = "Recipient name is required")
         private String recipientName;
 
@@ -68,10 +100,21 @@ public class UpdateOrderRequest {
 
         private Boolean certifiedMail; // Added for service options
 
+        @JsonProperty("isNew")
         private boolean isNew; // Flag to indicate this is a new recipient being added
 
+        @JsonProperty("toBeRemoved")
         private boolean toBeRemoved; // Flag to mark for deletion
 
         private String serviceType; // PROCESS_SERVICE or CERTIFIED_MAIL
+        
+        // Explicit getters for boolean fields to avoid Lombok naming issues
+        public boolean isNew() {
+            return isNew;
+        }
+        
+        public boolean isToBeRemoved() {
+            return toBeRemoved;
+        }
     }
 }

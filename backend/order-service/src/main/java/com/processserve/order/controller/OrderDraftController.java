@@ -131,6 +131,25 @@ public class OrderDraftController {
     }
 
     /**
+     * Delete all drafts for a customer
+     */
+    @DeleteMapping("/customer/{customerId}")
+    public ResponseEntity<?> deleteAllCustomerDrafts(@PathVariable String customerId) {
+        try {
+            int deleted = draftService.deleteAllCustomerDrafts(customerId);
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "All drafts deleted successfully");
+            response.put("deleted", deleted);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to delete all drafts for customer {}: {}", customerId, e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
+    }
+
+    /**
      * Convert draft to order data (Called before order creation)
      */
     @GetMapping("/{draftId}/convert")

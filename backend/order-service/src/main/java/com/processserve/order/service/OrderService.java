@@ -37,6 +37,7 @@ public class OrderService {
     private final OrderHistoryService historyService;
     private final DocumentPageCounter documentPageCounter;
     private final OrderDocumentRepository orderDocumentRepository;
+    private final ProcessServerPricingService pricingService;
 
     public Order createOrder(CreateOrderRequest request) {
         int maxRetries = 3;
@@ -125,6 +126,27 @@ public class OrderService {
         order.setCaseNumber(request.getCaseNumber());
         order.setJurisdiction(request.getJurisdiction());
 
+        // Set Initiator/Attorney Information
+        if (request.getInitiatorType() != null) {
+            try {
+                order.setInitiatorType(Order.InitiatorType.valueOf(request.getInitiatorType()));
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid initiator type: {}", request.getInitiatorType());
+            }
+        }
+        order.setInitiatorFirstName(request.getInitiatorFirstName());
+        order.setInitiatorMiddleName(request.getInitiatorMiddleName());
+        order.setInitiatorLastName(request.getInitiatorLastName());
+        order.setInitiatorAddress(request.getInitiatorAddress());
+        order.setInitiatorCity(request.getInitiatorCity());
+        order.setInitiatorState(request.getInitiatorState());
+        order.setInitiatorZipCode(request.getInitiatorZipCode());
+        order.setInitiatorPhone(request.getInitiatorPhone());
+
+        // Set Document Service Dates
+        order.setHearingDate(request.getHearingDate());
+        order.setPersonalServiceDate(request.getPersonalServiceDate());
+
         // Initialize totals
         order.setCustomerPaymentAmount(BigDecimal.ZERO);
         order.setProcessServerPayout(BigDecimal.ZERO);
@@ -152,6 +174,23 @@ public class OrderService {
             // Set recipient order number in format: ORD-2026-039-01
             recipient.setRecipientOrderNumber(String.format("%s-%02d", orderNumber, sequence));
             sequence++;
+            
+            // Set recipient entity type and name fields
+            if (recipientReq.getRecipientEntityType() != null) {
+                try {
+                    recipient.setRecipientEntityType(OrderRecipient.RecipientEntityType.valueOf(recipientReq.getRecipientEntityType()));
+                } catch (IllegalArgumentException e) {
+                    recipient.setRecipientEntityType(OrderRecipient.RecipientEntityType.INDIVIDUAL);
+                }
+            }
+            
+            recipient.setFirstName(recipientReq.getFirstName());
+            recipient.setMiddleName(recipientReq.getMiddleName());
+            recipient.setLastName(recipientReq.getLastName());
+            recipient.setOrganizationName(recipientReq.getOrganizationName());
+            recipient.setAuthorizedAgent(recipientReq.getAuthorizedAgent());
+            recipient.setEmail(recipientReq.getEmail());
+            recipient.setPhone(recipientReq.getPhone());
             
             recipient.setRecipientName(recipientReq.getRecipientName());
             recipient.setRecipientAddress(recipientReq.getRecipientAddress());
@@ -189,19 +228,38 @@ public class OrderService {
                 recipient.setRemoteLocation(recipientReq.getRemoteLocation());
                 recipient.setStatus(OrderRecipient.RecipientStatus.ASSIGNED);
                 
-                // Calculate service options fee for GUIDED orders: $50 per selected option
+                // Calculate service options fee using process server's custom pricing
                 BigDecimal serviceOptionsFee = BigDecimal.ZERO;
-                if (Boolean.TRUE.equals(recipientReq.getProcessService())) {
-                    serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
-                }
-                if (Boolean.TRUE.equals(recipientReq.getCertifiedMail())) {
-                    serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
-                }
-                if (Boolean.TRUE.equals(recipientReq.getRushService())) {
-                    serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
-                }
-                if (Boolean.TRUE.equals(recipientReq.getRemoteLocation())) {
-                    serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
+                try {
+                    ProcessServerPricingService.CalculatedPricing pricing = pricingService.calculateServiceOptions(
+                        recipientReq.getAssignedProcessServerId(),
+                        recipientReq.getRecipientZipCode(),
+                        Boolean.TRUE.equals(recipientReq.getProcessService()),
+                        Boolean.TRUE.equals(recipientReq.getCertifiedMail()),
+                        Boolean.TRUE.equals(recipientReq.getRushService()),
+                        Boolean.TRUE.equals(recipientReq.getRemoteLocation())
+                    );
+                    serviceOptionsFee = pricing.getTotalServiceOptionsFee();
+                    log.info("Calculated service options fee for PS {}, zip {}: ${}", 
+                        recipientReq.getAssignedProcessServerId(), 
+                        recipientReq.getRecipientZipCode(), 
+                        serviceOptionsFee);
+                } catch (Exception e) {
+                    log.error("Failed to calculate pricing for PS {}, falling back to $50 default", 
+                        recipientReq.getAssignedProcessServerId(), e);
+                    // Fallback to $50 per service if pricing service fails
+                    if (Boolean.TRUE.equals(recipientReq.getProcessService())) {
+                        serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
+                    }
+                    if (Boolean.TRUE.equals(recipientReq.getCertifiedMail())) {
+                        serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
+                    }
+                    if (Boolean.TRUE.equals(recipientReq.getRushService())) {
+                        serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
+                    }
+                    if (Boolean.TRUE.equals(recipientReq.getRemoteLocation())) {
+                        serviceOptionsFee = serviceOptionsFee.add(new BigDecimal("50.00"));
+                    }
                 }
                 recipient.setServiceOptionsFee(serviceOptionsFee);
                 
@@ -600,6 +658,63 @@ public class OrderService {
             order.setJurisdiction(request.getJurisdiction());
         }
 
+        // Update Initiator fields
+        if (request.getInitiatorType() != null) {
+            String currentInitiatorType = order.getInitiatorType() != null ? order.getInitiatorType().name() : null;
+            if (!request.getInitiatorType().equals(currentInitiatorType)) {
+                changes.put("initiatorType", new String[] { currentInitiatorType, request.getInitiatorType() });
+                try {
+                    order.setInitiatorType(Order.InitiatorType.valueOf(request.getInitiatorType()));
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid initiator type: {}", request.getInitiatorType());
+                }
+            }
+        }
+        if (request.getInitiatorFirstName() != null && !request.getInitiatorFirstName().equals(order.getInitiatorFirstName())) {
+            changes.put("initiatorFirstName", new String[] { order.getInitiatorFirstName(), request.getInitiatorFirstName() });
+            order.setInitiatorFirstName(request.getInitiatorFirstName());
+        }
+        if (request.getInitiatorMiddleName() != null && !request.getInitiatorMiddleName().equals(order.getInitiatorMiddleName())) {
+            changes.put("initiatorMiddleName", new String[] { order.getInitiatorMiddleName(), request.getInitiatorMiddleName() });
+            order.setInitiatorMiddleName(request.getInitiatorMiddleName());
+        }
+        if (request.getInitiatorLastName() != null && !request.getInitiatorLastName().equals(order.getInitiatorLastName())) {
+            changes.put("initiatorLastName", new String[] { order.getInitiatorLastName(), request.getInitiatorLastName() });
+            order.setInitiatorLastName(request.getInitiatorLastName());
+        }
+        if (request.getInitiatorAddress() != null && !request.getInitiatorAddress().equals(order.getInitiatorAddress())) {
+            changes.put("initiatorAddress", new String[] { order.getInitiatorAddress(), request.getInitiatorAddress() });
+            order.setInitiatorAddress(request.getInitiatorAddress());
+        }
+        if (request.getInitiatorCity() != null && !request.getInitiatorCity().equals(order.getInitiatorCity())) {
+            changes.put("initiatorCity", new String[] { order.getInitiatorCity(), request.getInitiatorCity() });
+            order.setInitiatorCity(request.getInitiatorCity());
+        }
+        if (request.getInitiatorState() != null && !request.getInitiatorState().equals(order.getInitiatorState())) {
+            changes.put("initiatorState", new String[] { order.getInitiatorState(), request.getInitiatorState() });
+            order.setInitiatorState(request.getInitiatorState());
+        }
+        if (request.getInitiatorZipCode() != null && !request.getInitiatorZipCode().equals(order.getInitiatorZipCode())) {
+            changes.put("initiatorZipCode", new String[] { order.getInitiatorZipCode(), request.getInitiatorZipCode() });
+            order.setInitiatorZipCode(request.getInitiatorZipCode());
+        }
+        if (request.getInitiatorPhone() != null && !request.getInitiatorPhone().equals(order.getInitiatorPhone())) {
+            changes.put("initiatorPhone", new String[] { order.getInitiatorPhone(), request.getInitiatorPhone() });
+            order.setInitiatorPhone(request.getInitiatorPhone());
+        }
+
+        // Update Document Service Dates
+        if (request.getHearingDate() != null && !request.getHearingDate().equals(order.getHearingDate())) {
+            String oldDate = order.getHearingDate() != null ? order.getHearingDate().toString() : null;
+            changes.put("hearingDate", new String[] { oldDate, request.getHearingDate().toString() });
+            order.setHearingDate(request.getHearingDate());
+        }
+        if (request.getPersonalServiceDate() != null && !request.getPersonalServiceDate().equals(order.getPersonalServiceDate())) {
+            String oldDate = order.getPersonalServiceDate() != null ? order.getPersonalServiceDate().toString() : null;
+            changes.put("personalServiceDate", new String[] { oldDate, request.getPersonalServiceDate().toString() });
+            order.setPersonalServiceDate(request.getPersonalServiceDate());
+        }
+
         // Log changes to history
         if (!changes.isEmpty()) {
             historyService.trackOrderEdit(order, changes, userId, "CUSTOMER"); // Assuming customer for now, or derive
@@ -738,9 +853,40 @@ public class OrderService {
         OrderRecipient recipient = new OrderRecipient();
         recipient.setId(UUID.randomUUID().toString());
         recipient.setOrder(order);
+        
+        // Set sequence number (find max and add 1)
+        int nextSequence = order.getRecipients().stream()
+            .mapToInt(OrderRecipient::getSequenceNumber)
+            .max()
+            .orElse(0) + 1;
+        recipient.setSequenceNumber(nextSequence);
+        
+        // Generate recipient order number
+        String recipientOrderNumber = order.getOrderNumber() + "-" + String.format("%02d", nextSequence);
+        recipient.setRecipientOrderNumber(recipientOrderNumber);
+        
+        // Set recipient entity type and related fields
+        if (recipientData.getRecipientEntityType() != null) {
+            try {
+                recipient.setRecipientEntityType(OrderRecipient.RecipientEntityType.valueOf(recipientData.getRecipientEntityType()));
+            } catch (IllegalArgumentException e) {
+                recipient.setRecipientEntityType(OrderRecipient.RecipientEntityType.INDIVIDUAL);
+            }
+        }
+        
+        recipient.setFirstName(recipientData.getFirstName());
+        recipient.setMiddleName(recipientData.getMiddleName());
+        recipient.setLastName(recipientData.getLastName());
+        recipient.setOrganizationName(recipientData.getOrganizationName());
+        recipient.setAuthorizedAgent(recipientData.getAuthorizedAgent());
+        recipient.setEmail(recipientData.getEmail());
+        recipient.setPhone(recipientData.getPhone());
+        
         recipient.setRecipientName(recipientData.getRecipientName());
         recipient.setRecipientAddress(recipientData.getRecipientAddress());
         recipient.setRecipientZipCode(recipientData.getRecipientZipCode());
+        recipient.setCity(recipientData.getCity());
+        recipient.setState(recipientData.getState());
 
         if ("GUIDED".equals(recipientData.getRecipientType())) {
             recipient.setRecipientType(OrderRecipient.RecipientType.GUIDED);
@@ -798,6 +944,8 @@ public class OrderService {
         // }
 
         recipient.setStatus(OrderRecipient.RecipientStatus.PENDING);
+        recipient.setProcessService(recipientData.getProcessService() != null ? recipientData.getProcessService() : false);
+        recipient.setCertifiedMail(recipientData.getCertifiedMail() != null ? recipientData.getCertifiedMail() : false);
         order.getRecipients().add(recipient);
 
         recipientRepository.save(recipient);
@@ -875,6 +1023,13 @@ public class OrderService {
     private java.util.Map<String, String[]> updateRecipientEntity(OrderRecipient recipient,
             UpdateOrderRequest.RecipientUpdate update,
             String userId) {
+        log.info("=== UPDATING RECIPIENT ENTITY ===");
+        log.info("Recipient ID: {}", recipient.getId());
+        log.info("Update recipientType from request: {}", update.getRecipientType());
+        log.info("Update assignedProcessServerId from request: {}", update.getAssignedProcessServerId());
+        log.info("Current recipient.recipientType: {}", recipient.getRecipientType());
+        log.info("Current recipient.assignedProcessServerId: {}", recipient.getAssignedProcessServerId());
+        
         java.util.Map<String, String[]> changes = new java.util.HashMap<>();
 
         if (update.getRecipientName() != null && !update.getRecipientName().equals(recipient.getRecipientName())) {
@@ -893,12 +1048,77 @@ public class OrderService {
                     new String[] { recipient.getRecipientZipCode(), update.getRecipientZipCode() });
             recipient.setRecipientZipCode(update.getRecipientZipCode());
         }
+
+        // Update recipient entity type and related fields
+        if (update.getRecipientEntityType() != null) {
+            String currentEntityType = recipient.getRecipientEntityType() != null ? recipient.getRecipientEntityType().name() : null;
+            if (!update.getRecipientEntityType().equals(currentEntityType)) {
+                changes.put("recipientEntityType", new String[] { currentEntityType, update.getRecipientEntityType() });
+                try {
+                    recipient.setRecipientEntityType(OrderRecipient.RecipientEntityType.valueOf(update.getRecipientEntityType()));
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid recipient entity type: {}", update.getRecipientEntityType());
+                }
+            }
+        }
+        if (update.getFirstName() != null && !update.getFirstName().equals(recipient.getFirstName())) {
+            changes.put("firstName", new String[] { recipient.getFirstName(), update.getFirstName() });
+            recipient.setFirstName(update.getFirstName());
+        }
+        if (update.getMiddleName() != null && !update.getMiddleName().equals(recipient.getMiddleName())) {
+            changes.put("middleName", new String[] { recipient.getMiddleName(), update.getMiddleName() });
+            recipient.setMiddleName(update.getMiddleName());
+        }
+        if (update.getLastName() != null && !update.getLastName().equals(recipient.getLastName())) {
+            changes.put("lastName", new String[] { recipient.getLastName(), update.getLastName() });
+            recipient.setLastName(update.getLastName());
+        }
+        if (update.getOrganizationName() != null && !update.getOrganizationName().equals(recipient.getOrganizationName())) {
+            changes.put("organizationName", new String[] { recipient.getOrganizationName(), update.getOrganizationName() });
+            recipient.setOrganizationName(update.getOrganizationName());
+        }
+        if (update.getAuthorizedAgent() != null && !update.getAuthorizedAgent().equals(recipient.getAuthorizedAgent())) {
+            changes.put("authorizedAgent", new String[] { recipient.getAuthorizedAgent(), update.getAuthorizedAgent() });
+            recipient.setAuthorizedAgent(update.getAuthorizedAgent());
+        }
+        if (update.getEmail() != null && !update.getEmail().equals(recipient.getEmail())) {
+            changes.put("email", new String[] { recipient.getEmail(), update.getEmail() });
+            recipient.setEmail(update.getEmail());
+        }
+        if (update.getPhone() != null && !update.getPhone().equals(recipient.getPhone())) {
+            changes.put("phone", new String[] { recipient.getPhone(), update.getPhone() });
+            recipient.setPhone(update.getPhone());
+        }
+
         if (update.getAssignedProcessServerId() != null
                 && !update.getAssignedProcessServerId().equals(recipient.getAssignedProcessServerId())) {
             changes.put("assignedProcessServerId",
                     new String[] { recipient.getAssignedProcessServerId(), update.getAssignedProcessServerId() });
             recipient.setAssignedProcessServerId(update.getAssignedProcessServerId());
         }
+        
+        // Update recipientType (AUTOMATED or GUIDED)
+        if (update.getRecipientType() != null) {
+            String currentRecipientType = recipient.getRecipientType() != null ? recipient.getRecipientType().name() : null;
+            log.info("Checking recipientType update: current={}, new={}", currentRecipientType, update.getRecipientType());
+            
+            if (!update.getRecipientType().equals(currentRecipientType)) {
+                log.info("RecipientType is changing from {} to {}", currentRecipientType, update.getRecipientType());
+                changes.put("recipientType", new String[] { currentRecipientType, update.getRecipientType() });
+                try {
+                    OrderRecipient.RecipientType newType = OrderRecipient.RecipientType.valueOf(update.getRecipientType());
+                    recipient.setRecipientType(newType);
+                    log.info("Successfully set recipientType to {}", newType);
+                } catch (IllegalArgumentException e) {
+                    log.error("Invalid recipient type value: {}", update.getRecipientType(), e);
+                }
+            } else {
+                log.info("RecipientType unchanged: {}", currentRecipientType);
+            }
+        } else {
+            log.warn("RecipientType is NULL in update request!");
+        }
+        
         // REMOVED PRICING: if (update.getFinalAgreedPrice() != null) {
         //     BigDecimal newVal = BigDecimal.valueOf(update.getFinalAgreedPrice());
         //     if (recipient.getFinalAgreedPrice() == null || newVal.compareTo(recipient.getFinalAgreedPrice()) != 0) {
@@ -951,17 +1171,34 @@ public class OrderService {
         // Recalculate service options fee for GUIDED assignments
         if (recipient.getRecipientType() == OrderRecipient.RecipientType.GUIDED) {
             BigDecimal newServiceOptionsFee = BigDecimal.ZERO;
-            if (Boolean.TRUE.equals(recipient.getProcessService())) {
-                newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
-            }
-            if (Boolean.TRUE.equals(recipient.getCertifiedMail())) {
-                newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
-            }
-            if (Boolean.TRUE.equals(recipient.getRushService())) {
-                newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
-            }
-            if (Boolean.TRUE.equals(recipient.getRemoteLocation())) {
-                newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
+            try {
+                ProcessServerPricingService.CalculatedPricing pricing = pricingService.calculateServiceOptions(
+                    recipient.getAssignedProcessServerId(),
+                    recipient.getRecipientZipCode(),
+                    Boolean.TRUE.equals(recipient.getProcessService()),
+                    Boolean.TRUE.equals(recipient.getCertifiedMail()),
+                    Boolean.TRUE.equals(recipient.getRushService()),
+                    Boolean.TRUE.equals(recipient.getRemoteLocation())
+                );
+                newServiceOptionsFee = pricing.getTotalServiceOptionsFee();
+                log.info("Recalculated service options fee for recipient {}: ${}", 
+                    recipient.getId(), newServiceOptionsFee);
+            } catch (Exception e) {
+                log.error("Failed to recalculate pricing for recipient {}, falling back to $50 default", 
+                    recipient.getId(), e);
+                // Fallback to $50 per service if pricing service fails
+                if (Boolean.TRUE.equals(recipient.getProcessService())) {
+                    newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
+                }
+                if (Boolean.TRUE.equals(recipient.getCertifiedMail())) {
+                    newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
+                }
+                if (Boolean.TRUE.equals(recipient.getRushService())) {
+                    newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
+                }
+                if (Boolean.TRUE.equals(recipient.getRemoteLocation())) {
+                    newServiceOptionsFee = newServiceOptionsFee.add(new BigDecimal("50.00"));
+                }
             }
             
             if (recipient.getServiceOptionsFee() == null || newServiceOptionsFee.compareTo(recipient.getServiceOptionsFee()) != 0) {

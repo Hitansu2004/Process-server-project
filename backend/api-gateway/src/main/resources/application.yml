@@ -20,6 +20,15 @@ spring:
           filters:
             - RewritePath=/tenant-service/(?<segment>.*), /${segment}
         
+        # Order Service - Pricing Routes (must be before user-service to match first)
+        - id: order-service-pricing
+          uri: lb://ORDER-SERVICE
+          order: -1
+          predicates:
+            - Path=/api/process-servers/pricing,/api/process-servers/pricing/**
+          filters:
+            - RewritePath=/api/(?<segment>.*), /api/${segment}
+        
         # Order Service - Orders Routes
         - id: order-service-orders
           uri: lb://ORDER-SERVICE
@@ -28,11 +37,38 @@ spring:
           filters:
             - RewritePath=/api/(?<segment>.*), /api/${segment}
         
-        # User Service Routes
+        # User Service - Process Server Profile GET
+        - id: user-service-ps-profile
+          uri: lb://USER-SERVICE
+          predicates:
+            - Path=/api/process-servers/{segment}
+            - Method=GET
+          filters:
+            - RewritePath=/api/(?<segment>.*), /api/${segment}
+        
+        # User Service - Process Server POST (create profile)
+        - id: user-service-ps-create
+          uri: lb://USER-SERVICE
+          predicates:
+            - Path=/api/process-servers
+            - Method=POST
+          filters:
+            - RewritePath=/api/(?<segment>.*), /api/${segment}
+        
+        # User Service - Other Process Server Routes
+        - id: user-service-ps-other
+          uri: lb://USER-SERVICE
+          order: 100
+          predicates:
+            - Path=/api/process-servers/**
+          filters:
+            - RewritePath=/api/(?<segment>.*), /api/${segment}
+        
+        # User Service - Other Routes
         - id: user-service
           uri: lb://USER-SERVICE
           predicates:
-            - Path=/api/users/**,/api/customers/**,/api/delivery-persons/**,/api/contact-book/**,/api/process-servers/**
+            - Path=/api/users/**,/api/customers/**,/api/delivery-persons/**,/api/contact-book/**
           filters:
             - RewritePath=/api/(?<segment>.*), /api/${segment}
         

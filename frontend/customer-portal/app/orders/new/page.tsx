@@ -32,6 +32,14 @@ interface ContactEntry {
 }
 
 interface Recipient {
+    recipientEntityType?: string
+    firstName?: string
+    middleName?: string
+    lastName?: string
+    organizationName?: string
+    authorizedAgent?: string
+    email?: string
+    phone?: string
     recipientName: string
     recipientAddress: string
     recipientCity: string
@@ -372,11 +380,30 @@ export default function NewOrder() {
         otherDocumentType: '',
         caseNumber: '',
         jurisdiction: '',
+        initiatorType: '',
+        initiatorFirstName: '',
+        initiatorMiddleName: '',
+        initiatorLastName: '',
+        initiatorAddress: '',
+        initiatorCity: '',
+        initiatorState: '',
+        initiatorZipCode: '',
+        initiatorPhone: '',
+        hearingDate: '',
+        personalServiceDate: '',
     })
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [filePageCount, setFilePageCount] = useState<number | null>(null)
     const [isDragging, setIsDragging] = useState(false)
     const [recipients, setRecipients] = useState<Recipient[]>([{
+        recipientEntityType: 'INDIVIDUAL',
+        firstName: '',
+        middleName: '',
+        lastName: '',
+        organizationName: '',
+        authorizedAgent: '',
+        email: '',
+        phone: '',
         recipientName: '',
         recipientAddress: '',
         recipientCity: '',
@@ -570,6 +597,14 @@ export default function NewOrder() {
 
     const addRecipient = () => {
         const newRecipient = {
+            recipientEntityType: 'INDIVIDUAL',
+            firstName: '',
+            middleName: '',
+            lastName: '',
+            organizationName: '',
+            authorizedAgent: '',
+            email: '',
+            phone: '',
             recipientName: '',
             recipientAddress: '',
             recipientCity: '',
@@ -845,6 +880,133 @@ export default function NewOrder() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="card space-y-6">
+                    {/* Who Are You Section */}
+                    <div className="glass rounded-xl p-6 border border-gray-200 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                            <span className="text-2xl">👤</span> Who Are You?
+                        </h3>
+
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-medium mb-2">I am:</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, initiatorType: 'SELF_REPRESENTED' })}
+                                        className={`p-4 rounded-lg border-2 transition-all ${
+                                            formData.initiatorType === 'SELF_REPRESENTED'
+                                                ? 'border-blue-500 bg-blue-50'
+                                                : 'border-gray-200 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <div className="font-semibold">Self-Represented</div>
+                                        <div className="text-sm text-gray-600">Filing on my own behalf</div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, initiatorType: 'ATTORNEY' })}
+                                        className={`p-4 rounded-lg border-2 transition-all ${
+                                            formData.initiatorType === 'ATTORNEY'
+                                                ? 'border-blue-500 bg-blue-50'
+                                                : 'border-gray-200 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <div className="font-semibold">Attorney</div>
+                                        <div className="text-sm text-gray-600">Representing a client</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">First Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorFirstName}
+                                        onChange={(e) => setFormData({ ...formData, initiatorFirstName: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="First Name"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Middle Name (Optional)</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorMiddleName}
+                                        onChange={(e) => setFormData({ ...formData, initiatorMiddleName: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="Middle Name"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Last Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorLastName}
+                                        onChange={(e) => setFormData({ ...formData, initiatorLastName: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="Last Name"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Address</label>
+                                <input
+                                    type="text"
+                                    value={formData.initiatorAddress}
+                                    onChange={(e) => setFormData({ ...formData, initiatorAddress: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="Street Address"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium mb-2">City</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorCity}
+                                        onChange={(e) => setFormData({ ...formData, initiatorCity: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="City"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">State</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorState}
+                                        onChange={(e) => setFormData({ ...formData, initiatorState: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="State"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">ZIP Code</label>
+                                    <input
+                                        type="text"
+                                        value={formData.initiatorZipCode}
+                                        onChange={(e) => setFormData({ ...formData, initiatorZipCode: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="ZIP"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Phone Number</label>
+                                <input
+                                    type="tel"
+                                    value={formData.initiatorPhone}
+                                    onChange={(e) => setFormData({ ...formData, initiatorPhone: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="(555) 123-4567"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Document Details */}
                     <div className="glass rounded-xl p-6 border border-gray-200 shadow-sm">
                         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -918,6 +1080,26 @@ export default function NewOrder() {
                                     onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
                                     className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
                                     required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Hearing Date (Optional)</label>
+                                <input
+                                    type="datetime-local"
+                                    value={formData.hearingDate}
+                                    onChange={(e) => setFormData({ ...formData, hearingDate: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Personal Service Date (Optional)</label>
+                                <input
+                                    type="datetime-local"
+                                    value={formData.personalServiceDate}
+                                    onChange={(e) => setFormData({ ...formData, personalServiceDate: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
                                 />
                             </div>
                         </div>
@@ -1097,6 +1279,42 @@ export default function NewOrder() {
                                                 required
                                             />
                                         </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">Middle Name (Optional)</label>
+                                            <input
+                                                type="text"
+                                                value={recipient.middleName || ''}
+                                                onChange={(e) => updateRecipient(index, 'middleName', e.target.value)}
+                                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                                placeholder="Middle"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">Email (Optional)</label>
+                                            <input
+                                                type="email"
+                                                value={recipient.email || ''}
+                                                onChange={(e) => updateRecipient(index, 'email', e.target.value)}
+                                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                                placeholder="email@example.com"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">Phone (Optional)</label>
+                                            <input
+                                                type="tel"
+                                                value={recipient.phone || ''}
+                                                onChange={(e) => updateRecipient(index, 'phone', e.target.value)}
+                                                className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
+                                                placeholder="(555) 123-4567"
+                                            />
+                                        </div>
+
                                         <div>
                                             <label className="block text-sm font-medium mb-2">Address</label>
                                             <input
@@ -1109,6 +1327,20 @@ export default function NewOrder() {
                                             />
                                         </div>
 
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">ZIP Code</label>
+                                            <input
+                                                type="text"
+                                                value={recipient.recipientZipCode}
+                                                onChange={(e) => updateRecipient(index, 'recipientZipCode', e.target.value)}
+                                                className="w-full px-4 py-3 rounded-lg glass"
+                                                placeholder="Enter ZIP code"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                         <div>
                                             <label className="block text-sm font-medium mb-2">State *</label>
                                             <select
@@ -1134,18 +1366,6 @@ export default function NewOrder() {
                                                 onChange={(e) => updateRecipient(index, 'recipientCity', e.target.value)}
                                                 className="w-full px-4 py-3 rounded-lg glass focus:outline-none focus:ring-2 focus:ring-primary"
                                                 placeholder="Enter city name"
-                                                required
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2">ZIP Code</label>
-                                            <input
-                                                type="text"
-                                                value={recipient.recipientZipCode}
-                                                onChange={(e) => updateRecipient(index, 'recipientZipCode', e.target.value)}
-                                                className="w-full px-4 py-3 rounded-lg glass"
-                                                placeholder="Enter ZIP code"
                                                 required
                                             />
                                         </div>
