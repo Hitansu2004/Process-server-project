@@ -116,7 +116,8 @@ docs/_build/
 out/
 
 # Deployment Folder (For server deployment only, not for GitHub)
-deployment/
+# deployment/  ← COMMENTED OUT so deployment scripts can be used by GitHub Actions
+
 
 # Configuration Files (Server-specific)
 nginx.conf
