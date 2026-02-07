@@ -1,0 +1,167 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Services to deploy (comma-separated: order-service,customer-portal,etc or "all")'
+        required: true
+        default: 'all'
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://app.ezcollab.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Display Deployment Plan
+        run: |
+          echo "🎯 Production Deployment Plan"
+          echo "=============================="
+          echo "Server: ${{ secrets.VPS_HOST }}"
+          echo "Services: ${{ github.event.inputs.services }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo ""
+          echo "⚠️  PRODUCTION DEPLOYMENT - Requires approval"
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      
+      - name: Transfer Deployment Scripts
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          echo "📦 Transferring deployment scripts..."
+          scp -P $VPS_PORT -r deployment $VPS_USER@$VPS_HOST:/home/ubuntu/
+          scp -P $VPS_PORT -r backend $VPS_USER@$VPS_HOST:/home/ubuntu/deployment-temp/
+          scp -P $VPS_PORT -r frontend $VPS_USER@$VPS_HOST:/home/ubuntu/deployment-temp/
+      
+      - name: Deploy Services
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          SERVICES: ${{ github.event.inputs.services }}
+        run: |
+          echo "🚀 Starting production deployment..."
+          
+          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+            set -e
+            cd /home/ubuntu/deployment
+            
+            # Source common functions
+            source common.sh
+            
+            # Function to deploy a service
+            deploy_service() {
+              local service=$1
+              echo "🔄 Deploying $service..."
+              
+              case $service in
+                "order-service"|"auth-service"|"user-service"|"tenant-service"|"notification-service"|"api-gateway"|"discovery-server")
+                  bash deploy_${service}.sh
+                  ;;
+                "customer-portal"|"admin-panel"|"home-page"|"process-server-portal"|"super-admin")
+                  bash deploy_${service}.sh
+                  ;;
+                *)
+                  echo "⚠️  Unknown service: $service"
+                  ;;
+              esac
+            }
+            
+            # Parse services to deploy
+            SERVICES="${SERVICES:-all}"
+            
+            if [ "$SERVICES" = "all" ]; then
+              echo "📋 Deploying ALL services..."
+              
+              # Deploy backend services
+              for service in discovery-server api-gateway auth-service user-service tenant-service order-service notification-service; do
+                deploy_service $service
+                sleep 5  # Wait between services for stability
+              done
+              
+              # Deploy frontend services
+              for service in home-page customer-portal process-server-portal admin-panel super-admin; do
+                deploy_service $service
+                sleep 3
+              done
+            else
+              echo "📋 Deploying selected services: $SERVICES"
+              IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES"
+              for service in "${SERVICE_ARRAY[@]}"; do
+                service=$(echo $service | xargs)  # Trim whitespace
+                deploy_service $service
+                sleep 3
+              done
+            fi
+            
+            echo "✅ Deployment completed!"
+          ENDSSH
+      
+      - name: Verify Deployment
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          echo "🔍 Verifying deployment..."
+          
+          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+            echo "📊 Service Status:"
+            sudo systemctl status discovery-server --no-pager | head -5
+            sudo systemctl status api-gateway --no-pager | head -5
+            sudo systemctl status order-service --no-pager | head -5
+            
+            echo ""
+            echo "🌐 Testing endpoints..."
+            curl -s -o /dev/null -w "Discovery Server: %{http_code}\n" http://localhost:8761 || true
+            curl -s -o /dev/null -w "API Gateway: %{http_code}\n" http://localhost:8080/actuator/health || true
+            
+            echo ""
+            echo "✅ Deployment verification complete"
+          ENDSSH
+      
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "✅ Production deployment completed successfully!"
+          echo ""
+          echo "📊 Deployment Details:"
+          echo "   Services: ${{ github.event.inputs.services }}"
+          echo "   Deployed by: ${{ github.actor }}"
+          echo "   Timestamp: $(date)"
+          echo ""
+          echo "🌐 Live at: https://app.ezcollab.com"
+      
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "❌ Production deployment failed!"
+          echo "Please check the logs above and verify server status"
+          exit 1
