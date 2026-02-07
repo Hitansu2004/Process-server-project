@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       services:
-        description: 'Services to deploy (comma-separated: order-service,customer-portal,etc or "all")'
+        description: 'Services to deploy (comma-separated: order-service,customer-portal,home-page,etc or "all")'
         required: true
         default: 'all'
 
@@ -49,177 +49,178 @@ jobs:
         with:
           node-version: '24'
       
-      - name: Build Services
-        env:
-          SERVICES: ${{ github.event.inputs.services }}
+      - name: Build Backend Services
         run: |
-          echo "🔨 Building services in GitHub Actions..."
+          echo "🔨 Building backend services..."
           
-          # Function to build a service
-          build_service() {
+          SERVICES="${{ github.event.inputs.services }}"
+          
+          build_backend_service() {
             local service=$1
-            echo "🔨 Building $service..."
-            
-            case $service in
-              "home-page"|"customer-portal"|"process-server-portal"|"admin-panel"|"super-admin")
-                cd frontend/$service
-                npm install
-                npm run build
-                echo "✅ Built frontend: $service"
-                cd ../..
-                ;;
-                
-              "order-service"|"auth-service"|"user-service"|"tenant-service"|"notification-service"|"api-gateway"|"discovery-server")
-                cd backend/$service
-                mvn clean package -DskipTests
-                echo "✅ Built backend: $service"
-                cd ../..
-                ;;
-                
-              *)
-                echo "⚠️  Unknown service: $service"
-                ;;
-            esac
+            echo "📦 Building $service..."
+            cd backend/$service
+            mvn clean package -DskipTests
+            echo "✅ Built $service"
+            cd ../..
           }
           
-          # Parse services to build
-          SERVICES="${SERVICES:-all}"
-          
           if [ "$SERVICES" = "all" ]; then
-            echo "📋 Building ALL services..."
-            
-            # Build backend services
             for service in discovery-server api-gateway auth-service user-service tenant-service order-service notification-service; do
-              build_service $service
-            done
-            
-            # Build frontend services
-            for service in home-page customer-portal process-server-portal admin-panel super-admin; do
-              build_service $service
+              build_backend_service $service
             done
           else
-            echo "📋 Building selected services: $SERVICES"
             IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES"
             for service in "${SERVICE_ARRAY[@]}"; do
-              service=$(echo $service | xargs)  # Trim whitespace
-              build_service $service
+              service=$(echo $service | xargs)
+              case $service in
+                "order-service"|"auth-service"|"user-service"|"tenant-service"|"notification-service"|"api-gateway"|"discovery-server")
+                  build_backend_service $service
+                  ;;
+              esac
             done
           fi
-          
-          echo "✅ All builds completed!"
       
-      - name: Deploy Services
+      - name: Build Frontend Services
+        run: |
+          echo "🔨 Building frontend services..."
+          
+          SERVICES="${{ github.event.inputs.services }}"
+          
+          build_frontend_service() {
+            local service=$1
+            echo "� Building $service..."
+            cd frontend/$service
+            npm install
+            npm run build
+            echo "✅ Built $service"
+            cd ../..
+          }
+          
+          if [ "$SERVICES" = "all" ]; then
+            for service in home-page customer-portal process-server-portal admin-panel super-admin; do
+              build_frontend_service $service
+            done
+          else
+            IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES"
+            for service in "${SERVICE_ARRAY[@]}"; do
+              service=$(echo $service | xargs)
+              case $service in
+                "home-page"|"customer-portal"|"process-server-portal"|"admin-panel"|"super-admin")
+                  build_frontend_service $service
+                  ;;
+              esac
+            done
+          fi
+      
+      - name: Deploy Backend Services
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
-          SERVICES: ${{ github.event.inputs.services }}
         run: |
-          echo "🚀 Deploying BUILT artifacts to production..."
+          echo "🚀 Deploying backend services..."
           
-          # Function to deploy a single service
-          deploy_service() {
+          SERVICES="${{ github.event.inputs.services }}"
+          
+          deploy_backend_service() {
             local service=$1
-            echo "📦 Deploying $service..."
+            echo "📦 Deploying $service to production..."
             
-            case $service in
-              "home-page"|"customer-portal"|"process-server-portal"|"admin-panel"|"super-admin")
-                echo "📦 Deploying $service frontend (built .next folder)..."
-                cd frontend/$service
-                
-                # Create deployment package with BUILT files
-                tar -czf ${service}-built.tar.gz \
-                  .next \
-                  public \
-                  package.json \
-                  package-lock.json \
-                  next.config.js \
-                  || true
-                
-                # Transfer to server
-                scp -P $VPS_PORT ${service}-built.tar.gz $VPS_USER@$VPS_HOST:/home/ubuntu/apps/$service/
-                rm ${service}-built.tar.gz
-                
-                # Deploy on server
-                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST <<ENDSSH
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-cd /home/ubuntu/apps/$service
-
-# Extract built files
-tar -xzf ${service}-built.tar.gz
-rm ${service}-built.tar.gz
-
-# Install ONLY production dependencies (no devDependencies)
-npm install --production
-
-# Create production env file
-echo "NEXT_PUBLIC_API_URL=https://app.ezcollab.com" > .env.production
-
-# Restart service
-sudo systemctl restart $service
-
-echo "✅ Deployed $service"
-ENDSSH
-                cd ../..
-                ;;
-                
-              "order-service"|"auth-service"|"user-service"|"tenant-service"|"notification-service"|"api-gateway"|"discovery-server")
-                echo "📦 Deploying $service backend (JAR file)..."
-                cd backend/$service
-                
-                # Transfer BUILT JAR to server
-                scp -P $VPS_PORT target/${service}-1.0.0.jar $VPS_USER@$VPS_HOST:/home/ubuntu/apps/$service/
-                
-                # Restart service
-                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST <<ENDSSH
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-sudo systemctl restart $service
-echo "✅ Deployed $service"
-ENDSSH
-                cd ../..
-                ;;
-                
-              *)
-                echo "⚠️  Unknown service: $service"
-                ;;
-            esac
+            # Transfer JAR file
+            scp -P $VPS_PORT backend/$service/target/${service}-1.0.0.jar $VPS_USER@$VPS_HOST:/home/ubuntu/apps/$service/
+            
+            # Restart service
+            ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+              export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+              sudo systemctl restart SERVICE_NAME
+              echo "✅ Deployed SERVICE_NAME"
+          ENDSSH
           }
           
-          # Parse services to deploy
-          SERVICES="${SERVICES:-all}"
+          if [ "$SERVICES" = "all" ]; then
+            # Deploy backend services in order (dependencies first)
+            for service in discovery-server api-gateway auth-service user-service tenant-service order-service notification-service; do
+              echo "Deploying $service..."
+              scp -P $VPS_PORT backend/$service/target/${service}-1.0.0.jar $VPS_USER@$VPS_HOST:/home/ubuntu/apps/$service/
+              ssh -p $VPS_PORT $VPS_USER@$VPS_HOST "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && sudo systemctl restart $service && echo '✅ Deployed $service'"
+              sleep 5
+            done
+          else
+            IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES"
+            for service in "${SERVICE_ARRAY[@]}"; do
+              service=$(echo $service | xargs)
+              case $service in
+                "order-service"|"auth-service"|"user-service"|"tenant-service"|"notification-service"|"api-gateway"|"discovery-server")
+                  echo "Deploying $service..."
+                  scp -P $VPS_PORT backend/$service/target/${service}-1.0.0.jar $VPS_USER@$VPS_HOST:/home/ubuntu/apps/$service/
+                  ssh -p $VPS_PORT $VPS_USER@$VPS_HOST "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && sudo systemctl restart $service && echo '✅ Deployed $service'"
+                  sleep 3
+                  ;;
+              esac
+            done
+          fi
+      
+      - name: Deploy Frontend Services
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          echo "🚀 Deploying frontend services..."
+          
+          SERVICES="${{ github.event.inputs.services }}"
+          
+          deploy_frontend_service() {
+            local service=$1
+            echo "� Deploying $service to production..."
+            
+            cd frontend/$service
+            
+            # Create tarball with built files
+            tar -czf ${service}-built.tar.gz .next public package.json package-lock.json next.config.js 2>/dev/null || tar -czf ${service}-built.tar.gz .next public package.json next.config.js
+            
+            # Transfer to server
+            scp -P $VPS_PORT ${service}-built.tar.gz $VPS_USER@$VPS_HOST:/home/ubuntu/apps/$service/
+            rm ${service}-built.tar.gz
+            
+            # Deploy on server
+            ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << ENDSSH
+          export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          cd /home/ubuntu/apps/$service
+          tar -xzf ${service}-built.tar.gz
+          rm ${service}-built.tar.gz
+          npm install --production
+          echo "NEXT_PUBLIC_API_URL=https://app.ezcollab.com" > .env.production
+          sudo systemctl restart $service
+          echo "✅ Deployed $service"
+          ENDSSH
+            
+            cd ../..
+          }
           
           if [ "$SERVICES" = "all" ]; then
-            echo "📋 Deploying ALL services..."
-            
-            # Deploy backend services (order matters for dependencies)
-            for service in discovery-server api-gateway auth-service user-service tenant-service order-service notification-service; do
-              deploy_service $service
-              sleep 5  # Wait between services for stability
-            done
-            
-            # Deploy frontend services
             for service in home-page customer-portal process-server-portal admin-panel super-admin; do
-              deploy_service $service
+              deploy_frontend_service $service
               sleep 3
             done
           else
-            echo "📋 Deploying selected services: $SERVICES"
             IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES"
             for service in "${SERVICE_ARRAY[@]}"; do
-              service=$(echo $service | xargs)  # Trim whitespace
-              deploy_service $service
-              sleep 3
+              service=$(echo $service | xargs)
+              case $service in
+                "home-page"|"customer-portal"|"process-server-portal"|"admin-panel"|"super-admin")
+                  deploy_frontend_service $service
+                  sleep 3
+                  ;;
+              esac
             done
           fi
-          
-          echo "✅ Deployment completed!"
       
       - name: Verify Deployment
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
-          SERVICES: ${{ github.event.inputs.services }}
         run: |
           echo "🔍 Verifying deployment..."
           
@@ -227,7 +228,6 @@ ENDSSH
             export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
             echo "📊 Service Status:"
             
-            # Check common services
             for service in discovery-server api-gateway order-service home-page customer-portal; do
               if sudo systemctl is-active --quiet $service 2>/dev/null; then
                 echo "✅ $service is running"
@@ -241,9 +241,6 @@ ENDSSH
             curl -s -o /dev/null -w "Discovery Server: %{http_code}\n" http://localhost:8761 || true
             curl -s -o /dev/null -w "API Gateway: %{http_code}\n" http://localhost:8080/actuator/health || true
             curl -s -o /dev/null -w "Home Page: %{http_code}\n" http://localhost:3001 || true
-            
-            echo ""
-            echo "✅ Deployment verification complete"
           ENDSSH
       
       - name: Deployment Summary
