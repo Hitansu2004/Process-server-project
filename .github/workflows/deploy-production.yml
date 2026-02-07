@@ -81,6 +81,8 @@ jobs:
           fi
       
       - name: Build Frontend Services
+        env:
+          NEXT_PUBLIC_API_URL: https://app.ezcollab.com
         run: |
           echo "🔨 Building frontend services..."
           
@@ -91,8 +93,8 @@ jobs:
             echo "� Building $service..."
             cd frontend/$service
             npm install
-            npm run build
-            echo "✅ Built $service"
+            NEXT_PUBLIC_API_URL=https://app.ezcollab.com npm run build
+            echo "✅ Built $service with production API URL"
             cd ../..
           }
           
@@ -190,7 +192,6 @@ jobs:
           tar -xzf ${service}-built.tar.gz
           rm ${service}-built.tar.gz
           npm install --production
-          echo "NEXT_PUBLIC_API_URL=https://app.ezcollab.com" > .env.production
           sudo systemctl restart $service
           echo "✅ Deployed $service"
           ENDSSH
