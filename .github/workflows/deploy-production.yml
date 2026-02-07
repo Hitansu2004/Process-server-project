@@ -49,25 +49,14 @@ jobs:
         with:
           node-version: '24'
       
-      - name: Create Deployment Directory
+      - name: Update Deployment Scripts on Server
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
         run: |
-          echo "📁 Creating deployment directory on server..."
-          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST "mkdir -p /home/ubuntu/deployment-temp"
-      
-      - name: Transfer Deployment Scripts
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-        run: |
-          echo "📦 Transferring deployment scripts..."
-          scp -P $VPS_PORT -r deployment $VPS_USER@$VPS_HOST:/home/ubuntu/
-          scp -P $VPS_PORT -r backend $VPS_USER@$VPS_HOST:/home/ubuntu/deployment-temp/
-          scp -P $VPS_PORT -r frontend $VPS_USER@$VPS_HOST:/home/ubuntu/deployment-temp/
+          echo "� Updating deployment scripts on server..."
+          scp -P $VPS_PORT -r deployment/ $VPS_USER@$VPS_HOST:/home/ubuntu/
       
       - name: Deploy Services
         env:
@@ -76,81 +65,185 @@ jobs:
           VPS_PORT: ${{ secrets.VPS_PORT }}
           SERVICES: ${{ github.event.inputs.services }}
         run: |
-          echo "🚀 Starting production deployment..."
+          echo "� Starting production deployment..."
           
-          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
-            set -e
-            cd /home/ubuntu/deployment
+          # Function to deploy a single service
+          deploy_service() {
+            local service=$1
+            echo "🔄 Deploying $service..."
             
-            # Source common functions
-            source common.sh
+            case $service in
+              "home-page")
+                echo "📦 Deploying home-page Next.js app..."
+                cd frontend/home-page
+                zip -r home-page.zip . -x "node_modules/*" ".next/*" ".git/*" ".env.local"
+                scp -P $VPS_PORT home-page.zip $VPS_USER@$VPS_HOST:/home/ubuntu/apps/home-page/
+                rm home-page.zip
+                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+                  export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+                  cd /home/ubuntu/apps/home-page
+                  unzip -o home-page.zip
+                  rm home-page.zip
+                  echo "NEXT_PUBLIC_API_URL=https://app.ezcollab.com" > .env.production
+                  npm install
+                  npm run build
+                  sudo systemctl restart home-page
+ENDSSH
+                ;;
+                
+              "customer-portal")
+                echo "📦 Deploying customer-portal Next.js app..."
+                cd frontend/customer-portal
+                zip -r customer-portal.zip . -x "node_modules/*" ".next/*" ".git/*" ".env.local"
+                scp -P $VPS_PORT customer-portal.zip $VPS_USER@$VPS_HOST:/home/ubuntu/apps/customer-portal/
+                rm customer-portal.zip
+                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+                  export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+                  cd /home/ubuntu/apps/customer-portal
+                  unzip -o customer-portal.zip
+                  rm customer-portal.zip
+                  echo "NEXT_PUBLIC_API_URL=https://app.ezcollab.com" > .env.production
+                  npm install
+                  npm run build
+                  sudo systemctl restart customer-portal
+ENDSSH
+                ;;
+                
+              "process-server-portal")
+                echo "📦 Deploying process-server-portal Next.js app..."
+                cd frontend/process-server-portal
+                zip -r process-server-portal.zip . -x "node_modules/*" ".next/*" ".git/*" ".env.local"
+                scp -P $VPS_PORT process-server-portal.zip $VPS_USER@$VPS_HOST:/home/ubuntu/apps/process-server-portal/
+                rm process-server-portal.zip
+                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+                  export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+                  cd /home/ubuntu/apps/process-server-portal
+                  unzip -o process-server-portal.zip
+                  rm process-server-portal.zip
+                  echo "NEXT_PUBLIC_API_URL=https://app.ezcollab.com" > .env.production
+                  npm install
+                  npm run build
+                  sudo systemctl restart process-server-portal
+ENDSSH
+                ;;
+                
+              "admin-panel")
+                echo "� Deploying admin-panel Next.js app..."
+                cd frontend/admin-panel
+                zip -r admin-panel.zip . -x "node_modules/*" ".next/*" ".git/*" ".env.local"
+                scp -P $VPS_PORT admin-panel.zip $VPS_USER@$VPS_HOST:/home/ubuntu/apps/admin-panel/
+                rm admin-panel.zip
+                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+                  export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+                  cd /home/ubuntu/apps/admin-panel
+                  unzip -o admin-panel.zip
+                  rm admin-panel.zip
+                  echo "NEXT_PUBLIC_API_URL=https://app.ezcollab.com" > .env.production
+                  npm install
+                  npm run build
+                  sudo systemctl restart admin-panel
+ENDSSH
+                ;;
+                
+              "super-admin")
+                echo "📦 Deploying super-admin Next.js app..."
+                cd frontend/super-admin
+                zip -r super-admin.zip . -x "node_modules/*" ".next/*" ".git/*" ".env.local"
+                scp -P $VPS_PORT super-admin.zip $VPS_USER@$VPS_HOST:/home/ubuntu/apps/super-admin/
+                rm super-admin.zip
+                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+                  export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+                  cd /home/ubuntu/apps/super-admin
+                  unzip -o super-admin.zip
+                  rm super-admin.zip
+                  echo "NEXT_PUBLIC_API_URL=https://app.ezcollab.com" > .env.production
+                  npm install
+                  npm run build
+                  sudo systemctl restart super-admin
+ENDSSH
+                ;;
+                
+              "order-service"|"auth-service"|"user-service"|"tenant-service"|"notification-service"|"api-gateway"|"discovery-server")
+                echo "📦 Deploying $service Java service..."
+                local service_dir=""
+                case $service in
+                  "discovery-server") service_dir="backend/discovery-server" ;;
+                  "api-gateway") service_dir="backend/api-gateway" ;;
+                  "auth-service") service_dir="backend/auth-service" ;;
+                  "user-service") service_dir="backend/user-service" ;;
+                  "tenant-service") service_dir="backend/tenant-service" ;;
+                  "order-service") service_dir="backend/order-service" ;;
+                  "notification-service") service_dir="backend/notification-service" ;;
+                esac
+                
+                cd $service_dir
+                mvn clean package -DskipTests
+                scp -P $VPS_PORT target/${service}-1.0.0.jar $VPS_USER@$VPS_HOST:/home/ubuntu/apps/${service}/${service}-1.0.0.jar
+                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && sudo systemctl restart $service"
+                ;;
+                
+              *)
+                echo "⚠️  Unknown service: $service"
+                ;;
+            esac
+          }
+          
+          # Parse services to deploy
+          SERVICES="${SERVICES:-all}"
+          
+          if [ "$SERVICES" = "all" ]; then
+            echo "📋 Deploying ALL services..."
             
-            # Function to deploy a service
-            deploy_service() {
-              local service=$1
-              echo "🔄 Deploying $service..."
-              
-              case $service in
-                "order-service"|"auth-service"|"user-service"|"tenant-service"|"notification-service"|"api-gateway"|"discovery-server")
-                  bash deploy_${service}.sh
-                  ;;
-                "customer-portal"|"admin-panel"|"home-page"|"process-server-portal"|"super-admin")
-                  bash deploy_${service}.sh
-                  ;;
-                *)
-                  echo "⚠️  Unknown service: $service"
-                  ;;
-              esac
-            }
+            # Deploy backend services
+            for service in discovery-server api-gateway auth-service user-service tenant-service order-service notification-service; do
+              deploy_service $service
+              sleep 5  # Wait between services for stability
+            done
             
-            # Parse services to deploy
-            SERVICES="${SERVICES:-all}"
-            
-            if [ "$SERVICES" = "all" ]; then
-              echo "📋 Deploying ALL services..."
-              
-              # Deploy backend services
-              for service in discovery-server api-gateway auth-service user-service tenant-service order-service notification-service; do
-                deploy_service $service
-                sleep 5  # Wait between services for stability
-              done
-              
-              # Deploy frontend services
-              for service in home-page customer-portal process-server-portal admin-panel super-admin; do
-                deploy_service $service
-                sleep 3
-              done
-            else
-              echo "📋 Deploying selected services: $SERVICES"
-              IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES"
-              for service in "${SERVICE_ARRAY[@]}"; do
-                service=$(echo $service | xargs)  # Trim whitespace
-                deploy_service $service
-                sleep 3
-              done
-            fi
-            
-            echo "✅ Deployment completed!"
-          ENDSSH
+            # Deploy frontend services
+            for service in home-page customer-portal process-server-portal admin-panel super-admin; do
+              deploy_service $service
+              sleep 3
+            done
+          else
+            echo "📋 Deploying selected services: $SERVICES"
+            IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES"
+            for service in "${SERVICE_ARRAY[@]}"; do
+              service=$(echo $service | xargs)  # Trim whitespace
+              deploy_service $service
+              sleep 3
+            done
+          fi
+          
+          echo "✅ Deployment completed!"
       
       - name: Verify Deployment
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
+          SERVICES: ${{ github.event.inputs.services }}
         run: |
           echo "🔍 Verifying deployment..."
           
           ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
             echo "📊 Service Status:"
-            sudo systemctl status discovery-server --no-pager | head -5
-            sudo systemctl status api-gateway --no-pager | head -5
-            sudo systemctl status order-service --no-pager | head -5
+            
+            # Check common services
+            for service in discovery-server api-gateway order-service home-page customer-portal; do
+              if sudo systemctl is-active --quiet $service; then
+                echo "✅ $service is running"
+              else
+                echo "⚠️  $service is NOT running"
+              fi
+            done
             
             echo ""
             echo "🌐 Testing endpoints..."
             curl -s -o /dev/null -w "Discovery Server: %{http_code}\n" http://localhost:8761 || true
             curl -s -o /dev/null -w "API Gateway: %{http_code}\n" http://localhost:8080/actuator/health || true
+            curl -s -o /dev/null -w "Home Page: %{http_code}\n" http://localhost:3001 || true
             
             echo ""
             echo "✅ Deployment verification complete"
