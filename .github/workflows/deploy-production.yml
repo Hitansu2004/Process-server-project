@@ -49,6 +49,15 @@ jobs:
         with:
           node-version: '24'
       
+      - name: Create Deployment Directory
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          echo "📁 Creating deployment directory on server..."
+          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST "mkdir -p /home/ubuntu/deployment-temp"
+      
       - name: Transfer Deployment Scripts
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
