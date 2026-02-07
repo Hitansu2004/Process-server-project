@@ -141,7 +141,7 @@ jobs:
                 rm ${service}-built.tar.gz
                 
                 # Deploy on server
-                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << ENDSSH
+                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST <<ENDSSH
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 cd /home/ubuntu/apps/$service
 
@@ -171,7 +171,7 @@ ENDSSH
                 scp -P $VPS_PORT target/${service}-1.0.0.jar $VPS_USER@$VPS_HOST:/home/ubuntu/apps/$service/
                 
                 # Restart service
-                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << ENDSSH
+                ssh -p $VPS_PORT $VPS_USER@$VPS_HOST <<ENDSSH
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 sudo systemctl restart $service
 echo "✅ Deployed $service"
