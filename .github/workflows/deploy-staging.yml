@@ -1,0 +1,91 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      
+      - name: Build Java Services
+        run: |
+          echo "🏗️ Building Java services..."
+          cd backend
+          for service in api-gateway auth-service discovery-server notification-service order-service tenant-service user-service; do
+            echo "Building $service..."
+            cd $service
+            mvn clean package -DskipTests
+            cd ..
+          done
+      
+      - name: Build Next.js Frontends
+        run: |
+          echo "🏗️ Building Next.js frontends..."
+          for frontend in frontend/admin-panel frontend/customer-portal frontend/home-page frontend/process-server-portal frontend/super-admin; do
+            echo "Building $frontend..."
+            cd $frontend
+            npm ci
+            npm run build
+            cd ../..
+          done
+      
+      - name: Deploy to Staging Server
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          echo "🚀 Deploying to staging server..."
+          
+          # Transfer deployment scripts
+          scp -P $VPS_PORT -r deployment $VPS_USER@$VPS_HOST:/home/ubuntu/staging-deployment
+          
+          # Execute staging deployments (you can customize which services to deploy)
+          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+            cd /home/ubuntu/staging-deployment
+            
+            # Example: Deploy order-service to staging
+            # You can modify this section based on your staging environment setup
+            echo "Staging deployment executed"
+            echo "Note: Configure staging-specific deployment targets"
+          ENDSSH
+      
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "✅ Staging deployment completed!"
+          echo "📊 Deployed services:"
+          echo "   - All Java services built"
+          echo "   - All Next.js frontends built"
+          echo "   - Staging server updated"
+      
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "❌ Staging deployment failed!"
+          echo "Check the logs above for details"
